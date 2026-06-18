@@ -5,17 +5,21 @@ ConciergeOS is a hotel concierge and reservation management system built with Py
 ## Project Structure
 
 ```
-HotelCMSERP/
+ConciergeOS/
 ├── create_hotel_db.py          # SQLite schema initialization
 ├── Generator/
 │   ├── generate_names.py       # Multilingual name generator
 │   ├── generate_rooms.py       # Room data generator
 │   ├── populate_rooms.py       # Inserts rooms into database
 │   ├── populate_reservations.py # Generates guests & reservations
+│   ├── shift_reservations.py   # Shifts all reservation dates by N days
+│   ├── setup_errors.py         # Injects controlled errors into reservations
+│   ├── utils.py                # Shared constants & DB connection helper
 │   ├── all_names.json          # Master name list (8 alphabets)
 │   ├── *_names.txt             # Per-alphabet name files
 │   ├── rooms.json              # Structured room data
-│   └── rooms.txt               # Human-readable room list
+│   ├── rooms.txt               # Human-readable room list
+│   └── erroneous_reservations.json # Persisted error IDs from setup_errors.py
 ```
 
 ## What It Does
@@ -52,28 +56,38 @@ The system supports 1-6 guests per reservation and tracks booking source based o
 - ANY → random of `WEBSITE`, `PHONE`, `OTA`
 - STAFF_ASSIGNMENT → `INTERNAL`
 
-## How It Works
+## Quick Start
 
-### 1. Initialize the Database
+### Prerequisites
+- Python 3.8+
+- SQLite 3 (built into Python standard library)
+
+No external dependencies are required — the entire project uses Python's standard library.
+
+### Setup
+
+Follow these steps in order to initialize the database and generate test data:
+
+#### 1. Initialize the Database
 ```bash
 python create_hotel_db.py [--recreate]
 ```
-Creates `hotel.db` with the `Rooms`, `Guests`, and `Reservations` tables, including indexes for efficient date-range and guest lookups.
+Creates `hotel.db` with the `Rooms`, `Guests`, and `Reservations` tables, including indexes for efficient date-range and guest lookups. Use `--recreate` to delete the existing database and start fresh.
 
-### 2. Generate Name Data
+#### 2. Generate Name Data
 ```bash
 python Generator/generate_names.py
 ```
 Generates ~50 names per alphabet (400 total) and saves them to individual `.txt` files and a consolidated `all_names.json`.
 
-### 3. Generate and Populate Rooms
+#### 3. Generate and Populate Rooms
 ```bash
 python Generator/generate_rooms.py    # Creates rooms.json and rooms.txt
 python Generator/populate_rooms.py    # Inserts rooms into the database
 ```
 Generates ~205 rooms across three building wings (East, North, West), each mapped to a booking channel.
 
-### 4. Populate Guests and Reservations
+#### 4. Populate Guests and Reservations
 ```bash
 python Generator/populate_reservations.py
 ```
@@ -82,6 +96,41 @@ Creates realistic reservation data with:
 - **Name collisions**: Intentional duplicate guest names across multiple rooms (for testing deduplication logic)
 - **STAFF_ASSIGNMENT handling**: All staff rooms are always CHECKED_IN with past check-in and future check-out dates
 - **Booking source enforcement**: Sources are determined by room booking channel
+
+### Utility Scripts
+
+#### Shift Reservation Dates
+```bash
+python Generator/shift_reservations.py              # Shift by 1 day (default)
+python Generator/shift_reservations.py --days 3     # Shift forward by 3 days
+python Generator/shift_reservations.py --days -2    # Shift backward by 2 days
+```
+Shifts all `check_in_date` and `check_out_date` values in the `Reservations` table by the specified number of days. Positive values shift forward, negative values shift backward. A sample of dates before and after the shift is printed to stdout.
+
+#### Inject Controlled Errors (for testing)
+```bash
+python Generator/setup_errors.py
+```
+Finds reservations with name collisions (same guest name on 2+ different rooms) and introduces two types of controlled errors:
+
+- **Error Type A — Erroneous Status** (2 reservations):
+  1. A `CHECKED_IN` reservation → status changed to `CANCELLED`
+  2. A `CONFIRMED` reservation → status changed to `CHECKED_OUT`
+
+- **Error Type B — Unsynchronized Dates** (2 reservations):
+  3. A `CHECKED_IN` reservation → `check_out_date` moved to the past
+  4. A `CHECKED_OUT` reservation → `check_in_date` moved to the future
+
+The affected reservation IDs are persisted to `Generator/erroneous_reservations.json` for repeatable testing. Excluded IDs can be configured in the `EXCLUDED_RESERVATION_IDS` list at the top of the script.
+
+### Shared Utilities (`Generator/utils.py`)
+
+All Generator scripts share a common utility module that provides:
+- **`BASE_DIR`** — Path to the `Generator/` directory
+- **`PROJECT_ROOT`** — Path to the project root (`ConciergeOS/`)
+- **`DB_NAME`** — Database filename (`hotel.db`)
+- **`DB_PATH`** — Full path to the database file
+- **`init_connection()`** — Creates a SQLite connection with foreign keys enforced and WAL journal mode enabled
 
 ## Database Schema
 
@@ -114,13 +163,6 @@ Reservations (
     created_at TIMESTAMP
 )
 ```
-
-## Requirements
-
-- Python 3.8+
-- SQLite 3 (built into Python standard library)
-
-No external dependencies are required — the entire project uses Python's standard library.
 
 ## License
 

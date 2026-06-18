@@ -34,12 +34,11 @@ import sqlite3
 from datetime import date, timedelta
 from typing import Tuple, List, cast
 
+from utils import BASE_DIR, DB_PATH, init_connection
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(BASE_DIR)
-DB_PATH = os.path.join(PROJECT_ROOT, "hotel.db")
 NAMES_JSON_PATH = os.path.join(BASE_DIR, "all_names.json")
 
 # ---------------------------------------------------------------------------
@@ -157,13 +156,6 @@ def get_booking_source(allowed_booking_channel: str) -> str:
 # ---------------------------------------------------------------------------
 # Database operations
 # ---------------------------------------------------------------------------
-def init_connection(db_path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys = ON;")
-    conn.execute("PRAGMA journal_mode = WAL;")
-    return conn
-
-
 def insert_guest(conn: sqlite3.Connection, first_name: str, last_name: str) -> int:
     """Insert a guest into the Guests table and return the guest_id."""
     # Generate a random date of birth (between 18 and 80 years old)

@@ -18,10 +18,11 @@ import os
 import sqlite3
 from typing import Any, Tuple
 
+from utils import BASE_DIR, DB_PATH, init_connection
+
+# ---------------------------------------------------------------------------
 # Paths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(BASE_DIR)
-DB_PATH = os.path.join(PROJECT_ROOT, "hotel.db")
+# ---------------------------------------------------------------------------
 ROOMS_JSON_PATH = os.path.join(BASE_DIR, "rooms.json")
 
 # Wing-to-channel mapping
@@ -124,8 +125,7 @@ def main():
         print("Please run 'python create_hotel_db.py' first to create the database schema.")
         return
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA foreign_keys = ON;")
+    conn = init_connection(DB_PATH)
 
     try:
         # Clear existing rooms to allow re-running the script

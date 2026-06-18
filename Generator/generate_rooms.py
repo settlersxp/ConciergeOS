@@ -7,18 +7,17 @@ Example: L0001 E  (Left side, Floor 00, Room 01, East wing)
          R0305 N  (Right side, Floor 03, Room 05, North wing)
 
 Hotel layout:
-  - East:  floors 00–05  (6 floors)
-  - North: floors 00–10  (11 floors)
-  - West:  floors 00–15  (16 floors)
+  - East:  floors 00-05  (6 floors)
+  - North: floors 00-10  (11 floors)
+  - West:  floors 00-15  (16 floors)
 
 Rooms per side per floor vary deterministically to ensure 200+ total rooms.
 """
 
-import os
 import json
+import os
 
-# Define the Generator directory (same as this script)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+from utils import BASE_DIR
 
 # Wing configuration: (floor_count, min_rooms_per_side, max_rooms_per_side)
 # Floors start at 0 (ground floor included)

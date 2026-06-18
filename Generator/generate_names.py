@@ -5,10 +5,8 @@ Each alphabet gets 50 names, saved as separate files.
 """
 
 import os
-import json
 
-# Define the Generator directory (same as this script)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+from utils import BASE_DIR
 
 # 8 alphabets with 50 names each
 names_by_alphabet = {
@@ -445,6 +443,8 @@ def save_names():
         print(f"Saved {len(names)} {alphabet} names to {filepath}")
     
     # Save master JSON file
+    import json
+
     json_path = os.path.join(BASE_DIR, "all_names.json")
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(names_by_alphabet, f, ensure_ascii=False, indent=2)

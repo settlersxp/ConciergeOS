@@ -1,0 +1,18 @@
+{
+  "last_run": "2026-06-18",
+  "status_errors": [
+    19,
+    220
+  ],
+  "date_errors": [
+    1,
+    20
+  ],
+  "all_error_ids": [
+    1,
+    19,
+    20,
+    220
+  ],
+  "excluded_ids": []
+}
