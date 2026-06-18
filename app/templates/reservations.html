@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConciergeOS — Reservations Dashboard</title>
+    <style>
+        :root {
+            --bg: #f4f6f9;
+            --card: #ffffff;
+            --border: #e2e8f0;
+            --text: #1e293b;
+            --muted: #64748b;
+            --error-bg: #fef2f2;
+            --error-border: #fecaca;
+            --error-text: #991b1b;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 24px;
+            line-height: 1.5;
+        }
+        h1 {
+            font-size: 1.75rem;
+            margin-bottom: 24px;
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 12px;
+        }
+        h1 span { color: var(--muted); font-weight: 400; font-size: 1rem; }
+
+        /* ----- Errors section ----- */
+        .errors-section {
+            background: var(--error-bg);
+            border: 1px solid var(--error-border);
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 32px;
+        }
+        .errors-section h2 {
+            color: var(--error-text);
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+        }
+        .error-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+        .error-table th, .error-table td {
+            text-align: left;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--error-border);
+        }
+        .error-table th {
+            color: var(--error-text);
+            font-weight: 600;
+        }
+        .error-table td { color: var(--error-text); }
+        .error-table tr:last-child td { border-bottom: none; }
+        .no-errors { color: var(--muted); font-style: italic; }
+
+        /* ----- Room cards ----- */
+        .room-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .room-header {
+            background: #f8fafc;
+            padding: 12px 20px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+        }
+        .room-header:hover { background: #f1f5f9; }
+        .room-header .count {
+            font-size: 0.8rem;
+            font-weight: 400;
+            color: var(--muted);
+            background: #e2e8f0;
+            padding: 2px 10px;
+            border-radius: 12px;
+        }
+        .room-body { display: block; }
+        .room-body.collapsed { display: none; }
+
+        /* ----- Reservation table ----- */
+        .res-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+        .res-table th, .res-table td {
+            text-align: left;
+            padding: 10px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        .res-table thead th {
+            background: #fafbfc;
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.04em;
+        }
+        .res-table tbody tr:last-child td { border-bottom: none; }
+        .res-table tbody tr:hover { background: #f8fafc; }
+
+        /* ----- Status badges ----- */
+        .badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+        .badge-PENDING      { background: #fef9c3; color: #854d0e; }
+        .badge-CONFIRMED    { background: #dbeafe; color: #1e40af; }
+        .badge-CHECKED_IN   { background: #dcfce7; color: #166534; }
+        .badge-CHECKED_OUT  { background: #e2e8f0; color: #475569; }
+        .badge-CANCELLED    { background: #fecaca; color: #991b1b; }
+
+        /* ----- Guests list ----- */
+        .guests-list { white-space: nowrap; }
+        .guest-name { display: inline-block; margin: 1px 4px; }
+
+        /* ----- Toggle button ----- */
+        .toggle-btn {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            color: var(--muted);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .toggle-btn.rotated { transform: rotate(-90deg); }
+
+        /* ----- Empty state ----- */
+        .empty-state {
+            padding: 40px 20px;
+            text-align: center;
+            color: var(--muted);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>ConciergeOS <span>— Reservations Dashboard</span></h1>
+
+    <!-- Errors Section -->
+    <div class="errors-section">
+        <h2>⚠ Errors ({{ errors | length }})</h2>
+        {% if errors %}
+        <table class="error-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Room</th>
+                    <th>Guest</th>
+                    <th>Check-in</th>
+                    <th>Check-out</th>
+                    <th>Status</th>
+                    <th>Type</th>
+                    <th>Issue</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in errors %}
+                <tr>
+                    <td>{{ e.reservation_id }}</td>
+                    <td>{{ e.room_name }}</td>
+                    <td>{{ e.guest_name }}</td>
+                    <td>{{ e.check_in_date }}</td>
+                    <td>{{ e.check_out_date }}</td>
+                    <td><span class="badge badge-{{ e.status }}">{{ e.status }}</span></td>
+                    <td>{{ e.error_type }}</td>
+                    <td>{{ e.description }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="no-errors">No errors detected.</p>
+        {% endif %}
+    </div>
+
+    <!-- Rooms Section -->
+    {% if rooms %}
+        {% for room_name, reservations in rooms.items() %}
+        <div class="room-card">
+            <div class="room-header" onclick="toggleRoom(this)">
+                <span>{{ room_name }}</span>
+                <span class="count">{{ reservations | length }} reservation{{ 's' if reservations | length != 1 else '' }}</span>
+                <button class="toggle-btn" onclick="toggleRoom(this.parentElement)">▼</button>
+            </div>
+            <div class="room-body">
+                <table class="res-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Guest(s)</th>
+                            <th>Check-in</th>
+                            <th>Check-out</th>
+                            <th>Status</th>
+                            <th>Source</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in reservations %}
+                        <tr>
+                            <td>{{ r.reservation_id }}</td>
+                            <td>
+                                <span class="guest-name">{{ r.first_name }} {{ r.last_name }}</span>
+                            </td>
+                            <td>{{ r.check_in_date }}</td>
+                            <td>{{ r.check_out_date }}</td>
+                            <td><span class="badge badge-{{ r.status }}">{{ r.status }}</span></td>
+                            <td>{{ r.booking_source }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">No reservations found in the database.</div>
+    {% endif %}
+
+    <script>
+        function toggleRoom(header) {
+            const body = header.nextElementSibling;
+            const btn = header.querySelector('.toggle-btn');
+            body.classList.toggle('collapsed');
+            btn.classList.toggle('rotated');
+        }
+    </script>
+
+</body>
+</html>
