@@ -109,3 +109,20 @@ class ShiftResponse(BaseModel):
     error: str | None = None
     before: List[ShiftSampleEntry] = []
     after: List[ShiftSampleEntry] = []
+
+
+# ---------------------------------------------------------------------------
+# Guest search schemas
+# ---------------------------------------------------------------------------
+
+class GuestSearchRequest(BaseModel):
+    """Request body for searching a guest by name."""
+
+    customer_name: str = Field(..., description="Full or partial name of the customer to search for")
+
+
+class GuestSearchResponse(BaseModel):
+    """Response from the guest-search endpoint."""
+
+    query: str
+    llm_response: str

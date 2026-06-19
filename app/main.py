@@ -6,7 +6,8 @@ FastAPI application for ConciergeOS reservation dashboard.
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 
-from app.services import get_reservations_summary
+from app.schemas import GuestSearchRequest, GuestSearchResponse
+from app.services import get_reservations_summary, query_guest_with_llm
 from app.services.debug import debug_router
 
 app = FastAPI(title="ConciergeOS")
@@ -33,3 +34,21 @@ async def api_reservations():
     """JSON endpoint returning reservations grouped by room and errors."""
     summary = get_reservations_summary()
     return summary.model_dump(mode="json")
+
+
+@app.get("/guest-search")
+async def guest_search_page(request: Request):
+    """Serve the guest search page."""
+    return templates.TemplateResponse(request, "guest_search.html", {
+        "request": request,
+    })
+
+
+@app.post("/api/guest-search")
+async def api_guest_search(body: GuestSearchRequest) -> GuestSearchResponse:
+    """Query the LLM for all information about a given guest."""
+    llm_response = query_guest_with_llm(body.customer_name)
+    return GuestSearchResponse(
+        query=body.customer_name,
+        llm_response=llm_response,
+    )
