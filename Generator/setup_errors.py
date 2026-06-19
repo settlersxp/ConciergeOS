@@ -27,6 +27,9 @@ import sys
 from datetime import date, timedelta
 from typing import Any, Dict, List, Optional, Tuple, cast
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from app.enums import ReservationStatus
 from utils import BASE_DIR, DB_PATH, init_connection
 
 # ---------------------------------------------------------------------------
@@ -44,7 +47,7 @@ EXCLUDED_RESERVATION_IDS: List[int] = [
 # ---------------------------------------------------------------------------
 # Valid status values (matches the CHECK constraint in the schema)
 # ---------------------------------------------------------------------------
-VALID_STATUSES = ("PENDING", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELLED")
+VALID_STATUSES = tuple(s.value for s in ReservationStatus)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -174,12 +177,12 @@ def apply_errors(conn: sqlite3.Connection,
         rec = fetch_reservation_details(conn, rid)
         if not rec:
             continue
-        if rec["status"] == "CHECKED_IN" and is_checked_in_type(cast(str, rec["check_in_date"]), cast(str, rec["check_out_date"]), today):
+        if rec["status"] == ReservationStatus.CHECKED_IN.value and is_checked_in_type(cast(str, rec["check_in_date"]), cast(str, rec["check_out_date"]), today):
             old_status = cast(str, rec["status"])
-            conn.execute("UPDATE Reservations SET status = ? WHERE reservation_id = ?", ("CANCELLED", rid))
+            conn.execute("UPDATE Reservations SET status = ? WHERE reservation_id = ?", (ReservationStatus.CANCELLED.value, rid))
             status_errors.append(ErrorRecord(
                 reservation_id=rid, error_type="status",
-                field="status", before=old_status, after="CANCELLED",
+                field="status", before=old_status, after=ReservationStatus.CANCELLED.value,
                 guest_name=f"{rec['first_name']} {rec['last_name']}",
                 room_id=cast(int, rec["room_id"]),
             ))
@@ -193,12 +196,12 @@ def apply_errors(conn: sqlite3.Connection,
         rec = fetch_reservation_details(conn, rid)
         if not rec:
             continue
-        if rec["status"] == "CONFIRMED" and is_confirmed_type(cast(str, rec["check_in_date"]), cast(str, rec["check_out_date"]), today):
+        if rec["status"] == ReservationStatus.CONFIRMED.value and is_confirmed_type(cast(str, rec["check_in_date"]), cast(str, rec["check_out_date"]), today):
             old_status = cast(str, rec["status"])
-            conn.execute("UPDATE Reservations SET status = ? WHERE reservation_id = ?", ("CHECKED_OUT", rid))
+            conn.execute("UPDATE Reservations SET status = ? WHERE reservation_id = ?", (ReservationStatus.CHECKED_OUT.value, rid))
             status_errors.append(ErrorRecord(
                 reservation_id=rid, error_type="status",
-                field="status", before=old_status, after="CHECKED_OUT",
+                field="status", before=old_status, after=ReservationStatus.CHECKED_OUT.value,
                 guest_name=f"{rec['first_name']} {rec['last_name']}",
                 room_id=cast(int, rec["room_id"]),
             ))
@@ -213,12 +216,12 @@ def apply_errors(conn: sqlite3.Connection,
             rec = fetch_reservation_details(conn, rid)
             if not rec:
                 continue
-            if rec["status"] == "CHECKED_IN" and is_checked_in_type(cast(str, rec["check_in_date"]), cast(str, rec["check_out_date"]), today):
+            if rec["status"] == ReservationStatus.CHECKED_IN.value and is_checked_in_type(cast(str, rec["check_in_date"]), cast(str, rec["check_out_date"]), today):
                 old_status = cast(str, rec["status"])
-                conn.execute("UPDATE Reservations SET status = ? WHERE reservation_id = ?", ("CHECKED_OUT", rid))
+                conn.execute("UPDATE Reservations SET status = ? WHERE reservation_id = ?", (ReservationStatus.CHECKED_OUT.value, rid))
                 status_errors.append(ErrorRecord(
                     reservation_id=rid, error_type="status",
-                    field="status", before=old_status, after="CHECKED_OUT",
+                    field="status", before=old_status, after=ReservationStatus.CHECKED_OUT.value,
                     guest_name=f"{rec['first_name']} {rec['last_name']}",
                     room_id=cast(int, rec["room_id"]),
                 ))
@@ -232,7 +235,7 @@ def apply_errors(conn: sqlite3.Connection,
         rec = fetch_reservation_details(conn, rid)
         if not rec:
             continue
-        if rec["status"] == "CHECKED_IN" and is_checked_in_type(cast(str, rec["check_in_date"]), cast(str, rec["check_out_date"]), today):
+        if rec["status"] == ReservationStatus.CHECKED_IN.value and is_checked_in_type(cast(str, rec["check_in_date"]), cast(str, rec["check_out_date"]), today):
             old_checkout = cast(str, rec["check_out_date"])
             # Set check_out to 3 days after check_in (both in the past)
             ci = date.fromisoformat(cast(str, rec["check_in_date"]))
@@ -257,7 +260,7 @@ def apply_errors(conn: sqlite3.Connection,
         rec = fetch_reservation_details(conn, rid)
         if not rec:
             continue
-        if rec["status"] == "CHECKED_OUT" and is_checked_out_type(cast(str, rec["check_in_date"]), cast(str, rec["check_out_date"]), today):
+        if rec["status"] == ReservationStatus.CHECKED_OUT.value and is_checked_out_type(cast(str, rec["check_in_date"]), cast(str, rec["check_out_date"]), today):
             old_checkin = cast(str, rec["check_in_date"])
             # Set check_in to 5 days in the future
             new_checkin = (today + timedelta(days=5)).isoformat()

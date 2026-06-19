@@ -11,7 +11,10 @@ import argparse
 import sys
 from typing import Any, Dict
 
-from Generator.utils import DB_NAME, init_connection
+from sqlalchemy import update
+from sqlalchemy.orm import Session
+
+from Generator.utils import DB_NAME, get_session
 
 
 def parse_args() -> int:
@@ -45,12 +48,12 @@ def shift_reservations(days: int = 1) -> Dict[str, Any]:
     """
     modifier = _build_modifier(days)
 
-    conn = init_connection()
+    db: Session = get_session()
     try:
-        cursor = conn.cursor()
+        from app.models import Reservation
 
-        cursor.execute("SELECT COUNT(*) FROM Reservations")
-        total = cursor.fetchone()[0]
+        # Count total reservations
+        total = db.query(Reservation).count()
         if total == 0:
             return {
                 "ok": True,
@@ -62,48 +65,53 @@ def shift_reservations(days: int = 1) -> Dict[str, Any]:
             }
 
         # Sample before
-        cursor.execute(
-            "SELECT check_in_date, check_out_date FROM Reservations "
-            "ORDER BY reservation_id LIMIT 5"
+        sample_before = (
+            db.query(Reservation.check_in_date, Reservation.check_out_date)
+            .order_by(Reservation.reservation_id)
+            .limit(5)
+            .all()
         )
-        sample_before = [
-            {"check_in": r[0], "check_out": r[1]} for r in cursor.fetchall()
+        before_list = [
+            {"check_in": r[0], "check_out": r[1]} for r in sample_before
         ]
 
-        # Perform the shift
-        cursor.execute(
-            """
-            UPDATE Reservations
-            SET check_in_date  = date(check_in_date, ?),
-                check_out_date = date(check_out_date, ?)
-            """,
-            (modifier, modifier),
+        # Perform the shift using SQLAlchemy Core UPDATE
+        result = (
+            db.execute(
+                update(Reservation)
+                .values(
+                    check_in_date=f"date(check_in_date, '{modifier}')",
+                    check_out_date=f"date(check_out_date, '{modifier}')",
+                )
+            )
         )
-        conn.commit()
-        shifted = cursor.rowcount
+        db.commit()
+        shifted = result.rowcount
 
         # Sample after
-        cursor.execute(
-            "SELECT check_in_date, check_out_date FROM Reservations "
-            "ORDER BY reservation_id LIMIT 5"
+        sample_after = (
+            db.query(Reservation.check_in_date, Reservation.check_out_date)
+            .order_by(Reservation.reservation_id)
+            .limit(5)
+            .all()
         )
-        sample_after = [
-            {"check_in": r[0], "check_out": r[1]} for r in cursor.fetchall()
+        after_list = [
+            {"check_in": r[0], "check_out": r[1]} for r in sample_after
         ]
 
         return {
             "ok": True,
             "shifted": shifted,
             "days": days,
-            "before": sample_before,
-            "after": sample_after,
+            "before": before_list,
+            "after": after_list,
         }
 
     except Exception as e:
-        conn.rollback()
+        db.rollback()
         return {"ok": False, "error": str(e)}
     finally:
-        conn.close()
+        db.close()
 
 
 def main():

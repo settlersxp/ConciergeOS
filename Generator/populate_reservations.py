@@ -31,9 +31,13 @@ import json
 import os
 import random
 import sqlite3
+import sys
 from datetime import date, timedelta
 from typing import Tuple, List, cast
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from app.enums import BookingChannel, ReservationStatus
 from utils import BASE_DIR, DB_PATH, init_connection
 
 # ---------------------------------------------------------------------------
@@ -104,30 +108,26 @@ def random_date_between(start: date, end: date) -> str:
     return random_day.isoformat()
 
 
-def get_bucket_dates(bucket: str, today: date) -> Tuple[str, str, str]:
+def get_bucket_dates(bucket: str, today: date) -> Tuple[str, str, ReservationStatus]:
     """Return (check_in_date, check_out_date, status) for a given bucket."""
     if bucket == "1":
-        # check_in: 7-30 days ago, check_out: today, status: CHECKED_IN
         check_in = random_date_between(today - timedelta(days=30), today - timedelta(days=7))
-        return check_in, today.isoformat(), "CHECKED_IN"
+        return check_in, today.isoformat(), ReservationStatus.CHECKED_IN
 
     elif bucket == "2":
-        # check_in: 7-30 days ago, check_out: 1-7 days in future, status: CHECKED_IN
         check_in = random_date_between(today - timedelta(days=30), today - timedelta(days=7))
         check_out = random_date_between(today + timedelta(days=1), today + timedelta(days=7))
-        return check_in, check_out, "CHECKED_IN"
+        return check_in, check_out, ReservationStatus.CHECKED_IN
 
     elif bucket == "3":
-        # check_in: 14-60 days ago, check_out: 2-10 days ago, status: CHECKED_OUT
         check_out_str = random_date_between(today - timedelta(days=10), today - timedelta(days=2))
         check_out_date = date.fromisoformat(check_out_str)
         check_in = random_date_between(today - timedelta(days=60), check_out_date - timedelta(days=1))
-        return check_in, check_out_str, "CHECKED_OUT"
+        return check_in, check_out_str, ReservationStatus.CHECKED_OUT
 
     elif bucket == "4":
-        # check_in: today, check_out: 1-7 days in future, status: CONFIRMED
         check_out = random_date_between(today + timedelta(days=1), today + timedelta(days=7))
-        return today.isoformat(), check_out, "CONFIRMED"
+        return today.isoformat(), check_out, ReservationStatus.CONFIRMED
 
     raise ValueError(f"Unknown bucket: {bucket}")
 
@@ -142,13 +142,13 @@ def weighted_random_bucket() -> str:
 # ---------------------------------------------------------------------------
 # Booking source
 # ---------------------------------------------------------------------------
-def get_booking_source(allowed_booking_channel: str) -> str:
+def get_booking_source(allowed_booking_channel: BookingChannel) -> str:
     """Determine booking_source based on room's allowed_booking_channel."""
-    if allowed_booking_channel == "ON_SITE_ONLY":
+    if allowed_booking_channel == BookingChannel.ON_SITE_ONLY:
         return "WALK_IN"
-    elif allowed_booking_channel == "ANY":
+    elif allowed_booking_channel == BookingChannel.ANY:
         return random.choice(BOOKING_SOURCES_ANY)
-    elif allowed_booking_channel == "STAFF_ASSIGNMENT":
+    elif allowed_booking_channel == BookingChannel.STAFF_ASSIGNMENT:
         return "INTERNAL"
     raise ValueError(f"Unknown booking channel: {allowed_booking_channel}")
 
@@ -241,15 +241,15 @@ def create_collision_reservations(
         fixed_check_in = (today - timedelta(days=random.randint(5, 15))).isoformat()
         fixed_check_out = (today + timedelta(days=random.randint(2, 5))).isoformat()
 
-    status = "CHECKED_OUT" if bucket == "3" else "CHECKED_IN"
+    status = ReservationStatus.CHECKED_OUT if bucket == "3" else ReservationStatus.CHECKED_IN
 
     print(f"\n📛 Creating {collision_count} name collisions for '{first_name} {last_name}' "
-          f"(status={status}, check_in={fixed_check_in}, check_out={fixed_check_out})")
+          f"(status={status.value}, check_in={fixed_check_in}, check_out={fixed_check_out})")
 
     total_rows = 0
     for room in selected_rooms:
         room_id = cast(int, room["room_id"])
-        channel = cast(str, room["allowed_booking_channel"])
+        channel = BookingChannel(cast(str, room["allowed_booking_channel"]))
         booking_source = get_booking_source(channel)
 
         # Each collision reservation also has 1-6 guests, but the PRIMARY guest
@@ -258,7 +258,7 @@ def create_collision_reservations(
 
         # Insert the collision-named guest first
         guest_id = insert_guest(conn, first_name, last_name)
-        insert_reservation(conn, room_id, guest_id, fixed_check_in, fixed_check_out, status, booking_source)
+        insert_reservation(conn, room_id, guest_id, fixed_check_in, fixed_check_out, status.value, booking_source)
         total_rows += 1
 
         # Then insert additional guests with random names
@@ -266,7 +266,7 @@ def create_collision_reservations(
             other_name = random.choice(all_names)
             other_first, other_last = split_name(other_name)
             other_guest_id = insert_guest(conn, other_first, other_last)
-            insert_reservation(conn, room_id, other_guest_id, fixed_check_in, fixed_check_out, status, booking_source)
+            insert_reservation(conn, room_id, other_guest_id, fixed_check_in, fixed_check_out, status.value, booking_source)
             total_rows += 1
 
     return total_rows
@@ -343,10 +343,10 @@ def populate_reservations() -> None:
 
         for room in remaining_rooms:
             room_id = room["room_id"]
-            channel = room["allowed_booking_channel"]
+            channel = BookingChannel(room["allowed_booking_channel"])
 
             # Determine bucket
-            if channel == "STAFF_ASSIGNMENT":
+            if channel == BookingChannel.STAFF_ASSIGNMENT:
                 bucket = "2"  # Always CHECKED_IN with past check_in, future check_out
             else:
                 bucket = weighted_random_bucket()
@@ -361,10 +361,10 @@ def populate_reservations() -> None:
             for full_name in selected_names:
                 first_name, last_name = split_name(full_name)
                 guest_id = insert_guest(conn, first_name, last_name)
-                insert_reservation(conn, room_id, guest_id, check_in, check_out, status, booking_source)
+                insert_reservation(conn, room_id, guest_id, check_in, check_out, status.value, booking_source)
                 normal_rows += 1
 
-            status_counts[status] = status_counts.get(status, 0) + 1
+            status_counts[status.value] = status_counts.get(status.value, 0) + 1
 
         conn.commit()
 

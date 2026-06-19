@@ -5,11 +5,13 @@ Shared constants and helpers for all Generator scripts.
 Provides a single source of truth for:
   - Directory paths (BASE_DIR, PROJECT_ROOT)
   - Database location (DB_NAME, DB_PATH)
-  - Database connection initialization
+  - Database connection initialization (raw sqlite3 and SQLAlchemy session)
 """
 
 import os
 import sqlite3
+
+from sqlalchemy.orm import Session
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -21,7 +23,7 @@ DB_PATH = os.path.join(PROJECT_ROOT, DB_NAME)
 
 
 # ---------------------------------------------------------------------------
-# Database
+# Database – raw sqlite3 (legacy scripts)
 # ---------------------------------------------------------------------------
 def init_connection(db_path: str | None = None) -> sqlite3.Connection:
     """
@@ -35,3 +37,16 @@ def init_connection(db_path: str | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.execute("PRAGMA journal_mode = WAL;")
     return conn
+
+
+# ---------------------------------------------------------------------------
+# Database – SQLAlchemy session (new code)
+# ---------------------------------------------------------------------------
+def get_session() -> Session:
+    """
+    Create and return a new SQLAlchemy Session bound to the project database.
+
+    Callers are responsible for closing the session when done.
+    """
+    from app.db import SessionLocal
+    return SessionLocal()
