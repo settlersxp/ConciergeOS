@@ -1,0 +1,97 @@
+<style>
+    /* ----- ConciergeOS Header ----- */
+    .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 12px;
+        margin-bottom: 24px;
+        border-bottom: 2px solid #e2e8f0;
+    }
+    .header h1 {
+        font-size: 1.75rem;
+        margin: 0;
+    }
+    .header h1 span { color: #64748b; font-weight: 400; font-size: 1rem; }
+
+    .shift-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 18px;
+        border: none;
+        border-radius: 6px;
+        background: #3b82f6;
+        color: #fff;
+        font-size: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s, opacity 0.15s;
+    }
+    .shift-btn:hover { background: #2563eb; }
+    .shift-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 0.875rem;
+        font-weight: 500;
+        z-index: 9999;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        animation: slideIn 0.25s ease;
+    }
+    .toast.success { background: #16a34a; }
+    .toast.error { background: #dc2626; }
+    @keyframes slideIn {
+        from { opacity: 0; transform: translateX(30px); }
+        to   { opacity: 1; transform: translateX(0); }
+    }
+</style>
+
+<header class="header">
+  <h1>ConciergeOS <span>— Reservations Dashboard</span></h1>
+  <button class="shift-btn" id="shiftBtn" onclick="shiftReservations()">Shift +1 Day</button>
+</header>
+
+<script>
+async function shiftReservations() {
+    const btn = document.getElementById('shiftBtn');
+    btn.disabled = true;
+    btn.textContent = 'Shifting…';
+
+    try {
+        const res = await fetch('/api/debug/shift-reservations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ days: 1 }),
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+            showToast(`Shifted ${data.shifted} reservation(s) by +1 day`, 'success');
+        } else {
+            showToast(data.error || 'Shift failed', 'error');
+        }
+    } catch (err) {
+        showToast('Network error: ' + err.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Shift +1 Day';
+    }
+}
+
+function showToast(message, type) {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    el.textContent = message;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 4000);
+}
+</script>

@@ -23,14 +23,6 @@
             padding: 24px;
             line-height: 1.5;
         }
-        h1 {
-            font-size: 1.75rem;
-            margin-bottom: 24px;
-            border-bottom: 2px solid var(--border);
-            padding-bottom: 12px;
-        }
-        h1 span { color: var(--muted); font-weight: 400; font-size: 1rem; }
-
         /* ----- Errors section ----- */
         .errors-section {
             background: var(--error-bg);
@@ -157,7 +149,7 @@
 </head>
 <body>
 
-    <h1>ConciergeOS <span>— Reservations Dashboard</span></h1>
+    {% include 'header.html' %}
 
     <!-- Errors Section -->
     <div class="errors-section">

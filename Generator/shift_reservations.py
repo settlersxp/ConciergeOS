@@ -9,8 +9,9 @@ Usage:
 
 import argparse
 import sys
+from typing import Any, Dict
 
-from utils import DB_NAME, init_connection
+from Generator.utils import DB_NAME, init_connection
 
 
 def parse_args() -> int:
@@ -27,37 +28,51 @@ def parse_args() -> int:
     return args.days
 
 
-def main():
-    days = parse_args()
+def _build_modifier(days: int) -> str:
     sign = "+" if days >= 0 else "-"
     abs_days = abs(days)
-    modifier = f"{sign}{abs_days} day"
+    return f"{sign}{abs_days} day"
 
-    print(f"📅 Shifting all reservations by {sign}{days} day(s) in '{DB_NAME}' ...")
+
+def shift_reservations(days: int = 1) -> Dict[str, Any]:
+    """
+    Shift all reservation check_in and check_out dates by a given number
+    of days and return a result summary.
+
+    Returns a dict with keys:
+        ok (bool), shifted (int), days (int), before (list), after (list),
+        and optionally error (str) or message (str).
+    """
+    modifier = _build_modifier(days)
 
     conn = init_connection()
     try:
         cursor = conn.cursor()
 
-        # Show counts before the shift
         cursor.execute("SELECT COUNT(*) FROM Reservations")
         total = cursor.fetchone()[0]
         if total == 0:
-            print("ℹ️  No reservations found. Nothing to shift.")
-            return
+            return {
+                "ok": True,
+                "shifted": 0,
+                "days": days,
+                "message": "No reservations found. Nothing to shift.",
+                "before": [],
+                "after": [],
+            }
 
+        # Sample before
         cursor.execute(
-            "SELECT check_in_date, check_out_date FROM Reservations ORDER BY reservation_id LIMIT 5"
+            "SELECT check_in_date, check_out_date FROM Reservations "
+            "ORDER BY reservation_id LIMIT 5"
         )
-        sample_before = cursor.fetchall()
-        print(f"\n📋 Sample before ({min(5, total)} rows):")
-        print(f"   {'Check-In':<14} {'Check-Out':<14}")
-        for row in sample_before:
-            print(f"   {row[0]:<14} {row[1]:<14}")
+        sample_before = [
+            {"check_in": r[0], "check_out": r[1]} for r in cursor.fetchall()
+        ]
 
         # Perform the shift
         cursor.execute(
-            f"""
+            """
             UPDATE Reservations
             SET check_in_date  = date(check_in_date, ?),
                 check_out_date = date(check_out_date, ?)
@@ -65,26 +80,61 @@ def main():
             (modifier, modifier),
         )
         conn.commit()
-
         shifted = cursor.rowcount
-        print(f"\n✅ Shifted {shifted} reservation(s) by {sign}{days} day(s).")
 
-        # Show sample after the shift
+        # Sample after
         cursor.execute(
-            "SELECT check_in_date, check_out_date FROM Reservations ORDER BY reservation_id LIMIT 5"
+            "SELECT check_in_date, check_out_date FROM Reservations "
+            "ORDER BY reservation_id LIMIT 5"
         )
-        sample_after = cursor.fetchall()
-        print(f"\n📋 Sample after ({min(5, total)} rows):")
-        print(f"   {'Check-In':<14} {'Check-Out':<14}")
-        for row in sample_after:
-            print(f"   {row[0]:<14} {row[1]:<14}")
+        sample_after = [
+            {"check_in": r[0], "check_out": r[1]} for r in cursor.fetchall()
+        ]
+
+        return {
+            "ok": True,
+            "shifted": shifted,
+            "days": days,
+            "before": sample_before,
+            "after": sample_after,
+        }
 
     except Exception as e:
-        print(f"❌ Error: {e}")
         conn.rollback()
-        sys.exit(1)
+        return {"ok": False, "error": str(e)}
     finally:
         conn.close()
+
+
+def main():
+    days = parse_args()
+    sign = "+" if days >= 0 else "-"
+
+    print(f"📅 Shifting all reservations by {sign}{days} day(s) in '{DB_NAME}' ...")
+
+    result = shift_reservations(days)
+
+    if not result["ok"]:
+        print(f"❌ Error: {result['error']}")
+        sys.exit(1)
+
+    if result.get("message"):
+        print(result["message"])
+        return
+
+    total_before = len(result["before"])
+    print(f"\n📋 Sample before ({total_before} rows):")
+    print(f"   {'Check-In':<14} {'Check-Out':<14}")
+    for row in result["before"]:
+        print(f"   {row['check_in']:<14} {row['check_out']:<14}")
+
+    print(f"\n✅ Shifted {result['shifted']} reservation(s) by {sign}{days} day(s).")
+
+    total_after = len(result["after"])
+    print(f"\n📋 Sample after ({total_after} rows):")
+    print(f"   {'Check-In':<14} {'Check-Out':<14}")
+    for row in result["after"]:
+        print(f"   {row['check_in']:<14} {row['check_out']:<14}")
 
 
 if __name__ == "__main__":
