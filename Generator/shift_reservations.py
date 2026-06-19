@@ -64,7 +64,7 @@ def shift_reservations(days: int = 1) -> Dict[str, Any]:
                 "after": [],
             }
 
-        # Sample before
+        # Sample before (convert date objects to ISO strings for JSON serialization)
         sample_before = (
             db.query(Reservation.check_in_date, Reservation.check_out_date)
             .order_by(Reservation.reservation_id)
@@ -72,7 +72,11 @@ def shift_reservations(days: int = 1) -> Dict[str, Any]:
             .all()
         )
         before_list = [
-            {"check_in": r[0], "check_out": r[1]} for r in sample_before
+            {
+                "check_in": row.check_in_date.isoformat(),
+                "check_out": row.check_out_date.isoformat(),
+            }
+            for row in sample_before
         ]
 
         # Perform the shift using SQLAlchemy Core UPDATE
@@ -88,7 +92,7 @@ def shift_reservations(days: int = 1) -> Dict[str, Any]:
         db.commit()
         shifted = result.rowcount
 
-        # Sample after
+        # Sample after (convert date objects to ISO strings for JSON serialization)
         sample_after = (
             db.query(Reservation.check_in_date, Reservation.check_out_date)
             .order_by(Reservation.reservation_id)
@@ -96,7 +100,11 @@ def shift_reservations(days: int = 1) -> Dict[str, Any]:
             .all()
         )
         after_list = [
-            {"check_in": r[0], "check_out": r[1]} for r in sample_after
+            {
+                "check_in": row.check_in_date.isoformat(),
+                "check_out": row.check_out_date.isoformat(),
+            }
+            for row in sample_after
         ]
 
         return {

@@ -4,8 +4,9 @@ Shared constants and helpers for all Generator scripts.
 
 Provides a single source of truth for:
   - Directory paths (BASE_DIR, PROJECT_ROOT)
-  - Database location (DB_NAME, DB_PATH)
   - Database connection initialization (raw sqlite3 and SQLAlchemy session)
+
+Note: DB_PATH and DB_NAME are imported from app.db to avoid duplication.
 """
 
 import os
@@ -18,8 +19,9 @@ from sqlalchemy.orm import Session
 # ---------------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
-DB_NAME = "hotel.db"
-DB_PATH = os.path.join(PROJECT_ROOT, DB_NAME)
+
+# Import DB configuration from app to avoid duplication
+from app.db import DB_NAME, DB_PATH
 
 
 # ---------------------------------------------------------------------------

@@ -25,4 +25,4 @@ def shift_reservations_endpoint(body: ShiftRequest = ShiftRequest()) -> ShiftRes
         {"days": -2}  – shift backward by 2 days
     """
     result = _shift_reservations(body.days)
-    return ShiftResponse(**result)
+    return ShiftResponse.model_validate(result)

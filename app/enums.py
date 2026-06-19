@@ -27,3 +27,13 @@ class ReservationStatus(str, Enum):
     CHECKED_IN = "CHECKED_IN"
     CHECKED_OUT = "CHECKED_OUT"
     CANCELLED = "CANCELLED"
+
+
+class BookingSource(str, Enum):
+    """Where a reservation was created / booked from."""
+
+    WALK_IN = "WALK_IN"
+    WEBSITE = "WEBSITE"
+    PHONE = "PHONE"
+    OTA = "OTA"
+    INTERNAL = "INTERNAL"

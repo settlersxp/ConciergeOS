@@ -3,13 +3,23 @@
 SQLAlchemy database engine, session management, and base model.
 """
 
+import os
+from pathlib import Path
 from typing import Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from Generator.utils import DB_PATH
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+_PROJECT_ROOT = Path(os.path.dirname(os.path.abspath(__file__))).parent
+DB_NAME = "hotel.db"
+DB_PATH = str(_PROJECT_ROOT / DB_NAME)
 
+# ---------------------------------------------------------------------------
+# Engine & Session
+# ---------------------------------------------------------------------------
 engine = create_engine(
     f"sqlite:///{DB_PATH}",
     connect_args={"check_same_thread": False},

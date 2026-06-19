@@ -3,11 +3,15 @@
 Pydantic schemas for API request/response validation.
 """
 
-from typing import Dict, List
+from datetime import date
+from typing import TYPE_CHECKING, Dict, List
 
 from pydantic import BaseModel, Field
 
-from app.enums import ReservationStatus
+from app.enums import BookingSource, ReservationStatus
+
+if TYPE_CHECKING:
+    from app.models import Reservation
 
 
 # ---------------------------------------------------------------------------
@@ -23,10 +27,29 @@ class ReservationResponse(BaseModel):
     guest_id: int
     first_name: str
     last_name: str
-    check_in_date: str
-    check_out_date: str
+    check_in_date: date
+    check_out_date: date
     status: ReservationStatus
-    booking_source: str
+    booking_source: BookingSource
+
+    @classmethod
+    def from_orm_reservation(
+        cls,
+        reservation: "Reservation",
+    ) -> "ReservationResponse":
+        """Create a ReservationResponse directly from an ORM Reservation object (room/guest must be loaded)."""
+        return cls(
+            reservation_id=reservation.reservation_id,
+            room_id=reservation.room_id,
+            room_name=reservation.room.name,
+            guest_id=reservation.guest_id,
+            first_name=reservation.guest.first_name,
+            last_name=reservation.guest.last_name,
+            check_in_date=reservation.check_in_date,
+            check_out_date=reservation.check_out_date,
+            status=reservation.status,
+            booking_source=reservation.booking_source,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -40,8 +63,8 @@ class ErrorResponse(BaseModel):
     room_name: str
     room_id: int
     guest_name: str
-    check_in_date: str
-    check_out_date: str
+    check_in_date: date
+    check_out_date: date
     status: ReservationStatus
     error_type: str
     description: str
@@ -65,7 +88,10 @@ class ReservationsSummary(BaseModel):
 class ShiftRequest(BaseModel):
     """Request body for shifting reservation dates."""
 
-    days: int = Field(default=1, description="Number of days to shift (positive = forward, negative = backward)")
+    days: int = Field(
+        default=1,
+        description="Number of days to shift (positive = forward, negative = backward)"
+    )
 
 
 class ShiftSampleEntry(BaseModel):

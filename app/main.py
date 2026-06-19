@@ -18,11 +18,12 @@ app.include_router(debug_router, prefix="/api")
 @app.get("/")
 async def index(request: Request):
     """Serve the main reservations dashboard page."""
-    data = get_reservations_summary()
+    summary = get_reservations_summary()
+    # model_dump() converts Pydantic schemas to plain dicts for Jinja2 rendering
     context = {
         "request": request,
-        "rooms": data["rooms"],
-        "errors": data["errors"],
+        "rooms": summary.model_dump(mode="json")["rooms"],
+        "errors": [e.model_dump(mode="json") for e in summary.errors],
     }
     return templates.TemplateResponse(request, "reservations.html", context)
 
@@ -30,4 +31,5 @@ async def index(request: Request):
 @app.get("/api/reservations")
 async def api_reservations():
     """JSON endpoint returning reservations grouped by room and errors."""
-    return get_reservations_summary()
+    summary = get_reservations_summary()
+    return summary.model_dump(mode="json")

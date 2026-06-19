@@ -9,67 +9,63 @@ import json
 import os
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Dict, List
+
+from sqlalchemy.orm import Query, Session
 
 from app.db import SessionLocal
 from app.enums import ReservationStatus
 from app.models import Guest, Reservation, Room
-from app.schemas import ErrorResponse, ReservationResponse
+from app.schemas import ErrorResponse, ReservationResponse, ReservationsSummary
+
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-_BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__))).parent
+_BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__))).parent.parent
 ERRONEOUS_JSON = _BASE_DIR / "Generator" / "erroneous_reservations.json"
 
 
 # ---------------------------------------------------------------------------
-# Data conversion
+# Query helpers
 # ---------------------------------------------------------------------------
 
-def _orm_to_reservation(resp: ReservationResponse) -> Dict[str, Any]:
-    """Convert a Pydantic ReservationResponse to a plain dict for template rendering."""
-    return resp.model_dump()
+def _base_reservation_query(db: Session) -> Query[Reservation]:
+    """
+    Build the base query for reservations joined with Room and Guest.
+    Reused by both get_all_reservations_grouped_by_room and detect_errors.
+    """
+    return (
+        db.query(Reservation)
+        .join(Room, Reservation.room_id == Room.room_id)
+        .join(Guest, Reservation.guest_id == Guest.guest_id)
+    )
 
 
 # ---------------------------------------------------------------------------
 # Queries
 # ---------------------------------------------------------------------------
 
-def get_all_reservations_grouped_by_room() -> Dict[str, List[Dict[str, Any]]]:
+def get_all_reservations_grouped_by_room() -> Dict[str, List[ReservationResponse]]:
     """
     Fetch all reservations joined with room and guest data,
-    grouped by room name.
+    grouped by room name. Returns Pydantic ReservationResponse objects.
     """
     db = SessionLocal()
     try:
         rows = (
-            db.query(Reservation)
-            .join(Room, Reservation.room_id == Room.room_id)
-            .join(Guest, Reservation.guest_id == Guest.guest_id)
+            _base_reservation_query(db)
             .order_by(Room.name, Reservation.room_id, Reservation.check_in_date)
             .all()
         )
 
-        rooms: Dict[str, List[Dict[str, Any]]] = {}
+        rooms: Dict[str, List[ReservationResponse]] = {}
         for res in rows:
             room_name = res.room.name
             if room_name not in rooms:
                 rooms[room_name] = []
 
-            schema = ReservationResponse(
-                reservation_id=res.reservation_id,
-                room_id=res.room_id,
-                room_name=room_name,
-                guest_id=res.guest_id,
-                first_name=res.guest.first_name,
-                last_name=res.guest.last_name,
-                check_in_date=res.check_in_date,
-                check_out_date=res.check_out_date,
-                status=res.status,
-                booking_source=res.booking_source,
-            )
-            rooms[room_name].append(_orm_to_reservation(schema))
+            rooms[room_name].append(ReservationResponse.from_orm_reservation(res))
 
         return rooms
     finally:
@@ -94,7 +90,7 @@ def get_error_ids() -> Dict[str, List[int]]:
     }
 
 
-def detect_errors() -> List[Dict[str, Any]]:
+def detect_errors() -> List[ErrorResponse]:
     """
     Return a list of error details for reservations flagged in
     erroneous_reservations.json, including what's wrong with each.
@@ -110,22 +106,21 @@ def detect_errors() -> List[Dict[str, Any]]:
     db = SessionLocal()
     try:
         today = date.today()
-
+        
         rows = (
-            db.query(Reservation)
-            .join(Room, Reservation.room_id == Room.room_id)
-            .join(Guest, Reservation.guest_id == Guest.guest_id)
+            _base_reservation_query(db)
             .filter(Reservation.reservation_id.in_(all_error_ids))
             .order_by(Reservation.reservation_id)
             .all()
         )
 
-        errors: List[Dict[str, Any]] = []
+        errors: List[ErrorResponse] = []
 
         for res in rows:
             rid = res.reservation_id
-            check_in = date.fromisoformat(res.check_in_date)
-            check_out = date.fromisoformat(res.check_out_date)
+            # Dates are now native `date` objects thanks to SQLAlchemy Date type
+            check_in = res.check_in_date
+            check_out = res.check_out_date
             status = res.status
 
             descriptions = []
@@ -134,17 +129,17 @@ def detect_errors() -> List[Dict[str, Any]]:
             if rid in status_error_ids:
                 if status == ReservationStatus.CANCELLED and check_in < today and check_out >= today:
                     descriptions.append(
-                        f"Status is CANCELLED but dates ({res.check_in_date} → {res.check_out_date}) "
+                        f"Status is CANCELLED but dates ({check_in.isoformat()} → {check_out.isoformat()}) "
                         f"indicate an active stay (likely should be CHECKED_IN)."
                     )
                 elif status == ReservationStatus.CHECKED_OUT and check_in == today and check_out > today:
                     descriptions.append(
-                        f"Status is CHECKED_OUT but check-in is today ({res.check_in_date}) "
-                        f"with future check-out ({res.check_out_date}) (likely should be CONFIRMED)."
+                        f"Status is CHECKED_OUT but check-in is today ({check_in.isoformat()}) "
+                        f"with future check-out ({check_out.isoformat()}) (likely should be CONFIRMED)."
                     )
                 elif status == ReservationStatus.CHECKED_OUT and check_in < today and check_out >= today:
                     descriptions.append(
-                        f"Status is CHECKED_OUT but dates ({res.check_in_date} → {res.check_out_date}) "
+                        f"Status is CHECKED_OUT but dates ({check_in.isoformat()} → {check_out.isoformat()}) "
                         f"indicate an active stay (likely should be CHECKED_IN)."
                     )
 
@@ -152,12 +147,12 @@ def detect_errors() -> List[Dict[str, Any]]:
             if rid in date_error_ids:
                 if status == ReservationStatus.CHECKED_IN and check_out < today:
                     descriptions.append(
-                        f"Status is CHECKED_IN but check-out date ({res.check_out_date}) "
+                        f"Status is CHECKED_IN but check-out date ({check_out.isoformat()}) "
                         f"is in the past — dates are unsynchronized."
                     )
                 elif status == ReservationStatus.CHECKED_OUT and check_in > today:
                     descriptions.append(
-                        f"Status is CHECKED_OUT but check-in date ({res.check_in_date}) "
+                        f"Status is CHECKED_OUT but check-in date ({check_in.isoformat()}) "
                         f"is in the future — dates are unsynchronized."
                     )
 
@@ -174,30 +169,29 @@ def detect_errors() -> List[Dict[str, Any]]:
             if rid in date_error_ids:
                 error_type.append("date")
 
-            error_schema = ErrorResponse(
+            errors.append(ErrorResponse(
                 reservation_id=rid,
                 room_name=res.room.name,
                 room_id=res.room_id,
                 guest_name=f"{res.guest.first_name} {res.guest.last_name}",
-                check_in_date=res.check_in_date,
-                check_out_date=res.check_out_date,
+                check_in_date=check_in,
+                check_out_date=check_out,
                 status=status,
                 error_type=" / ".join(error_type),
                 description=" ".join(descriptions),
-            )
-            errors.append(error_schema.model_dump())
+            ))
 
         return errors
     finally:
         db.close()
 
 
-def get_reservations_summary() -> Dict[str, Any]:
+def get_reservations_summary() -> ReservationsSummary:
     """
     Return the full data payload for the dashboard:
     reservations grouped by room and the list of errors.
     """
-    return {
-        "rooms": get_all_reservations_grouped_by_room(),
-        "errors": detect_errors(),
-    }
+    return ReservationsSummary(
+        rooms=get_all_reservations_grouped_by_room(),
+        errors=detect_errors(),
+    )
