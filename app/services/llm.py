@@ -18,6 +18,26 @@ _LLM_CLIENT = OpenAI(
 )
 _LLM_MODEL = "Qwen/Qwen3.6-27B"
 
+# ── Shared prompts (single source of truth) ─────────────────────────────────
+
+SYSTEM_PROMPT = (
+    "You are a helpful hotel concierge assistant. "
+    "You will receive a JSON dataset containing all guests with their rooms and reservations. "
+    "Given a customer name, return all available information about that guest, "
+    "including personal details, rooms, and all reservations. "
+    "If the guest is not found, say so clearly. "
+    "Format your response in a clear, readable way."
+)
+
+
+def build_user_prompt(customer_name: str, data: str) -> str:
+    """Build the user prompt for querying a guest by name."""
+    return (
+        f"Find all information about the customer named: {customer_name}\n\n"
+        f"Here is the full dataset of guests, rooms, and reservations:\n\n"
+        f"{data}"
+    )
+
 
 def _fetch_all_guests_and_reservations() -> str:
     """
@@ -72,25 +92,12 @@ def query_guest_with_llm(customer_name: str) -> str:
     """
     data = _fetch_all_guests_and_reservations()
 
-    system_prompt = (
-        "You are a helpful hotel concierge assistant. "
-        "You will receive a JSON dataset containing all guests with their rooms and reservations. "
-        "Given a customer name, return all available information about that guest, "
-        "including personal details, rooms, and all reservations. "
-        "If the guest is not found, say so clearly. "
-        "Format your response in a clear, readable way."
-    )
-
-    user_prompt = (
-        f"Find all information about the customer named: {customer_name}\n\n"
-        f"Here is the full dataset of guests, rooms, and reservations:\n\n"
-        f"{data}"
-    )
+    user_prompt = build_user_prompt(customer_name, data)
 
     response = _LLM_CLIENT.chat.completions.create(
         model=_LLM_MODEL,
         messages=[
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
         temperature=0,

@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConciergeOS — Performance Testing</title>
+    <style>
+        :root {
+            --bg: #f4f6f9;
+            --card: #ffffff;
+            --border: #e2e8f0;
+            --text: #1e293b;
+            --muted: #64748b;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 24px;
+            line-height: 1.5;
+        }
+
+        .nav-link {
+            display: inline-block;
+            margin-bottom: 16px;
+            color: var(--primary);
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+        .nav-link:hover { text-decoration: underline; }
+
+        /* ---- Layout ---- */
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        @media (max-width: 900px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+        }
+        .card.full { grid-column: 1 / -1; }
+        .card h2 {
+            font-size: 1.1rem;
+            margin-bottom: 16px;
+            color: var(--text);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+        }
+        .card h3 {
+            font-size: 0.95rem;
+            margin-bottom: 8px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        /* ---- Form ---- */
+        .form-group {
+            margin-bottom: 14px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--text);
+        }
+        .form-group input[type="text"],
+        .form-group input[type="number"],
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.15s;
+            font-family: inherit;
+        }
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            border-color: var(--primary);
+        }
+        .form-group textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        .form-row {
+            display: flex;
+            gap: 12px;
+        }
+        .form-row .form-group { flex: 1; }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+        }
+
+        /* ---- Buttons ---- */
+        .btn-row {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+        .btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, opacity 0.15s;
+        }
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+        }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-secondary {
+            background: var(--border);
+            color: var(--text);
+        }
+        .btn-secondary:hover { background: #cbd5e1; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* ---- Status ---- */
+        .status-bar {
+            display: none;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            font-size: 0.95rem;
+        }
+        .status-bar.visible { display: block; }
+        .status-bar.running {
+            background: #dbeafe;
+            border: 1px solid #93c5fd;
+            color: #1e40af;
+        }
+        .status-bar.success {
+            background: #dcfce7;
+            border: 1px solid #86efac;
+            color: #166534;
+        }
+        .status-bar.error {
+            background: #fee2e2;
+            border: 1px solid #fca5a5;
+            color: #991b1b;
+        }
+
+        /* ---- Results table ---- */
+        .results-wrapper {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        th, td {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            text-align: left;
+        }
+        th {
+            background: var(--bg);
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.03em;
+        }
+        td { color: var(--text); }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-sequential { background: #dbeafe; color: #1e40af; }
+        .badge-concurrent { background: #fef3c7; color: #92400e; }
+        .badge-json { background: #dcfce7; color: #166534; }
+        .badge-text { background: #f1f5f9; color: #475569; }
+        .badge-ok { background: #dcfce7; color: #166534; }
+        .badge-malformed { background: #fee2e2; color: #991b1b; }
+        .badge-true { background: #dbeafe; color: #1e40af; }
+        .badge-false { background: #f1f5f9; color: #475569; }
+
+        /* ---- Summary cards ---- */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .summary-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+        }
+        .summary-card .value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        .summary-card .label {
+            font-size: 0.8rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    {% include 'header.html' %}
+
+    <a href="/" class="nav-link">&larr; Back to Reservations Dashboard</a>
+
+    <h1 style="font-size: 1.4rem; margin-bottom: 20px;">Performance Testing</h1>
+
+    <!-- Status Bar -->
+    <div class="status-bar" id="statusBar"></div>
+
+    <div class="grid">
+        <!-- Test Configuration -->
+        <div class="card">
+            <h2>Test Configuration</h2>
+            <div class="form-group">
+                <label for="customerName">Customer Name</label>
+                <input type="text" id="customerName" value="عائشة إبراهيم" />
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="sequentialBatch">Sequential Requests</label>
+                    <input type="number" id="sequentialBatch" value="5" min="1" max="50" />
+                </div>
+                <div class="form-group">
+                    <label for="concurrentBatch">Concurrent Requests</label>
+                    <input type="number" id="concurrentBatch" value="8" min="1" max="50" />
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="vllmUrl">vLLM Base URL</label>
+                <input type="text" id="vllmUrl" value="http://10.0.0.227:8000/v1" />
+            </div>
+            <div class="form-group">
+                <label for="modelsEndpoint">Models Endpoint</label>
+                <input type="text" id="modelsEndpoint" value="http://10.0.0.227:8000/v1/models" />
+            </div>
+        </div>
+
+        <!-- Model Settings -->
+        <div class="card">
+            <h2>Model Settings <small style="color: var(--muted); font-weight: normal;">(auto-filled or manual)</small></h2>
+            <div class="form-group">
+                <label for="modelName">Model Name</label>
+                <input type="text" id="modelName" placeholder="e.g. Qwen/Qwen3.6-27B" />
+            </div>
+            <div class="form-group">
+                <label for="vllmVersion">vLLM Version</label>
+                <input type="text" id="vllmVersion" placeholder="e.g. 0.6.0" />
+            </div>
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="thinkingEnabled" />
+                    <label for="thinkingEnabled">Thinking Enabled</label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="expectedFormat">Expected Response Format</label>
+                <select id="expectedFormat">
+                    <option value="auto">Auto-Detect</option>
+                    <option value="json">JSON</option>
+                    <option value="text">TEXT</option>
+                </select>
+            </div>
+            <div class="btn-row">
+                <button class="btn btn-secondary" id="fetchModelBtn" onclick="fetchModelInfo()">Fetch Model Info</button>
+            </div>
+        </div>
+
+        <!-- Prompt Settings -->
+        <div class="card full">
+            <h2>Prompt Settings</h2>
+            <div class="form-group">
+                <label for="systemPrompt">System Prompt</label>
+                <textarea id="systemPrompt">You are a helpful hotel concierge assistant. You will receive a JSON dataset containing all guests with their rooms and reservations. Given a customer name, return all available information about that guest, including personal details, rooms, and all reservations. If the guest is not found, say so clearly. Format your response in a clear, readable way.</textarea>
+            </div>
+            <div class="form-group">
+                <label for="userPrompt">User Prompt <small style="color: var(--muted); font-weight: normal;">(leave empty to auto-generate from customer name + DB data)</small></label>
+                <textarea id="userPrompt" placeholder="Leave empty to auto-build from customer name and database..."></textarea>
+            </div>
+        </div>
+
+        <!-- Run Button -->
+        <div class="card full">
+            <div class="btn-row" style="margin-top: 0;">
+                <button class="btn btn-primary" id="runBtn" onclick="runTests()">Run Performance Tests</button>
+                <button class="btn btn-secondary" id="loadResultsBtn" onclick="loadResults()">Load Latest Results</button>
+                <button class="btn btn-secondary" id="loadAllResultsBtn" onclick="loadAllResults()">Load All Results</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" style="display: none;">
+        <h2 style="margin-bottom: 16px;">Results — Run <span id="runIdDisplay"></span></h2>
+
+        <div class="summary-grid" id="summaryGrid"></div>
+
+        <div class="card">
+            <h2>Detailed Results</h2>
+            <div class="results-wrapper">
+                <table id="resultsTable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Batch</th>
+                            <th>Model</th>
+                            <th>vLLM</th>
+                            <th>Thinking</th>
+                            <th>Context</th>
+                            <th>Format</th>
+                            <th>JSON</th>
+                            <th>Length</th>
+                            <th>Sent</th>
+                            <th>Received</th>
+                            <th>Elapsed</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const statusBar = document.getElementById('statusBar');
+
+        function showStatus(message, type) {
+            statusBar.textContent = message;
+            statusBar.className = 'status-bar visible ' + type;
+        }
+
+        function hideStatus() {
+            statusBar.className = 'status-bar';
+        }
+
+        async function fetchModelInfo() {
+            const btn = document.getElementById('fetchModelBtn');
+            btn.disabled = true;
+            btn.textContent = 'Fetching...';
+
+            try {
+                const url = document.getElementById('modelsEndpoint').value;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                const models = data.data || [];
+                if (!models.length) throw new Error('No models found');
+
+                const m = models[0];
+                document.getElementById('modelName').value = m.id || m.model || 'unknown';
+
+                let version = m.vllm_version || '';
+                if (!version && m.extra && typeof m.extra === 'object') {
+                    version = m.extra.vllm_version || 'unknown';
+                }
+                document.getElementById('vllmVersion').value = version || 'unknown';
+
+                let thinking = false;
+                if (m.capabilities && typeof m.capabilities === 'object') {
+                    thinking = m.capabilities.thinking || false;
+                }
+                const mtype = String(m.type || '');
+                if (mtype.toLowerCase().includes('thinking')) thinking = true;
+                document.getElementById('thinkingEnabled').checked = thinking;
+
+                showStatus('Model info fetched successfully.', 'success');
+            } catch (err) {
+                showStatus('Failed to fetch model info: ' + err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Fetch Model Info';
+            }
+        }
+
+        function gatherSettings() {
+            return {
+                customer_name: document.getElementById('customerName').value.trim(),
+                vllm_url: document.getElementById('vllmUrl').value.trim(),
+                models_endpoint: document.getElementById('modelsEndpoint').value.trim(),
+                sequential_batch_size: parseInt(document.getElementById('sequentialBatch').value) || 5,
+                concurrent_batch_size: parseInt(document.getElementById('concurrentBatch').value) || 8,
+                model_name: document.getElementById('modelName').value.trim(),
+                vllm_version: document.getElementById('vllmVersion').value.trim(),
+                thinking_enabled: document.getElementById('thinkingEnabled').checked,
+                system_prompt: document.getElementById('systemPrompt').value.trim(),
+                user_prompt: document.getElementById('userPrompt').value.trim(),
+                expected_response_format: document.getElementById('expectedFormat').value,
+            };
+        }
+
+        async function runTests() {
+            const runBtn = document.getElementById('runBtn');
+            const loadBtn = document.getElementById('loadResultsBtn');
+            runBtn.disabled = true;
+            loadBtn.disabled = true;
+            showStatus('Running performance tests... This may take a while.', 'running');
+
+            const settings = gatherSettings();
+
+            try {
+                const res = await fetch('/api/performance-testing', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings),
+        });
+
+                if (!res.ok) {
+                    const err = await res.json().catch(() => null);
+                    throw new Error(err?.detail || err?.error || `Server error: ${res.status}`);
+                }
+
+                const data = await res.json();
+                showStatus(`Tests completed! Run #${data.run_id} — ${data.total_requests} requests total.`, 'success');
+                renderResults(data);
+            } catch (err) {
+                showStatus('Error running tests: ' + err.message, 'error');
+            } finally {
+                runBtn.disabled = false;
+                loadBtn.disabled = false;
+            }
+        }
+
+        async function loadResults() {
+            showStatus('Loading latest results...', 'running');
+            try {
+                const res = await fetch('/api/performance-testing/results');
+                if (!res.ok) throw new Error(`Server error: ${res.status}`);
+                const data = await res.json();
+                if (!data.length) {
+                    showStatus('No results found in database.', 'error');
+                    return;
+                }
+                renderResultsFromRaw(data);
+                showStatus(`Results loaded successfully. ${data.length} records retrieved (latest 100).`, 'success');
+            } catch (err) {
+                showStatus('Error loading results: ' + err.message, 'error');
+            }
+        }
+
+        async function loadAllResults() {
+            showStatus('Loading all results from database...', 'running');
+            try {
+                const res = await fetch('/api/performance-testing/all-results');
+                if (!res.ok) throw new Error(`Server error: ${res.status}`);
+                const data = await res.json();
+                if (!data.length) {
+                    showStatus('No results found in database.', 'error');
+                    return;
+                }
+                renderResultsFromRaw(data);
+                showStatus(`All results loaded successfully. ${data.length} records retrieved.`, 'success');
+            } catch (err) {
+                showStatus('Error loading all results: ' + err.message, 'error');
+            }
+        }
+
+        function renderResults(data) {
+            document.getElementById('resultsSection').style.display = 'block';
+            document.getElementById('runIdDisplay').textContent = data.run_id;
+
+            // Summary
+            const seq = data.sequential_results || [];
+            const conc = data.concurrent_results || [];
+            const all = [...seq, ...conc];
+            const times = all.map(r => r.elapsed);
+            const avg = times.length ? (times.reduce((a, b) => a + b, 0) / times.length).toFixed(2) : 0;
+            const min = times.length ? Math.min(...times).toFixed(2) : 0;
+            const max = times.length ? Math.max(...times).toFixed(2) : 0;
+
+            document.getElementById('summaryGrid').innerHTML = `
+                <div class="summary-card">
+                    <div class="value">${data.total_requests}</div>
+                    <div class="label">Total Requests</div>
+                </div>
+                <div class="summary-card">
+                    <div class="value">${avg}s</div>
+                    <div class="label">Avg Response Time</div>
+                </div>
+                <div class="summary-card">
+                    <div class="value">${min}s</div>
+                    <div class="label">Min Response Time</div>
+                </div>
+                <div class="summary-card">
+                    <div class="value">${max}s</div>
+                    <div class="label">Max Response Time</div>
+                </div>
+                <div class="summary-card">
+                    <div class="value">${data.model_name || '—'}</div>
+                    <div class="label">Model</div>
+                </div>
+            `;
+
+            // Table (we only have timing here, details come from DB)
+            const tbody = document.getElementById('resultsBody');
+            tbody.innerHTML = '';
+            all.forEach((r, i) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${i + 1}</td>
+                    <td><span class="badge badge-${r.batch_type}">${r.batch_type}</span></td>
+                    <td>${data.model_name || '—'}</td>
+                    <td>${data.vllm_version || '—'}</td>
+                    <td>${data.thinking_enabled ? '<span class="badge badge-true">Yes</span>' : '<span class="badge badge-false">No</span>'}</td>
+                    <td>${r.context_length != null && r.context_length !== undefined ? r.context_length : '—'}</td>
+                    <td><span class="badge badge-${(r.response_format || 'text').toLowerCase()}">${r.response_format || '—'}</span></td>
+                    <td>${r.json_malformed === null || r.json_malformed === undefined ? '—' :
+                          r.json_malformed ? '<span class="badge badge-malformed">Malformed</span>' :
+                          '<span class="badge badge-ok">OK</span>'}</td>
+                    <td>${r.response_length != null && r.response_length !== undefined ? r.response_length : '—'}</td>
+                    <td>${r.request_sent_time ? new Date(r.request_sent_time).toLocaleTimeString() : '—'}</td>
+                    <td>${r.response_received_time ? new Date(r.response_received_time).toLocaleTimeString() : '—'}</td>
+                    <td>${r.elapsed}s</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Scroll to results
+            document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function renderResultsFromRaw(rows) {
+            document.getElementById('resultsSection').style.display = 'block';
+            const runIds = [...new Set(rows.map(r => r.run_id))];
+            document.getElementById('runIdDisplay').textContent = runIds.join(', ');
+
+            // Summary
+            const times = rows.map(r => {
+                const sent = new Date(r.request_sent_time);
+                const received = new Date(r.response_received_time);
+                return (received - sent) / 1000;
+            });
+            const avg = times.length ? (times.reduce((a, b) => a + b, 0) / times.length).toFixed(2) : 0;
+            const min = times.length ? Math.min(...times).toFixed(2) : 0;
+            const max = times.length ? Math.max(...times).toFixed(2) : 0;
+
+            document.getElementById('summaryGrid').innerHTML = `
+                <div class="summary-card">
+                    <div class="value">${rows.length}</div>
+                    <div class="label">Total Requests</div>
+                </div>
+                <div class="summary-card">
+                    <div class="value">${avg}s</div>
+                    <div class="label">Avg Response Time</div>
+                </div>
+                <div class="summary-card">
+                    <div class="value">${min}s</div>
+                    <div class="label">Min Response Time</div>
+                </div>
+                <div class="summary-card">
+                    <div class="value">${max}s</div>
+                    <div class="label">Max Response Time</div>
+                </div>
+            `;
+
+            // Table
+            const tbody = document.getElementById('resultsBody');
+            tbody.innerHTML = '';
+            rows.forEach((r, i) => {
+                const sent = new Date(r.request_sent_time);
+                const received = new Date(r.response_received_time);
+                const elapsed = ((received - sent) / 1000).toFixed(2);
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${i + 1}</td>
+                    <td><span class="badge badge-${r.batch_type}">${r.batch_type}</span></td>
+                    <td>${r.model_name || '—'}</td>
+                    <td>${r.vllm_version || '—'}</td>
+                    <td>${r.thinking_enabled ? '<span class="badge badge-true">Yes</span>' : '<span class="badge badge-false">No</span>'}</td>
+                    <td>${r.context_length ?? '—'}</td>
+                    <td><span class="badge badge-${r.response_format?.toLowerCase() || 'text'}">${r.response_format || '—'}</span></td>
+                    <td>${r.json_malformed === null || r.json_malformed === undefined ? '—' :
+                          r.json_malformed ? '<span class="badge badge-malformed">Malformed</span>' :
+                          '<span class="badge badge-ok">OK</span>'}</td>
+                    <td>${r.response_length ?? '—'}</td>
+                    <td>${sent.toLocaleTimeString()}</td>
+                    <td>${received.toLocaleTimeString()}</td>
+                    <td>${elapsed}s</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+
+</body>
+</html>
