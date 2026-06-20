@@ -78,6 +78,29 @@ async def api_run_performance_testing(request: Request) -> dict[str, Any]:
 
     from PerformanceTesting.run_performance_tests import TestSettings, run_tests  # noqa: cwd
 
+    test_mode = body.get("test_mode", "single")
+    guest_names: list[str] = []
+
+    # In multi-guest mode, fetch the test guests from the database
+    if test_mode == "multi":
+        from app.db import SessionLocal
+        from app.models import Guest
+
+        db = SessionLocal()
+        try:
+            test_guests = (
+                db.query(Guest)
+                .filter(Guest.special_preferences == "performance_test")
+                .order_by(Guest.guest_id)
+                .all()
+            )
+            guest_names = [
+                f"{g.first_name} {g.last_name}"
+                for g in test_guests
+            ]
+        finally:
+            db.close()
+
     settings = TestSettings(
         customer_name=body.get("customer_name", "عائشة إبراهيم"),
         vllm_url=body.get("vllm_url", "http://10.0.0.227:8000/v1"),
@@ -85,6 +108,8 @@ async def api_run_performance_testing(request: Request) -> dict[str, Any]:
         database_path=_DATABASE_PATH,
         sequential_batch_size=int(body.get("sequential_batch_size", 5)),
         concurrent_batch_size=int(body.get("concurrent_batch_size", 8)),
+        test_mode=test_mode,
+        guest_names=guest_names,
         batch_uuid=body.get("batch_uuid", ""),
         friendly_name=body.get("friendly_name", ""),
         model_name=body.get("model_name", ""),
@@ -224,3 +249,64 @@ async def api_update_valid_response(result_id: int, request: Request) -> dict[st
     conn.close()
 
     return {"ok": True, "id": result_id, "valid_response": valid_response}
+
+
+# ── Performance Test Guest Setup ─────────────────────────────────────────────
+
+@app.post("/api/performance-testing/setup-guests")
+async def api_setup_test_guests() -> dict[str, Any]:
+    """Setup 13 test guests with 4 reservations each for performance testing."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+
+    from Generator.setup_performance_guests import setup_performance_test_guests  # noqa: cwd
+
+    try:
+        guests = setup_performance_test_guests()
+        return {
+            "ok": True,
+            "guests": guests,
+            "total": len(guests),
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e),
+            "guests": [],
+        }
+
+
+@app.get("/api/performance-testing/test-guests")
+async def api_get_test_guests() -> list[dict[str, Any]]:
+    """Get all performance test guests (marked with special_preferences = 'performance_test')."""
+    from app.db import SessionLocal
+    from app.models import Guest, Reservation
+    from sqlalchemy import func
+
+    db = SessionLocal()
+    try:
+        guests = (
+            db.query(Guest)
+            .filter(Guest.special_preferences == "performance_test")
+            .order_by(Guest.guest_id)
+            .all()
+        )
+
+        result = []
+        for g in guests:
+            count = (
+                db.query(func.count(Reservation.reservation_id))
+                .filter(Reservation.guest_id == g.guest_id)
+                .scalar()
+            )
+            result.append({
+                "guest_id": g.guest_id,
+                "first_name": g.first_name,
+                "last_name": g.last_name,
+                "full_name": f"{g.first_name} {g.last_name}",
+                "reservation_count": count,
+            })
+
+        return result
+    finally:
+        db.close()

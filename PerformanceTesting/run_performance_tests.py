@@ -2,11 +2,11 @@
 """
 Performance testing for query_guest_with_llm().
 Runs sequential and concurrent batches, logging results to a SQLite database.
+
+Database initialization is decoupled into :mod:`PerformanceTesting.db` so the
+testing logic can be used independently of storage concerns.
 """
 
-import json
-import sqlite3
-import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -26,6 +26,14 @@ from app.services.llm import (  # noqa: E402
     build_user_prompt,
 )
 
+try:
+    from .db import PerformanceTestLogger, ensure_database, get_next_run_id
+except ImportError:
+    # Fallback when run directly as a script (python -m or __main__)
+    from PerformanceTesting.db import PerformanceTestLogger, ensure_database, get_next_run_id  # noqa: cwd
+
+
+# ── Test settings ────────────────────────────────────────────────────────────
 
 @dataclass
 class TestSettings:
@@ -36,6 +44,10 @@ class TestSettings:
     database_path: Path = field(default_factory=lambda: Path(__file__).parent.parent / "performance_tests.db")
     sequential_batch_size: int = 5
     concurrent_batch_size: int = 8
+    # Test mode: "single" (one guest for all tests) or "multi" (different guest per test)
+    test_mode: str = "single"
+    # Guest names for multi-guest mode (first N for sequential, remaining for concurrent)
+    guest_names: list[str] = field(default_factory=list)
     # Batch identification
     batch_uuid: str = field(default_factory=lambda: str(uuid.uuid4()))
     friendly_name: str = ""
@@ -48,131 +60,6 @@ class TestSettings:
     user_prompt: str = ""  # If empty, auto-built from customer_name + DB data
     # Response format expectation
     expected_response_format: str = "auto"  # "json", "text", or "auto"
-
-
-# ── Database setup ───────────────────────────────────────────────────────────
-
-def init_database(db_path: Path) -> sqlite3.Connection:
-    """Create the performance_tests database and return a connection."""
-    conn = sqlite3.connect(str(db_path))
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS test_results (
-            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_id                 INTEGER,
-            batch_uuid             TEXT    NOT NULL DEFAULT '',
-            friendly_name          TEXT    DEFAULT '',
-            batch_type             TEXT    NOT NULL,
-            request_index          INTEGER NOT NULL,
-            model_name             TEXT,
-            context_length         INTEGER,
-            vllm_version           TEXT,
-            thinking_enabled       BOOLEAN,
-            system_prompt          TEXT,
-            user_prompt            TEXT,
-            response_format        TEXT,
-            json_malformed         BOOLEAN,
-            response_length        INTEGER,
-            request_sent_time      DATETIME,
-            response_received_time DATETIME,
-            response_content       TEXT,
-            valid_response         BOOLEAN
-        )
-
-        )
-        """
-    )
-
-    # Add valid_response column to existing tables (ignore if already present)
-    try:
-        conn.execute("ALTER TABLE test_results ADD COLUMN valid_response BOOLEAN")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-
-    conn.commit()
-    return conn
-
-
-_db_lock = threading.Lock()
-
-
-def log_result(
-    db_path: Path,
-    run_id: int,
-    batch_type: str,
-    request_index: int,
-    settings: TestSettings,
-    response: str,
-    request_sent_time: str,
-    response_received_time: str,
-) -> None:
-    """Insert a single test result into the database (thread-safe)."""
-    context_length = len(settings.system_prompt) + len(settings.user_prompt)
-
-    # Detect response format
-    response_format = settings.expected_response_format
-    json_malformed: Optional[bool] = None
-
-    stripped = response.strip()
-
-    if response_format == "auto":
-        # Auto-detect: if response starts with { or [, treat as JSON
-        if stripped.startswith("{") or stripped.startswith("["):
-            response_format = "JSON"
-            try:
-                json.loads(stripped)
-                json_malformed = False
-            except (json.JSONDecodeError, ValueError):
-                json_malformed = True
-        else:
-            response_format = "TEXT"
-    elif response_format == "json":
-        response_format = "JSON"
-        try:
-            json.loads(stripped)
-            json_malformed = False
-        except (json.JSONDecodeError, ValueError):
-            json_malformed = True
-    else:
-        response_format = "TEXT"
-
-    response_length = len(response)
-
-    sql = """
-        INSERT INTO test_results (
-            run_id, batch_uuid, friendly_name, batch_type, request_index, model_name,
-            context_length, vllm_version, thinking_enabled, system_prompt, user_prompt,
-            response_format, json_malformed, response_length,
-            request_sent_time, response_received_time, response_content
-        ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )
-    """
-
-    with _db_lock:
-        conn = sqlite3.connect(str(db_path))
-        conn.execute(sql, (
-            run_id,
-            settings.batch_uuid,
-            settings.friendly_name,
-            batch_type,
-            request_index,
-            settings.model_name,
-            context_length,
-            settings.vllm_version,
-            settings.thinking_enabled,
-            settings.system_prompt,
-            settings.user_prompt,
-            response_format,
-            json_malformed,
-            response_length,
-            request_sent_time,
-            response_received_time,
-            response,
-        ))
-        conn.commit()
-        conn.close()
 
 
 # ── Model info retrieval ────────────────────────────────────────────────────
@@ -255,10 +142,18 @@ def run_single_request(
     request_index: int,
     run_id: int,
     settings: TestSettings,
-    db_path: Path,
+    logger: PerformanceTestLogger,
 ) -> dict[str, Any]:
-    """Execute a single LLM query and log the result."""
-    # Store the resolved user_prompt on settings for logging
+    """Execute a single LLM query and log the result.
+
+    Args:
+        batch_type: Either ``"sequential"`` or ``"concurrent"``.
+        request_index: 1-based index within the batch.
+        run_id: The auto-incremented run identifier.
+        settings: Configured test parameters.
+        logger: Pluggable result logger (decoupled from storage).
+    """
+    # Resolve the user_prompt once (cache on settings for subsequent calls)
     if not settings.user_prompt:
         settings.user_prompt = _build_user_prompt(settings.customer_name)
 
@@ -266,12 +161,18 @@ def run_single_request(
     response = _query_guest_with_llm(settings)
     response_received_time = datetime.now(timezone.utc).isoformat()
 
-    log_result(
-        db_path=db_path,
+    logger.log(
         run_id=run_id,
+        batch_uuid=settings.batch_uuid,
+        friendly_name=settings.friendly_name,
         batch_type=batch_type,
         request_index=request_index,
-        settings=settings,
+        model_name=settings.model_name,
+        vllm_version=settings.vllm_version,
+        thinking_enabled=settings.thinking_enabled,
+        system_prompt=settings.system_prompt,
+        user_prompt=settings.user_prompt,
+        expected_response_format=settings.expected_response_format,
         response=response,
         request_sent_time=request_sent_time,
         response_received_time=response_received_time,
@@ -291,23 +192,31 @@ def run_single_request(
 
 # ── Batch runners ────────────────────────────────────────────────────────────
 
-def run_sequential_batch(run_id: int, settings: TestSettings, db_path: Path) -> list[dict]:
-    """Run sequential requests back to back."""
-    results: list[dict] = []
+def run_sequential_batch(
+    run_id: int,
+    settings: TestSettings,
+    logger: PerformanceTestLogger,
+) -> list[dict[str, Any]]:
+    """Run sequential requests back to back (single-guest mode)."""
+    results: list[dict[str, Any]] = []
     for i in range(settings.sequential_batch_size):
-        result = run_single_request("sequential", i + 1, run_id, settings, db_path)
+        result = run_single_request("sequential", i + 1, run_id, settings, logger)
         results.append(result)
         print(f"  [sequential] Request {i + 1} completed in {result['elapsed']}s")
     return results
 
 
-def run_concurrent_batch(run_id: int, settings: TestSettings, db_path: Path) -> list[dict]:
-    """Run concurrent requests simultaneously using threads."""
-    results: list[dict] = []
+def run_concurrent_batch(
+    run_id: int,
+    settings: TestSettings,
+    logger: PerformanceTestLogger,
+) -> list[dict[str, Any]]:
+    """Run concurrent requests simultaneously using threads (single-guest mode)."""
+    results: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=settings.concurrent_batch_size) as executor:
         futures = {
             executor.submit(
-                run_single_request, "concurrent", i + 1, run_id, settings, db_path
+                run_single_request, "concurrent", i + 1, run_id, settings, logger
             ): i + 1
             for i in range(settings.concurrent_batch_size)
         }
@@ -318,30 +227,159 @@ def run_concurrent_batch(run_id: int, settings: TestSettings, db_path: Path) -> 
     return results
 
 
+def run_single_request_with_guest(
+    batch_type: str,
+    request_index: int,
+    run_id: int,
+    settings: TestSettings,
+    logger: PerformanceTestLogger,
+    customer_name: str,
+    user_prompt: str,
+) -> dict[str, Any]:
+    """Execute a single LLM query for a specific guest (used in multi-guest mode).
+
+    Args:
+        batch_type: Either ``"sequential"`` or ``"concurrent"``.
+        request_index: 1-based index within the batch.
+        run_id: The auto-incremented run identifier.
+        settings: Configured test parameters.
+        logger: Pluggable result logger.
+        customer_name: The guest name for this specific request.
+        user_prompt: Pre-built user prompt for this guest.
+    """
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url=settings.vllm_url,
+        api_key="none",
+    )
+
+    model_name = settings.model_name or "Qwen/Qwen3.6-27B"
+
+    request_sent_time = datetime.now(timezone.utc).isoformat()
+    response = client.chat.completions.create(
+        model=model_name,
+        messages=[
+            {"role": "system", "content": settings.system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0,
+        max_tokens=4096,
+    )
+
+    response_text = response.choices[0].message.content or "The LLM returned an empty response."
+    response_received_time = datetime.now(timezone.utc).isoformat()
+
+    logger.log(
+        run_id=run_id,
+        batch_uuid=settings.batch_uuid,
+        friendly_name=settings.friendly_name,
+        batch_type=batch_type,
+        request_index=request_index,
+        model_name=settings.model_name,
+        vllm_version=settings.vllm_version,
+        thinking_enabled=settings.thinking_enabled,
+        system_prompt=settings.system_prompt,
+        user_prompt=user_prompt,
+        expected_response_format=settings.expected_response_format,
+        response=response_text,
+        request_sent_time=request_sent_time,
+        response_received_time=response_received_time,
+    )
+
+    elapsed = (
+        datetime.fromisoformat(response_received_time)
+        - datetime.fromisoformat(request_sent_time)
+    ).total_seconds()
+
+    return {
+        "batch_type": batch_type,
+        "request_index": request_index,
+        "elapsed": round(elapsed, 2),
+        "customer_name": customer_name,
+    }
+
+
+def run_sequential_batch_multi_guest(
+    run_id: int,
+    settings: TestSettings,
+    logger: PerformanceTestLogger,
+    guest_names: list[str],
+) -> list[dict[str, Any]]:
+    """Run sequential requests, each querying a different guest.
+
+    Uses the first `sequential_batch_size` guests from the provided list.
+    """
+    results: list[dict[str, Any]] = []
+    seq_count = settings.sequential_batch_size
+    for i in range(seq_count):
+        customer_name = guest_names[i] if i < len(guest_names) else guest_names[-1]
+        user_prompt = _build_user_prompt(customer_name)
+        result = run_single_request_with_guest(
+            "sequential", i + 1, run_id, settings, logger, customer_name, user_prompt
+        )
+        results.append(result)
+        print(f"  [sequential] Request {i + 1} (guest: {customer_name}) completed in {result['elapsed']}s")
+    return results
+
+
+def run_concurrent_batch_multi_guest(
+    run_id: int,
+    settings: TestSettings,
+    logger: PerformanceTestLogger,
+    guest_names: list[str],
+) -> list[dict[str, Any]]:
+    """Run concurrent requests, each querying a different guest.
+
+    Uses guests starting at index `sequential_batch_size` (i.e., the guests
+    assigned to the concurrent batch).
+    """
+    results: list[dict[str, Any]] = []
+    conc_count = settings.concurrent_batch_size
+    seq_count = settings.sequential_batch_size
+    # Pre-build all user prompts for the concurrent guests (thread-safe since DB reads are independent)
+    guest_data = fetch_all_guests_and_reservations()
+    prompts: list[tuple[str, str]] = []
+    for i in range(conc_count):
+        guest_idx = seq_count + i
+        customer_name = guest_names[guest_idx] if guest_idx < len(guest_names) else guest_names[-1]
+        user_prompt = build_user_prompt(customer_name, guest_data)
+        prompts.append((customer_name, user_prompt))
+
+    with ThreadPoolExecutor(max_workers=conc_count) as executor:
+        futures = {
+            executor.submit(
+                run_single_request_with_guest,
+                "concurrent", i + 1, run_id, settings, logger,
+                prompts[i][0], prompts[i][1],
+            ): i + 1
+            for i in range(conc_count)
+        }
+        for future in as_completed(futures):
+            result = future.result()
+            results.append(result)
+            print(f"  [concurrent] Request {result['request_index']} (guest: {result['customer_name']}) completed in {result['elapsed']}s")
+    return results
+
+
 # ── Public entry point ──────────────────────────────────────────────────────
-
-def get_next_run_id(db_path: Path) -> int:
-    """Get the next run_id from the database."""
-    conn = sqlite3.connect(str(db_path))
-    cursor = conn.execute("SELECT MAX(run_id) FROM test_results")
-    row = cursor.fetchone()
-    conn.close()
-    return (row[0] or 0) + 1
-
 
 def run_tests(settings: Optional[TestSettings] = None) -> dict[str, Any]:
     """
     Main entry point for running performance tests.
     Can be called from CLI or from the web API.
+
+    The database schema is ensured before tests start, and a
+    :class:`~PerformanceTesting.db.PerformanceTestLogger` is injected into
+    the batch runners so the testing logic remains storage-agnostic.
     """
     if settings is None:
         settings = TestSettings()
 
     db_path = settings.database_path
 
-    # Initialize database
-    conn = init_database(db_path)
-    conn.close()
+    # Ensure database schema exists (decoupled init)
+    ensure_database(db_path)
 
     # Fetch model info if not set by user
     if not settings.model_name:
@@ -358,8 +396,12 @@ def run_tests(settings: Optional[TestSettings] = None) -> dict[str, Any]:
 
     run_id = get_next_run_id(db_path)
 
+    # Create the injected logger
+    logger = PerformanceTestLogger(db_path=db_path)
+
     print("Performance Testing for query_guest_with_llm()")
     print(f"  Run ID: {run_id}")
+    print(f"  Test Mode: {settings.test_mode}")
     print(f"  Customer: {settings.customer_name}")
     print(f"  Model: {settings.model_name}")
     print(f"  vLLM Version: {settings.vllm_version}")
@@ -367,16 +409,33 @@ def run_tests(settings: Optional[TestSettings] = None) -> dict[str, Any]:
     print(f"  Sequential: {settings.sequential_batch_size}, Concurrent: {settings.concurrent_batch_size}")
     print(f"  Database: {db_path}")
 
-    # Run batches
-    print(f"\n{'=' * 60}")
-    print(f"Sequential Batch: {settings.sequential_batch_size} requests")
-    print(f"{'=' * 60}")
-    seq_results = run_sequential_batch(run_id, settings, db_path)
+    # Run batches based on test mode
+    if settings.test_mode == "multi" and settings.guest_names:
+        guest_names = settings.guest_names
+        print(f"  Multi-guest mode: {len(guest_names)} guests configured")
+        print(f"  Sequential guests: {', '.join(guest_names[:settings.sequential_batch_size])}")
+        print(f"  Concurrent guests: {', '.join(guest_names[settings.sequential_batch_size:settings.sequential_batch_size + settings.concurrent_batch_size])}")
 
-    print(f"\n{'=' * 60}")
-    print(f"Concurrent Batch: {settings.concurrent_batch_size} requests")
-    print(f"{'=' * 60}")
-    conc_results = run_concurrent_batch(run_id, settings, db_path)
+        print(f"\n{'=' * 60}")
+        print(f"Sequential Batch (Multi-Guest): {settings.sequential_batch_size} requests")
+        print(f"{'=' * 60}")
+        seq_results = run_sequential_batch_multi_guest(run_id, settings, logger, guest_names)
+
+        print(f"\n{'=' * 60}")
+        print(f"Concurrent Batch (Multi-Guest): {settings.concurrent_batch_size} requests")
+        print(f"{'=' * 60}")
+        conc_results = run_concurrent_batch_multi_guest(run_id, settings, logger, guest_names)
+    else:
+        # Default single-guest mode
+        print(f"\n{'=' * 60}")
+        print(f"Sequential Batch: {settings.sequential_batch_size} requests")
+        print(f"{'=' * 60}")
+        seq_results = run_sequential_batch(run_id, settings, logger)
+
+        print(f"\n{'=' * 60}")
+        print(f"Concurrent Batch: {settings.concurrent_batch_size} requests")
+        print(f"{'=' * 60}")
+        conc_results = run_concurrent_batch(run_id, settings, logger)
 
     print(f"\n{'=' * 60}")
     print("All tests completed.")

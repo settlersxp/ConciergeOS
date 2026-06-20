@@ -533,6 +533,42 @@
             text-decoration: line-through;
             border-radius: 2px;
         }
+
+        /* ---- Guest list table ---- */
+        .guest-list-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            margin-top: 8px;
+        }
+        .guest-list-table th,
+        .guest-list-table td {
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            text-align: left;
+        }
+        .guest-list-table th {
+            background: var(--bg);
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.03em;
+        }
+        .guest-list-table td {
+            color: var(--text);
+        }
+        .guest-assignment {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .guest-assignment.sequential { background: #dbeafe; color: #1e40af; }
+        .guest-assignment.concurrent { background: #fef3c7; color: #92400e; }
+        .guest-count-ok { color: var(--success); font-weight: 600; }
+        .guest-count-warn { color: var(--danger); font-weight: 600; }
     </style>
 </head>
 <body>
@@ -551,6 +587,22 @@
         <div class="card">
             <h2>Test Configuration</h2>
             <div class="form-group">
+                <label>Test Mode</label>
+                <div class="form-row" style="gap: 16px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: normal;">
+                        <input type="radio" name="testMode" value="single" checked onchange="onTestModeChange()" />
+                        <span>Single Guest (all tests same guest)</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: normal;">
+                        <input type="radio" name="testMode" value="multi" onchange="onTestModeChange()" />
+                        <span>Multi-Guest (different guest per test)</span>
+                    </label>
+                </div>
+            </div>
+            <div id="multiGuestInfo" style="display: none; padding: 10px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 0.85rem; color: #1e40af; margin-bottom: 14px;">
+                <strong>Multi-Guest Mode:</strong> First 5 test guests → Sequential batch, last 8 guests → Concurrent batch. Make sure 13 test guests are configured below.
+            </div>
+            <div class="form-group">
                 <label for="batchUuid">Batch UUID <small style="color: var(--muted); font-weight: normal;">(auto-generated)</small></label>
                 <input type="text" id="batchUuid" placeholder="Auto-generated UUID" />
             </div>
@@ -558,7 +610,7 @@
                 <label for="friendlyName">Friendly Name</label>
                 <input type="text" id="friendlyName" placeholder="e.g. Qwen3.6 Smoke Test" />
             </div>
-            <div class="form-group">
+            <div class="form-group" id="customerNameGroup">
                 <label for="customerName">Customer Name</label>
                 <input type="text" id="customerName" value="عائشة إبراهيم" />
             </div>
@@ -579,6 +631,32 @@
             <div class="form-group">
                 <label for="modelsEndpoint">Models Endpoint</label>
                 <input type="text" id="modelsEndpoint" value="http://10.0.0.227:8000/v1/models" />
+            </div>
+        </div>
+
+        <!-- Test Guests Configuration -->
+        <div class="card">
+            <h2>Test Guests Configuration</h2>
+            <p style="font-size: 0.85rem; color: var(--muted); margin-bottom: 12px;">
+                Create 13 test guests with exactly 4 reservations each to ensure constant LLM output and avoid caching effects.
+            </p>
+            <div class="btn-row" style="margin-top: 0; margin-bottom: 16px;">
+                <button class="btn btn-primary" id="setupGuestsBtn" onclick="setupTestGuests()">Setup 13 Test Guests</button>
+                <button class="btn btn-secondary" id="refreshGuestsBtn" onclick="refreshGuestList()">Refresh List</button>
+            </div>
+            <div id="guestListStatus" style="font-size: 0.85rem; color: var(--muted); margin-bottom: 8px;"></div>
+            <div id="guestListContainer" style="display: none;">
+                <table class="guest-list-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Guest Name</th>
+                            <th>Reservations</th>
+                            <th>Assignment</th>
+                        </tr>
+                    </thead>
+                    <tbody id="guestListBody"></tbody>
+                </table>
             </div>
         </div>
 
@@ -801,8 +879,25 @@
         // Load batch dropdown on page load
         populateBatchDropdown();
 
+        // ---- Test Mode Toggle ----
+        function onTestModeChange() {
+            var isMulti = document.querySelector('input[name="testMode"][value="multi"]').checked;
+            var multiGuestInfo = document.getElementById('multiGuestInfo');
+            var customerNameGroup = document.getElementById('customerNameGroup');
+
+            if (isMulti) {
+                multiGuestInfo.style.display = 'block';
+                customerNameGroup.style.display = 'none';
+            } else {
+                multiGuestInfo.style.display = 'none';
+                customerNameGroup.style.display = 'block';
+            }
+        }
+
         function gatherSettings() {
+            var isMulti = document.querySelector('input[name="testMode"][value="multi"]').checked;
             return {
+                test_mode: isMulti ? "multi" : "single",
                 batch_uuid: document.getElementById('batchUuid').value.trim() || generateUuid(),
                 friendly_name: document.getElementById('friendlyName').value.trim(),
                 customer_name: document.getElementById('customerName').value.trim(),
@@ -1436,6 +1531,125 @@
             div.textContent = str;
             return div.innerHTML;
         }
+
+        // ---- Test Guest Management ----
+
+        async function setupTestGuests() {
+            var btn = document.getElementById('setupGuestsBtn');
+            btn.disabled = true;
+            btn.textContent = 'Setting up...';
+            showStatus('Creating 13 test guests with 4 reservations each...', 'running');
+
+            try {
+                var res = await fetch('/api/performance-testing/setup-guests', {
+                    method: 'POST',
+                });
+
+                if (!res.ok) {
+                    var err = await res.json().catch(() => null);
+                    throw new Error(err?.error || err?.detail || `Server error: ${res.status}`);
+                }
+
+                var data = await res.json();
+
+                if (!data.ok) {
+                    throw new Error(data.error || 'Setup failed');
+                }
+
+                showStatus(
+                    '✅ ' + data.total + ' test guests created successfully! ' +
+                    '(4 reservations each = ' + (data.total * 4) + ' total reservations)',
+                    'success'
+                );
+
+                // Populate the guest list table
+                renderGuestList(data.guests);
+
+            } catch (err) {
+                showStatus('Error setting up guests: ' + err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Setup 13 Test Guests';
+            }
+        }
+
+        async function refreshGuestList() {
+            var btn = document.getElementById('refreshGuestsBtn');
+            btn.disabled = true;
+            btn.textContent = 'Loading...';
+            document.getElementById('guestListStatus').textContent = 'Loading guest list...';
+
+            try {
+                var res = await fetch('/api/performance-testing/test-guests');
+
+                if (!res.ok) {
+                    throw new Error(`Server error: ${res.status}`);
+                }
+
+                var guests = await res.json();
+
+                if (!guests.length) {
+                    document.getElementById('guestListStatus').textContent = 'No performance test guests found. Click "Setup 13 Test Guests" to create them.';
+                    document.getElementById('guestListContainer').style.display = 'none';
+                } else {
+                    renderGuestList(guests);
+                    document.getElementById('guestListStatus').textContent =
+                        guests.length + ' performance test guests loaded.';
+                }
+            } catch (err) {
+                showStatus('Error loading guest list: ' + err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Refresh List';
+            }
+        }
+
+        function renderGuestList(guests) {
+            var tbody = document.getElementById('guestListBody');
+            tbody.innerHTML = '';
+
+            var expectedReservations = 4;
+            var sequentialCount = parseInt(document.getElementById('sequentialBatch').value) || 5;
+            var concurrentCount = parseInt(document.getElementById('concurrentBatch').value) || 8;
+
+            guests.forEach(function(g, i) {
+                var tr = document.createElement('tr');
+
+                // Determine assignment type
+                var assignment;
+                var assignmentClass;
+                if (i < sequentialCount) {
+                    assignment = 'Sequential';
+                    assignmentClass = 'sequential';
+                } else {
+                    assignment = 'Concurrent';
+                    assignmentClass = 'concurrent';
+                }
+
+                // Check reservation count
+                var countClass = g.reservation_count === expectedReservations ? 'guest-count-ok' : 'guest-count-warn';
+
+                tr.innerHTML =
+                    '<td>' + (i + 1) + '</td>' +
+                    '<td>' + escapeHtml(g.full_name) + '</td>' +
+                    '<td><span class="' + countClass + '">' + g.reservation_count + '</span></td>' +
+                    '<td><span class="guest-assignment ' + assignmentClass + '">' + assignment + '</span></td>';
+
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('guestListContainer').style.display = 'block';
+
+            // Auto-fill the customer name field with the first guest
+            if (guests.length > 0) {
+                document.getElementById('customerName').value = guests[0].full_name;
+            }
+        }
+
+        // Load guest list on page load
+        (function initGuestList() {
+            refreshGuestList();
+        })();
     </script>
 
 </body>
