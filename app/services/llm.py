@@ -39,7 +39,7 @@ def build_user_prompt(customer_name: str, data: str) -> str:
     )
 
 
-def _fetch_all_guests_and_reservations() -> str:
+def fetch_all_guests_and_reservations() -> str:
     """
     Fetch all guests, rooms, and reservations from the database
     and return as a compact JSON string.
@@ -90,7 +90,7 @@ def query_guest_with_llm(customer_name: str) -> str:
     Sends the full guest/reservation dataset as context and asks
     the LLM to return everything related to the requested customer.
     """
-    data = _fetch_all_guests_and_reservations()
+    data = fetch_all_guests_and_reservations()
 
     user_prompt = build_user_prompt(customer_name, data)
 

@@ -7,6 +7,7 @@ Runs sequential and concurrent batches, logging results to a SQLite database.
 import json
 import sqlite3
 import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -21,7 +22,7 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 # Import shared prompts from the single source of truth
 from app.services.llm import (  # noqa: E402
     SYSTEM_PROMPT as DEFAULT_SYSTEM_PROMPT,
-    _fetch_all_guests_and_reservations,
+    fetch_all_guests_and_reservations,
     build_user_prompt,
 )
 
@@ -35,6 +36,9 @@ class TestSettings:
     database_path: Path = field(default_factory=lambda: Path(__file__).parent.parent / "performance_tests.db")
     sequential_batch_size: int = 5
     concurrent_batch_size: int = 8
+    # Batch identification
+    batch_uuid: str = field(default_factory=lambda: str(uuid.uuid4()))
+    friendly_name: str = ""
     # Model metadata (auto-filled from vLLM API, but editable by user)
     model_name: str = ""
     vllm_version: str = ""
@@ -57,6 +61,8 @@ def init_database(db_path: Path) -> sqlite3.Connection:
         CREATE TABLE IF NOT EXISTS test_results (
             id                     INTEGER PRIMARY KEY AUTOINCREMENT,
             run_id                 INTEGER,
+            batch_uuid             TEXT    NOT NULL DEFAULT '',
+            friendly_name          TEXT    DEFAULT '',
             batch_type             TEXT    NOT NULL,
             request_index          INTEGER NOT NULL,
             model_name             TEXT,
@@ -70,10 +76,20 @@ def init_database(db_path: Path) -> sqlite3.Connection:
             response_length        INTEGER,
             request_sent_time      DATETIME,
             response_received_time DATETIME,
-            response_content       TEXT
+            response_content       TEXT,
+            valid_response         BOOLEAN
+        )
+
         )
         """
     )
+
+    # Add valid_response column to existing tables (ignore if already present)
+    try:
+        conn.execute("ALTER TABLE test_results ADD COLUMN valid_response BOOLEAN")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
     conn.commit()
     return conn
 
@@ -125,12 +141,12 @@ def log_result(
 
     sql = """
         INSERT INTO test_results (
-            run_id, batch_type, request_index, model_name, context_length,
-            vllm_version, thinking_enabled, system_prompt, user_prompt,
+            run_id, batch_uuid, friendly_name, batch_type, request_index, model_name,
+            context_length, vllm_version, thinking_enabled, system_prompt, user_prompt,
             response_format, json_malformed, response_length,
             request_sent_time, response_received_time, response_content
         ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
     """
 
@@ -138,6 +154,8 @@ def log_result(
         conn = sqlite3.connect(str(db_path))
         conn.execute(sql, (
             run_id,
+            settings.batch_uuid,
+            settings.friendly_name,
             batch_type,
             request_index,
             settings.model_name,
@@ -201,7 +219,7 @@ def fetch_model_info(url: str) -> dict[str, Any]:
 
 def _build_user_prompt(customer_name: str) -> str:
     """Build the full user prompt with embedded DB data (delegates to shared function)."""
-    data = _fetch_all_guests_and_reservations()
+    data = fetch_all_guests_and_reservations()
     return build_user_prompt(customer_name, data)
 
 
@@ -366,6 +384,8 @@ def run_tests(settings: Optional[TestSettings] = None) -> dict[str, Any]:
 
     return {
         "run_id": run_id,
+        "batch_uuid": settings.batch_uuid,
+        "friendly_name": settings.friendly_name,
         "model_name": settings.model_name,
         "vllm_version": settings.vllm_version,
         "thinking_enabled": settings.thinking_enabled,

@@ -85,6 +85,8 @@ async def api_run_performance_testing(request: Request) -> dict[str, Any]:
         database_path=_DATABASE_PATH,
         sequential_batch_size=int(body.get("sequential_batch_size", 5)),
         concurrent_batch_size=int(body.get("concurrent_batch_size", 8)),
+        batch_uuid=body.get("batch_uuid", ""),
+        friendly_name=body.get("friendly_name", ""),
         model_name=body.get("model_name", ""),
         vllm_version=body.get("vllm_version", ""),
         thinking_enabled=bool(body.get("thinking_enabled", False)),
@@ -92,6 +94,11 @@ async def api_run_performance_testing(request: Request) -> dict[str, Any]:
         user_prompt=body.get("user_prompt", ""),
         expected_response_format=body.get("expected_response_format", "auto"),
     )
+
+    # Generate a UUID if not provided
+    if not settings.batch_uuid:
+        import uuid as uuid_lib
+        settings.batch_uuid = str(uuid_lib.uuid4())
 
     # Use default system prompt if not provided
     if not settings.system_prompt:
@@ -116,7 +123,7 @@ async def api_get_performance_results() -> list[dict[str, Any]]:
                context_length, vllm_version, thinking_enabled,
                system_prompt, user_prompt, response_format, json_malformed,
                response_length, request_sent_time, response_received_time,
-               response_content
+               response_content, valid_response
         FROM test_results
         ORDER BY run_id DESC, batch_type, request_index DESC
         LIMIT 100
@@ -137,11 +144,11 @@ async def api_get_all_performance_results() -> list[dict[str, Any]]:
     conn.row_factory = sqlite3.Row
     cursor = conn.execute(
         """
-        SELECT id, run_id, batch_type, request_index, model_name,
-               context_length, vllm_version, thinking_enabled,
+        SELECT id, run_id, batch_uuid, friendly_name, batch_type, request_index,
+               model_name, context_length, vllm_version, thinking_enabled,
                system_prompt, user_prompt, response_format, json_malformed,
                response_length, request_sent_time, response_received_time,
-               response_content
+               response_content, valid_response
         FROM test_results
         ORDER BY run_id DESC, batch_type, request_index DESC
         """
@@ -149,3 +156,71 @@ async def api_get_all_performance_results() -> list[dict[str, Any]]:
     rows = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return rows
+
+
+@app.get("/api/performance-testing/batches")
+async def api_get_performance_batches() -> list[dict[str, Any]]:
+    """Get all unique test batches with their UUID and friendly name."""
+    if not _DATABASE_PATH.exists():
+        return []
+
+    conn = sqlite3.connect(str(_DATABASE_PATH))
+    conn.row_factory = sqlite3.Row
+    cursor = conn.execute(
+        """
+        SELECT batch_uuid, friendly_name, COUNT(*) AS total_requests,
+               MIN(request_sent_time) AS first_run_time
+        FROM test_results
+        GROUP BY batch_uuid
+        ORDER BY first_run_time DESC
+        """
+    )
+    rows = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+@app.get("/api/performance-testing/results-by-batch")
+async def api_get_results_by_batch(batch_uuid: str) -> list[dict[str, Any]]:
+    """Get test results for a specific batch identified by UUID."""
+    if not _DATABASE_PATH.exists():
+        return []
+
+    conn = sqlite3.connect(str(_DATABASE_PATH))
+    conn.row_factory = sqlite3.Row
+    cursor = conn.execute(
+        """
+        SELECT id, run_id, batch_uuid, friendly_name, batch_type, request_index,
+               model_name, context_length, vllm_version, thinking_enabled,
+               system_prompt, user_prompt, response_format, json_malformed,
+               response_length, request_sent_time, response_received_time,
+               response_content, valid_response
+        FROM test_results
+        WHERE batch_uuid = ?
+        ORDER BY batch_type, request_index
+        """,
+        (batch_uuid,),
+    )
+    rows = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+@app.patch("/api/performance-testing/result/{result_id}")
+async def api_update_valid_response(result_id: int, request: Request) -> dict[str, Any]:
+    """Update the valid_response flag for a specific test result."""
+    body = await request.json()
+    valid_response = body.get("valid_response")
+
+    if not _DATABASE_PATH.exists():
+        return {"error": "Database not found"}
+
+    conn = sqlite3.connect(str(_DATABASE_PATH))
+    conn.execute(
+        "UPDATE test_results SET valid_response = ? WHERE id = ?",
+        (valid_response, result_id),
+    )
+    conn.commit()
+    conn.close()
+
+    return {"ok": True, "id": result_id, "valid_response": valid_response}
