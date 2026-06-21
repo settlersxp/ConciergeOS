@@ -3,7 +3,8 @@
 LLM service for querying guest information via an OpenAI-compatible endpoint.
 """
 
-import xml.etree.ElementTree as ET
+import csv
+import io
 from pathlib import Path
 
 from openai import OpenAI
@@ -19,8 +20,8 @@ _LLM_CLIENT = OpenAI(
 )
 _LLM_MODEL = "Qwen/Qwen3.6-27B"
 
-# XML output path
-_XML_OUTPUT_PATH = Path("data/guests_data.xml")
+# CSV output path
+_CSV_OUTPUT_PATH = Path("data/guests_data.csv")
 
 # ── Shared prompts (single source of truth) ─────────────────────────────────
 
@@ -43,21 +44,13 @@ def build_user_prompt(customer_name: str, data: str) -> str:
     )
 
 
-def _bool_to_str(value: bool) -> str:
-    """Convert Python bool to lowercase string for XML."""
-    return "true" if value else "false"
-
-
 def fetch_all_guests_and_reservations() -> str:
     """
     Fetch all guests, rooms, and reservations from the database
-    and return as an optimized XML string. Also saves the XML to disk.
+    and return as a CSV string. Also saves the CSV to disk.
     """
     db = SessionLocal()
     try:
-        # Query all rooms once (static data)
-        rooms = db.query(Room).all()
-
         # Query reservations joined with guest and room
         rows = (
             db.query(Reservation)
@@ -67,65 +60,50 @@ def fetch_all_guests_and_reservations() -> str:
             .all()
         )
 
-        # Build XML tree
-        root = ET.Element("hotel_data")
+        # Define CSV columns
+        headers = [
+            "room_id", "room_name", "allowed_booking_channel",
+            "checkin_time", "checkout_time",
+            "guest_id", "first_name", "last_name", "date_of_birth",
+            "is_special_guest", "special_preferences",
+            "reservation_id", "check_in", "check_out",
+            "status", "booking_source", "created_at",
+        ]
 
-        # <rooms> section — static, defined once
-        rooms_elem = ET.SubElement(root, "rooms")
-        for room in rooms:
-            ET.SubElement(
-                rooms_elem,
-                "room",
-                {
-                    "id": str(room.room_id),
-                    "name": room.name,
-                    "allowed_booking_channel": room.allowed_booking_channel.value,
-                    "checkin_time": room.checkin_time,
-                    "checkout_time": room.checkout_time,
-                },
-            )
+        # Build CSV using StringIO
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=headers)
+        writer.writeheader()
 
-        # <guests> section — one entry per guest+reservation combination
-        guests_elem = ET.SubElement(root, "guests")
-        guests_map: dict[int, ET.Element] = {}
         for res in rows:
-            gid = res.guest_id
-            if gid not in guests_map:
-                guests_map[gid] = ET.SubElement(
-                    guests_elem,
-                    "guest",
-                    {
-                        "id": str(gid),
-                        "first_name": res.guest.first_name,
-                        "last_name": res.guest.last_name,
-                        "date_of_birth": res.guest.date_of_birth,
-                        "is_special_guest": _bool_to_str(res.guest.is_special_guest),
-                        "special_preferences": res.guest.special_preferences or "",
-                    },
-                )
-            ET.SubElement(
-                guests_map[gid],
-                "reservation",
-                {
-                    "id": str(res.reservation_id),
-                    "room_id": str(res.room_id),
-                    "check_in": str(res.check_in_date),
-                    "check_out": str(res.check_out_date),
-                    "status": res.status.value,
-                    "booking_source": res.booking_source.value,
-                    "created_at": str(res.created_at) if res.created_at else "",
-                },
-            )
+            writer.writerow({
+                "room_id": res.room_id,
+                "room_name": res.room.name,
+                "allowed_booking_channel": res.room.allowed_booking_channel.value,
+                "checkin_time": res.room.checkin_time,
+                "checkout_time": res.room.checkout_time,
+                "guest_id": res.guest_id,
+                "first_name": res.guest.first_name,
+                "last_name": res.guest.last_name,
+                "date_of_birth": res.guest.date_of_birth,
+                "is_special_guest": res.guest.is_special_guest,
+                "special_preferences": res.guest.special_preferences or "",
+                "reservation_id": res.reservation_id,
+                "check_in": str(res.check_in_date),
+                "check_out": str(res.check_out_date),
+                "status": res.status.value,
+                "booking_source": res.booking_source.value,
+                "created_at": str(res.created_at) if res.created_at else "",
+            })
 
-        # Generate XML string with declaration
-        xml_bytes = ET.tostring(root, encoding="unicode")
-        xml_output = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_bytes
+        csv_output = output.getvalue()
+        output.close()
 
         # Save to disk
-        _XML_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _XML_OUTPUT_PATH.write_text(xml_output, encoding="utf-8")
+        _CSV_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _CSV_OUTPUT_PATH.write_text(csv_output, encoding="utf-8")
 
-        return xml_output
+        return csv_output
     finally:
         db.close()
 
@@ -147,7 +125,7 @@ def query_guest_with_llm(customer_name: str) -> str:
             {"role": "user", "content": user_prompt},
         ],
         temperature=0,
-        max_tokens=4096,
+        max_tokens=40960,
     )
 
     return response.choices[0].message.content or "The LLM returned an empty response."

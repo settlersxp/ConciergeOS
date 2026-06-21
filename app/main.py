@@ -281,15 +281,15 @@ async def api_setup_test_guests() -> dict[str, Any]:
 
 @app.post("/api/performance-testing/generate-xml")
 async def api_generate_xml() -> dict[str, Any]:
-    """Regenerate the guests XML data file and return its path."""
+    """Regenerate the guests data file (CSV) and return its path."""
     from app.services.llm import fetch_all_guests_and_reservations  # noqa: cwd
 
     try:
-        xml_output = fetch_all_guests_and_reservations()
+        csv_output = fetch_all_guests_and_reservations()
         return {
             "ok": True,
-            "path": "data/guests_data.xml",
-            "size_bytes": len(xml_output.encode("utf-8")),
+            "path": "data/guests_data.csv",
+            "size_bytes": len(csv_output.encode("utf-8")),
         }
     except Exception as e:
         return {
