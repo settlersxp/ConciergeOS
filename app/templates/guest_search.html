@@ -1,120 +1,69 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ConciergeOS — Guest Search</title>
-    <style>
-        :root {
-            --bg: #f4f6f9;
-            --card: #ffffff;
-            --border: #e2e8f0;
-            --text: #1e293b;
-            --muted: #64748b;
-            --primary: #3b82f6;
-            --primary-hover: #2563eb;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            padding: 24px;
-            line-height: 1.5;
-        }
+{% extends "base.html" %}
+{% from 'components/macros.html' import button %}
 
-        /* ----- Search form ----- */
-        .search-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 24px;
-            margin-bottom: 24px;
-        }
-        .search-form {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-        .search-form input {
-            flex: 1;
-            padding: 10px 16px;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            font-size: 1rem;
-            outline: none;
-            transition: border-color 0.15s;
-        }
-        .search-form input:focus {
-            border-color: var(--primary);
-        }
-        .search-form button {
-            padding: 10px 24px;
-            border: none;
-            border-radius: 6px;
-            background: var(--primary);
-            color: #fff;
-            font-size: 0.95rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.15s, opacity 0.15s;
-            white-space: nowrap;
-        }
-        .search-form button:hover { background: var(--primary-hover); }
-        .search-form button:disabled { opacity: 0.6; cursor: not-allowed; }
+{% block title %}ConciergeOS — Guest Search{% endblock %}
 
-        /* ----- Result area ----- */
-        .result-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 24px;
-            display: none;
-        }
-        .result-card.visible { display: block; }
-        .result-card h2 {
-            font-size: 1.1rem;
-            margin-bottom: 12px;
-            color: var(--muted);
-        }
-        .result-content {
-            white-space: pre-wrap;
-            font-size: 0.95rem;
-            line-height: 1.7;
-            color: var(--text);
-        }
-        .loading {
-            color: var(--muted);
-            font-style: italic;
-        }
-        .error-msg {
-            color: #dc2626;
-            font-style: italic;
-        }
+{% block styles %}
+<style>
+    /* ----- Search form ----- */
+    .search-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+    .search-form {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+    }
+    .search-form input {
+        flex: 1;
+        padding: 10px 16px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 1rem;
+        outline: none;
+        transition: border-color 0.15s;
+    }
+    .search-form input:focus {
+        border-color: var(--primary);
+    }
+    .search-form .btn {
+        padding: 10px 24px;
+    }
 
-        /* ----- Nav link ----- */
-        .nav-link {
-            display: inline-block;
-            margin-bottom: 16px;
-            color: var(--primary);
-            text-decoration: none;
-            font-size: 0.9rem;
-        }
-        .nav-link:hover { text-decoration: underline; }
-    </style>
-</head>
-<body>
+    /* ----- Result area ----- */
+    .result-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 24px;
+        display: none;
+    }
+    .result-card.visible { display: block; }
+    .result-card h2 {
+        font-size: 1.1rem;
+        margin-bottom: 12px;
+        color: var(--muted);
+    }
+    .result-content {
+        white-space: pre-wrap;
+        font-size: 0.95rem;
+        line-height: 1.7;
+        color: var(--text);
+    }
+</style>
+{% endblock %}
 
-    {% include 'header.html' %}
-
-    <a href="/" class="nav-link">&larr; Back to Reservations Dashboard</a>
-
+{% block content %}
     <div class="search-card">
         <h1 style="font-size: 1.4rem; margin-bottom: 16px;">Guest Search</h1>
         <form class="search-form" id="searchForm">
             <input type="text" id="customerName" name="customer_name"
                    placeholder="Enter customer name (e.g. John Doe)" required autocomplete="off" />
-            <button type="submit" id="searchBtn">Search</button>
+            <button type="submit" id="searchBtn" class="btn btn-primary">Search</button>
         </form>
     </div>
 
@@ -122,51 +71,51 @@
         <h2 id="resultTitle">Results for: <span id="resultQuery"></span></h2>
         <div class="result-content" id="resultContent"></div>
     </div>
+{% endblock %}
 
-    <script>
-        const form = document.getElementById('searchForm');
-        const input = document.getElementById('customerName');
-        const btn = document.getElementById('searchBtn');
-        const resultCard = document.getElementById('resultCard');
-        const resultQuery = document.getElementById('resultQuery');
-        const resultContent = document.getElementById('resultContent');
+{% block scripts %}
+<script>
+    var form = document.getElementById('searchForm');
+    var input = document.getElementById('customerName');
+    var btn = document.getElementById('searchBtn');
+    var resultCard = document.getElementById('resultCard');
+    var resultQuery = document.getElementById('resultQuery');
+    var resultContent = document.getElementById('resultContent');
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const name = input.value.trim();
-            if (!name) return;
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        var name = input.value.trim();
+        if (!name) return;
 
-            btn.disabled = true;
-            btn.textContent = 'Searching...';
-            resultCard.classList.add('visible');
-            resultQuery.textContent = name;
-            resultContent.className = 'result-content loading';
-            resultContent.textContent = 'Querying LLM, please wait...';
+        btn.disabled = true;
+        btn.textContent = 'Searching...';
+        resultCard.classList.add('visible');
+        resultQuery.textContent = name;
+        resultContent.className = 'result-content loading';
+        resultContent.textContent = 'Querying LLM, please wait...';
 
-            try {
-                const res = await fetch('/api/guest-search', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ customer_name: name }),
-                });
+        try {
+            var res = await fetch('/api/guest-search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ customer_name: name }),
+            });
 
-                if (!res.ok) {
-                    const err = await res.json().catch(() => null);
-                    throw new Error(err?.detail || `Server error: ${res.status}`);
-                }
-
-                const data = await res.json();
-                resultContent.className = 'result-content';
-                resultContent.textContent = data.llm_response;
-            } catch (err) {
-                resultContent.className = 'result-content error-msg';
-                resultContent.textContent = 'Error: ' + err.message;
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Search';
+            if (!res.ok) {
+                var errData = await res.json().catch(function() { return null; });
+                throw new Error(errData?.detail || 'Server error: ' + res.status);
             }
-        });
-    </script>
 
-</body>
-</html>
+            var data = await res.json();
+            resultContent.className = 'result-content';
+            resultContent.textContent = data.llm_response;
+        } catch (err) {
+            resultContent.className = 'result-content error-msg';
+            resultContent.textContent = 'Error: ' + err.message;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Search';
+        }
+    });
+</script>
+{% endblock %}

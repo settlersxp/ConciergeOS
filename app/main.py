@@ -27,6 +27,7 @@ async def index(request: Request):
     # model_dump() converts Pydantic schemas to plain dicts for Jinja2 rendering
     context = {
         "request": request,
+        "current_page": "reservations",
         "rooms": summary.model_dump(mode="json")["rooms"],
         "errors": [e.model_dump(mode="json") for e in summary.errors],
     }
@@ -45,6 +46,7 @@ async def guest_search_page(request: Request):
     """Serve the guest search page."""
     return templates.TemplateResponse(request, "guest_search.html", {
         "request": request,
+        "current_page": "guest_search",
     })
 
 
@@ -68,6 +70,7 @@ async def performance_testing_page(request: Request):
     """Serve the performance testing page."""
     return templates.TemplateResponse(request, "performance_testing.html", {
         "request": request,
+        "current_page": "performance_testing",
     })
 
 

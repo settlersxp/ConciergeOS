@@ -1,0 +1,26 @@
+{% from 'components/macros.html' import button %}
+
+<div class="card">
+    <h2>Test Guests Configuration</h2>
+    <p style="font-size: 0.85rem; color: var(--muted); margin-bottom: 12px;">
+        Create 13 test guests with exactly 4 reservations each to ensure constant LLM output and avoid caching effects.
+    </p>
+    <div class="btn-row" style="margin-top: 0; margin-bottom: 16px;">
+        {{ button('Setup 13 Test Guests', 'btn-primary', id='setupGuestsBtn', onclick='setupTestGuests()') }}
+        {{ button('Refresh List', 'btn-secondary', id='refreshGuestsBtn', onclick='refreshGuestList()') }}
+    </div>
+    <div id="guestListStatus" style="font-size: 0.85rem; color: var(--muted); margin-bottom: 8px;"></div>
+    <div id="guestListContainer" style="display: none;">
+        <table class="guest-list-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Guest Name</th>
+                    <th>Reservations</th>
+                    <th>Assignment</th>
+                </tr>
+            </thead>
+            <tbody id="guestListBody"></tbody>
+        </table>
+    </div>
+</div>

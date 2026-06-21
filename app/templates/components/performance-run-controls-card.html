@@ -1,0 +1,15 @@
+{% from 'components/macros.html' import button %}
+
+<div class="card full">
+    <div class="btn-row" style="margin-top: 0;">
+        {{ button('Run Performance Tests', 'btn-primary', id='runBtn', onclick='runTests()') }}
+        {{ button('Load Latest Results', 'btn-secondary', id='loadResultsBtn', onclick='loadResults()') }}
+        <div style="display: flex; align-items: center; gap: 12px;">
+            {{ button('Load All Results', 'btn-secondary', id='loadAllResultsBtn', onclick='loadAllResults()') }}
+            <select id="batchSelect" class="btn btn-secondary" style="padding: 10px 16px; font-size: 0.95rem;" onchange="loadBatchByUuid()">
+                <option value="">— Select a batch —</option>
+            </select>
+        </div>
+        {{ button('Compare Selected (0/2)', 'btn-compare', true, 'openCompareModal()', 'compareBtn') }}
+    </div>
+</div>

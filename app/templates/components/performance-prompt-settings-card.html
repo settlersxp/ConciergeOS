@@ -1,0 +1,15 @@
+{% from 'components/macros.html' import textarea_input %}
+
+<div class="card full">
+    <h2>Prompt Settings</h2>
+    {{ textarea_input(
+        id='systemPrompt',
+        value='You are a helpful hotel concierge assistant. You will receive a JSON dataset containing all guests with their rooms and reservations. Given a customer name, return all available information about that guest, including personal details, rooms, and all reservations. If the guest is not found, say so clearly. Format your response in a clear, readable way.',
+        label='System Prompt'
+    ) }}
+    {{ textarea_input(
+        id='userPrompt',
+        placeholder='Leave empty to auto-build from customer name and database...',
+        label='User Prompt <small style="color: var(--muted); font-weight: normal;">(leave empty to auto-generate from customer name + DB data)</small>'
+    ) }}
+</div>

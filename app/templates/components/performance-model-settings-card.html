@@ -1,0 +1,18 @@
+{% from 'components/macros.html' import text_input, checkbox_group, select_input, button %}
+
+<div class="card">
+    <h2>Model Settings <small style="color: var(--muted); font-weight: normal;">(auto-filled or manual)</small></h2>
+    {{ text_input(id='modelName', placeholder='e.g. Qwen/Qwen3.6-27B', label='Model Name') }}
+    {{ text_input(id='vllmVersion', placeholder='e.g. 0.6.0', label='vLLM Version') }}
+    {{ checkbox_group('Thinking Enabled', id='thinkingEnabled', name='thinkingEnabled') }}
+    {{ select_input(
+        id='expectedFormat',
+        value='auto',
+        placeholder='',
+        label='Expected Response Format',
+        options=[('auto', 'Auto-Detect'), ('json', 'JSON'), ('text', 'TEXT')]
+    ) }}
+    <div class="btn-row">
+        {{ button('Fetch Model Info', 'btn-secondary', id='fetchModelBtn', onclick='fetchModelInfo()') }}
+    </div>
+</div>

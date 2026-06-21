@@ -33,9 +33,9 @@ SYSTEM_PROMPT = (
 def build_user_prompt(customer_name: str, data: str) -> str:
     """Build the user prompt for querying a guest by name."""
     return (
-        f"Find all information about the customer named: {customer_name}\n\n"
         f"Here is the full dataset of guests, rooms, and reservations:\n\n"
-        f"{data}"
+        f"{data}\n\n"
+        f"Find all information about the customer named: {customer_name}"
     )
 
 

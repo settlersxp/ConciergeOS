@@ -1,0 +1,34 @@
+{% from 'components/macros.html' import badge, summary_card %}
+
+<!-- Results Section -->
+<div id="resultsSection" style="display: none;">
+    <h2 style="margin-bottom: 16px;">Results — Run <span id="runIdDisplay"></span></h2>
+
+    <div class="summary-grid" id="summaryGrid"></div>
+
+    <div class="card">
+        <h2>Detailed Results</h2>
+        <div class="results-wrapper">
+            <table id="resultsTable">
+                <thead>
+                    <tr>
+                        <th class="compare-header" style="width:40px;">☑</th>
+                        <th>#</th>
+                        <th>Batch</th>
+                        <th>Model</th>
+                        <th>vLLM</th>
+                        <th>Thinking</th>
+                        <th>Context</th>
+                        <th>Format</th>
+                        <th>JSON</th>
+                        <th>Length</th>
+                        <th>Sent</th>
+                        <th>Received</th>
+                        <th>Elapsed</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
