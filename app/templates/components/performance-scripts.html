@@ -838,6 +838,43 @@
         return div.innerHTML;
     }
 
+    // ---- XML Generation ----
+
+    async function generateXML() {
+        var btn = document.getElementById('generateXmlBtn');
+        btn.disabled = true;
+        btn.textContent = 'Generating...';
+        showStatus('Generating guests XML data...', 'running');
+
+        try {
+            var res = await fetch('/api/performance-testing/generate-xml', {
+                method: 'POST',
+            });
+
+            if (!res.ok) {
+                var err = await res.json().catch(() => null);
+                throw new Error(err?.error || err?.detail || `Server error: ${res.status}`);
+            }
+
+            var data = await res.json();
+
+            if (!data.ok) {
+                throw new Error(data.error || 'XML generation failed');
+            }
+
+            var sizeKB = (data.size_bytes / 1024).toFixed(1);
+            showStatus(
+                'XML generated successfully! (' + sizeKB + ' KB saved to ' + data.path + ')',
+                'success'
+            );
+        } catch (err) {
+            showStatus('Error generating XML: ' + err.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Generate XML';
+        }
+    }
+
     // ---- Test Guest Management ----
 
     async function setupTestGuests() {
