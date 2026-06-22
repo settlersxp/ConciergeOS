@@ -21,6 +21,8 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 # Import shared prompts from the single source of truth
 from app.services.llm import (  # noqa: E402
     SYSTEM_PROMPT as DEFAULT_SYSTEM_PROMPT,
+    SHARED_SYSTEM_PROMPT,
+    TOOL_DEFINITIONS,
     build_user_prompt,
     fetch_all_as_json,
     fetch_all_as_xml,
@@ -64,7 +66,10 @@ class TestSettings:
     # Response format expectation
     expected_response_format: str = "auto"  # "json", "text", or "auto"
     # Data format: which file format to embed in the user prompt
-    data_format: str = "csv"  # "csv", "json", or "xml"
+    data_format: str = "csv"  # "csv", "json", "xml", or "tool_calling"
+    # Tool calling support
+    use_tool_calling: bool = False  # Whether to use function/tool calling instead of embedding data
+    tool_definitions: List[Dict[str, Any]] = field(default_factory=list)  # Tool definitions to send to LLM
 
 
 # ── Model info retrieval ────────────────────────────────────────────────────
@@ -131,19 +136,242 @@ def _query_guest_with_llm(settings: TestSettings) -> str:
     )
 
     model_name = settings.model_name or "Qwen/Qwen3.6-27B"
-    user_prompt = settings.user_prompt or _build_user_prompt(settings.customer_name, settings.data_format)
+    
+    # Determine the user prompt content
+    if settings.use_tool_calling:
+        # For tool calling mode, use a simple prompt - the tools handle the data fetching
+        user_prompt = settings.user_prompt or f"Find all information about the customer named: {settings.customer_name}"
+    else:
+        user_prompt = settings.user_prompt or _build_user_prompt(settings.customer_name, settings.data_format)
 
-    response = client.chat.completions.create(
-        model=model_name,
-        messages=[
-            {"role": "system", "content": settings.system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0,
-        max_tokens=4096,
-    )
+    # For tool calling mode, use the unified system prompt that describes tools
+    system_content = settings.system_prompt
+    if settings.use_tool_calling:
+        system_content = SHARED_SYSTEM_PROMPT
+    
+    # Build the API request
+    api_messages = [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_prompt},
+    ]
+    
+    # Prepare the API call parameters
+    api_params: Dict[str, Any] = {
+        "model": model_name,
+        "messages": api_messages,
+        "temperature": 0,
+        "max_tokens": 4096,
+    }
+    
+    # Add tools if tool calling is enabled and tool definitions are provided
+    if settings.use_tool_calling and settings.tool_definitions:
+        api_params["tools"] = settings.tool_definitions
+
+    # If tool calling is enabled, use the dedicated tool calling loop
+    if settings.use_tool_calling and settings.tool_definitions:
+        return _execute_tool_calling_loop(client, api_messages, model_name, settings.tool_definitions)
+
+    response = client.chat.completions.create(**api_params)
 
     return response.choices[0].message.content or "The LLM returned an empty response."
+
+
+def _execute_tool_calling_loop(
+    client: Any,
+    messages: List[Dict[str, Any]],
+    model_name: str,
+    tool_definitions: List[Dict[str, Any]],
+    max_turns: int = 10,
+) -> str:
+    """Execute the tool calling loop: send tools to LLM, execute returned function calls, repeat.
+    
+    This implements the multi-turn tool calling protocol:
+    1. Send message with tools to LLM
+    2. If LLM returns tool_calls, execute them and send results back
+    3. Repeat until LLM responds with content (no tool calls) or max_turns reached
+    """
+    # Map of tool names to their executor functions
+    # Import these here to avoid circular imports and use the same implementation
+    import json
+    from app.db import SessionLocal
+    from app.models import Guest, Reservation, Room
+    from app.enums import ReservationStatus
+    
+    def _format_guest(guest: Guest) -> dict:
+        return {
+            "guest_id": guest.guest_id,
+            "first_name": guest.first_name,
+            "last_name": guest.last_name,
+            "date_of_birth": str(guest.date_of_birth) if guest.date_of_birth else "",
+            "is_special_guest": guest.is_special_guest,
+            "special_preferences": guest.special_preferences or "",
+        }
+    
+    def _format_reservation(reservation: Reservation) -> dict:
+        return {
+            "reservation_id": reservation.reservation_id,
+            "room_id": reservation.room_id,
+            "guest_id": reservation.guest_id,
+            "check_in": str(reservation.check_in_date),
+            "check_out": str(reservation.check_out_date),
+            "status": reservation.status.value,
+            "booking_source": reservation.booking_source.value,
+            "created_at": str(reservation.created_at) if reservation.created_at else "",
+            "room_name": reservation.room.name if reservation.room else "",
+            "guest_name": f"{reservation.guest.first_name} {reservation.guest.last_name}" if reservation.guest else "",
+        }
+    
+    def _execute_query_guests(params: dict) -> str:
+        db = SessionLocal()
+        try:
+            query = db.query(Guest)
+            if "guest_id" in params and params["guest_id"] is not None:
+                query = query.filter(Guest.guest_id == params["guest_id"])
+            if "first_name" in params and params["first_name"]:
+                query = query.filter(Guest.first_name.ilike(f"%{params['first_name']}%"))
+            if "last_name" in params and params["last_name"]:
+                query = query.filter(Guest.last_name.ilike(f"%{params['last_name']}%"))
+            if "is_special_guest" in params and params["is_special_guest"] is not None:
+                is_special = bool(params["is_special_guest"])
+                query = query.filter(Guest.is_special_guest == is_special)
+            guests = query.all()
+            if not guests:
+                return "No guests found matching the criteria."
+            results = [_format_guest(g) for g in guests]
+            return json.dumps({"count": len(results), "guests": results}, indent=2)
+        finally:
+            db.close()
+    
+    def _execute_query_rooms(params: dict) -> str:
+        db = SessionLocal()
+        try:
+            query = db.query(Room)
+            if "room_id" in params and params["room_id"] is not None:
+                query = query.filter(Room.room_id == params["room_id"])
+            if "name" in params and params["name"]:
+                query = query.filter(Room.name.ilike(f"%{params['name']}%"))
+            rooms = query.all()
+            if not rooms:
+                return "No rooms found matching the criteria."
+            results = [
+                {
+                    "room_id": r.room_id,
+                    "name": r.name,
+                    "allowed_booking_channel": r.allowed_booking_channel.value,
+                    "checkin_time": r.checkin_time,
+                    "checkout_time": r.checkout_time,
+                }
+                for r in rooms
+            ]
+            return json.dumps({"count": len(results), "rooms": results}, indent=2)
+        finally:
+            db.close()
+    
+    def _execute_query_reservations(params: dict) -> str:
+        db = SessionLocal()
+        try:
+            query = db.query(Reservation)
+            if "reservation_id" in params and params["reservation_id"] is not None:
+                query = query.filter(Reservation.reservation_id == params["reservation_id"])
+            if "guest_id" in params and params["guest_id"] is not None:
+                query = query.filter(Reservation.guest_id == params["guest_id"])
+            if "room_id" in params and params["room_id"] is not None:
+                query = query.filter(Reservation.room_id == params["room_id"])
+            if "status" in params and params["status"]:
+                try:
+                    status_enum = ReservationStatus(params["status"])
+                    query = query.filter(Reservation.status == status_enum)
+                except ValueError:
+                    return f"Invalid status: {params['status']}. Valid options: PENDING, CONFIRMED, CHECKED_IN, CHECKED_OUT, CANCELLED"
+            if "check_in" in params and params["check_in"]:
+                query = query.filter(Reservation.check_in_date == params["check_in"])
+            if "check_out" in params and params["check_out"]:
+                query = query.filter(Reservation.check_out_date == params["check_out"])
+            reservations = query.all()
+            if not reservations:
+                return "No reservations found matching the criteria."
+            results = [_format_reservation(r) for r in reservations]
+            return json.dumps({"count": len(results), "reservations": results}, indent=2)
+        finally:
+            db.close()
+    
+    def _execute_get_hotel_summary(params: dict) -> str:
+        db = SessionLocal()
+        try:
+            total_guests = db.query(Guest).count()
+            total_rooms = db.query(Room).count()
+            total_reservations = db.query(Reservation).count()
+            status_counts = {}
+            for status in ReservationStatus:
+                count = db.query(Reservation).filter(Reservation.status == status).count()
+                status_counts[status.value] = count
+            special_guests = db.query(Guest).filter(Guest.is_special_guest == True).count()
+            summary = {
+                "total_guests": total_guests,
+                "total_rooms": total_rooms,
+                "total_reservations": total_reservations,
+                "special_guests": special_guests,
+                "reservations_by_status": status_counts,
+            }
+            return json.dumps(summary, indent=2)
+        finally:
+            db.close()
+    
+    TOOL_EXECUTORS = {
+        "query_guests": _execute_query_guests,
+        "query_rooms": _execute_query_rooms,
+        "query_reservations": _execute_query_reservations,
+        "get_hotel_summary": _execute_get_hotel_summary,
+    }
+    
+    for turn in range(max_turns):
+        # Call LLM with tools
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=messages,
+            tools=tool_definitions,
+            temperature=0.1,
+            max_tokens=1024,
+        )
+        
+        assistant_message = response.choices[0].message
+        
+        # Check if the assistant wants to call tools
+        tool_calls = assistant_message.tool_calls or []
+        
+        if not tool_calls:
+            # No more tool calls - this is the final response
+            return assistant_message.content or "The LLM returned an empty response."
+        
+        # Append assistant message to conversation
+        messages.append(assistant_message)
+        
+        # Execute ALL tool calls in this response (batch execution)
+        for tool_call in tool_calls:
+            func_name = tool_call.function.name
+            func_args = json.loads(tool_call.function.arguments)
+            call_id = tool_call.id
+            
+            # Execute the tool
+            if func_name in TOOL_EXECUTORS:
+                try:
+                    result = TOOL_EXECUTORS[func_name](func_args)
+                except Exception as e:
+                    result = f"Error executing {func_name}: {str(e)}"
+            else:
+                result = f"Unknown tool: {func_name}"
+            
+            # Append tool result to conversation
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": result,
+                }
+            )
+    
+    # If we exhausted max_turns, return a message
+    return f"The request exceeded the maximum of {max_turns} turns. Please simplify your request."
 
 
 # ── Single request execution ────────────────────────────────────────────────
@@ -165,8 +393,12 @@ def run_single_request(
         logger: Pluggable result logger (decoupled from storage).
     """
     # Resolve the user_prompt once (cache on settings for subsequent calls)
+    # For tool calling mode, the user prompt is simpler
     if not settings.user_prompt:
-        settings.user_prompt = _build_user_prompt(settings.customer_name, settings.data_format)
+        if settings.use_tool_calling:
+            settings.user_prompt = f"Find all information about the customer named: {settings.customer_name}"
+        else:
+            settings.user_prompt = _build_user_prompt(settings.customer_name, settings.data_format)
 
     request_sent_time = datetime.now(timezone.utc).isoformat()
     response = _query_guest_with_llm(settings)
@@ -267,18 +499,40 @@ def run_single_request_with_guest(
 
     model_name = settings.model_name or "Qwen/Qwen3.6-27B"
 
-    request_sent_time = datetime.now(timezone.utc).isoformat()
-    response = client.chat.completions.create(
-        model=model_name,
-        messages=[
-            {"role": "system", "content": settings.system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0,
-        max_tokens=4096,
-    )
+    # For tool calling mode, use the unified system prompt that describes tools
+    system_content = settings.system_prompt
+    if settings.use_tool_calling:
+        system_content = SHARED_SYSTEM_PROMPT
 
-    response_text = response.choices[0].message.content or "The LLM returned an empty response."
+    # Build the API request
+    api_messages = [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_prompt},
+    ]
+    
+    # Prepare the API call parameters
+    api_params: Dict[str, Any] = {
+        "model": model_name,
+        "messages": api_messages,
+        "temperature": 0,
+        "max_tokens": 4096,
+    }
+    
+    # Add tools if tool calling is enabled and tool definitions are provided
+    if settings.use_tool_calling and settings.tool_definitions:
+        api_params["tools"] = settings.tool_definitions
+
+    request_sent_time = datetime.now(timezone.utc).isoformat()
+    
+    # If tool calling is enabled, use the tool calling loop
+    if settings.use_tool_calling and settings.tool_definitions:
+        response_text = _execute_tool_calling_loop(
+            client, api_messages, model_name, settings.tool_definitions
+        )
+    else:
+        response = client.chat.completions.create(**api_params)
+        response_text = response.choices[0].message.content or "The LLM returned an empty response."
+    
     response_received_time = datetime.now(timezone.utc).isoformat()
 
     logger.log(

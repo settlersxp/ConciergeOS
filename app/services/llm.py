@@ -521,7 +521,7 @@ def query_guest_with_llm(customer_name: str) -> str:
     # Lazy import to break circular dependency
     from app.services.tool_calling import call_llm_with_db_tools
     
-    user_prompt = f"Please find all information about the guest named: {customer_name}"
+    user_prompt = f"Please find all information about the guest named. The guest's name can have it's name translated into the following languages Arabic, Chinese, Devanagari, Japanese, Jorean, Latin or Nordic. It is unclear if is the user's first name or last name. Retry once with every translated language if needed. Also bring the information about its reservations. : {customer_name}"
     
     try:
         result = call_llm_with_db_tools(user_prompt)

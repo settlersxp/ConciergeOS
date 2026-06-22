@@ -130,9 +130,14 @@ async def api_run_performance_testing(request: Request) -> dict[str, Any]:
     body = await request.json()
 
     from PerformanceTesting.run_performance_tests import TestSettings, run_tests  # noqa: cwd
+    from app.services.llm import TOOL_DEFINITIONS  # noqa: cwd
 
     test_mode = body.get("test_mode", "single")
     guest_names: list[str] = []
+
+    # Determine tool calling mode from data_format
+    data_format = body.get("data_format", "csv")
+    use_tool_calling = data_format == "tool_calling"
 
     # In multi-guest mode, fetch the test guests from the database
     if test_mode == "multi":
@@ -171,7 +176,9 @@ async def api_run_performance_testing(request: Request) -> dict[str, Any]:
         system_prompt=body.get("system_prompt", ""),
         user_prompt=body.get("user_prompt", ""),
         expected_response_format=body.get("expected_response_format", "auto"),
-        data_format=body.get("data_format", "csv"),
+        data_format=data_format,
+        use_tool_calling=use_tool_calling,
+        tool_definitions=TOOL_DEFINITIONS if use_tool_calling else [],
     )
 
     # Generate a UUID if not provided
@@ -380,6 +387,24 @@ async def api_generate_all() -> dict[str, Any]:
             "ok": False,
             "error": str(e),
         }
+
+
+@app.delete("/api/performance-testing/batch/{batch_uuid}")
+async def api_delete_batch(batch_uuid: str) -> dict[str, Any]:
+    """Delete all test results for a specific batch identified by UUID."""
+    if not _DATABASE_PATH.exists():
+        return {"ok": False, "error": "Database not found"}
+
+    conn = sqlite3.connect(str(_DATABASE_PATH))
+    cursor = conn.execute(
+        "DELETE FROM test_results WHERE batch_uuid = ?",
+        (batch_uuid,),
+    )
+    deleted_count = cursor.rowcount
+    conn.commit()
+    conn.close()
+
+    return {"ok": True, "deleted_count": deleted_count, "batch_uuid": batch_uuid}
 
 
 @app.get("/api/performance-testing/test-guests")

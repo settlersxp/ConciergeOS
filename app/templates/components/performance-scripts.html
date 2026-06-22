@@ -53,6 +53,9 @@
             if (mtype.toLowerCase().includes('thinking')) thinking = true;
             document.getElementById('thinkingEnabled').checked = thinking;
 
+            // Update the friendly name value with the fetched model name
+            setFriendlyNameValue(m.id || m.model || '');
+
             showStatus('Model info fetched successfully.', 'success');
         } catch (err) {
             showStatus('Failed to fetch model info: ' + err.message, 'error');
@@ -147,8 +150,17 @@
                     appSettings.vllm_url = data.test_settings.models_endpoint.replace('/models', '').replace('/v1/models', '');
                 }
             }
+            // Set the friendly name value to the model name
+            setFriendlyNameValue(appSettings.model_name);
         } catch (err) {
             console.error('Failed to load app settings:', err);
+        }
+    }
+
+    function setFriendlyNameValue(modelName) {
+        var friendlyNameField = document.getElementById('friendlyName');
+        if (friendlyNameField && modelName && !friendlyNameField.value.trim()) {
+            friendlyNameField.value = modelName;
         }
     }
 
@@ -267,6 +279,48 @@
             showStatus(`Batch "${friendlyName}" loaded. ${data.length} records retrieved.`, 'success');
         } catch (err) {
             showStatus('Error loading batch: ' + err.message, 'error');
+        }
+    }
+
+    async function deleteSelectedBatch() {
+        const select = document.getElementById('batchSelect');
+        const batchUuid = select.value;
+        if (!batchUuid) {
+            showStatus('Please select a batch from the dropdown to delete.', 'error');
+            return;
+        }
+
+        var friendlyName = '';
+        for (var i = 0; i < select.options.length; i++) {
+            if (select.options[i].value === batchUuid) {
+                friendlyName = select.options[i].text;
+                break;
+            }
+        }
+
+        if (!confirm('Are you sure you want to delete the batch "' + friendlyName + '"? This action cannot be undone.')) {
+            return;
+        }
+
+        showStatus('Deleting batch... ', 'running');
+        try {
+            const res = await fetch('/api/performance-testing/batch/' + encodeURIComponent(batchUuid), {
+                method: 'DELETE',
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => null);
+                throw new Error(err?.error || err?.detail || `Server error: ${res.status}`);
+            }
+            const data = await res.json();
+            showStatus('Batch deleted successfully. ' + data.deleted_count + ' records removed.', 'success');
+            // Reset dropdown
+            select.value = '';
+            // Clear results display
+            document.getElementById('resultsSection').style.display = 'none';
+            // Refresh the dropdown to remove the deleted batch
+            await populateBatchDropdown();
+        } catch (err) {
+            showStatus('Error deleting batch: ' + err.message, 'error');
         }
     }
 

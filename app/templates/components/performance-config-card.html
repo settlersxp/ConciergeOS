@@ -19,7 +19,7 @@
         <strong>Multi-Guest Mode:</strong> First 5 test guests → Sequential batch, last 8 guests → Concurrent batch. Make sure 13 test guests are configured below.
     </div>
     {{ text_input(id='batchUuid', placeholder='Auto-generated UUID', label='Batch UUID <small style="color: var(--muted); font-weight: normal;">(auto-generated)</small>') }}
-    {{ text_input(id='friendlyName', placeholder='e.g. Qwen3.6 Smoke Test', label='Friendly Name') }}
+    {{ text_input(id='friendlyName', value='', label='Friendly Name') }}
     <div id="customerNameGroup">
         {{ text_input(id='customerName', value='عائشة إبراهيم', label='Customer Name') }}
     </div>
