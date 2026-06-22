@@ -7,7 +7,6 @@ Database initialization is decoupled into :mod:`PerformanceTesting.db` so the
 testing logic can be used independently of storage concerns.
 """
 
-import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -22,8 +21,10 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 # Import shared prompts from the single source of truth
 from app.services.llm import (  # noqa: E402
     SYSTEM_PROMPT as DEFAULT_SYSTEM_PROMPT,
-    fetch_all_guests_and_reservations,
     build_user_prompt,
+    fetch_all_as_json,
+    fetch_all_as_xml,
+    fetch_all_guests_and_reservations,
 )
 
 try:
@@ -49,10 +50,10 @@ class TestSettings:
     # Guest names for multi-guest mode (first N for sequential, remaining for concurrent)
     guest_names: list[str] = field(default_factory=list)
     # Batch identification
-    batch_uuid: str = field(default_factory=lambda: str(uuid.uuid4()))
+    batch_uuid: str = ""
     friendly_name: str = ""
     # Model metadata (auto-filled from vLLM API, but editable by user)
-    model_name: str = ""
+    model_name: str = "google/gemma-4-26B-A4B-it"
     vllm_version: str = ""
     thinking_enabled: bool = False
     # Prompt settings
@@ -60,6 +61,8 @@ class TestSettings:
     user_prompt: str = ""  # If empty, auto-built from customer_name + DB data
     # Response format expectation
     expected_response_format: str = "auto"  # "json", "text", or "auto"
+    # Data format: which file format to embed in the user prompt
+    data_format: str = "csv"  # "csv", "json", or "xml"
 
 
 # ── Model info retrieval ────────────────────────────────────────────────────
@@ -104,9 +107,14 @@ def fetch_model_info(url: str) -> dict[str, Any]:
 
 # ── LLM query wrapper ───────────────────────────────────────────────────────
 
-def _build_user_prompt(customer_name: str) -> str:
-    """Build the full user prompt with embedded DB data (delegates to shared function)."""
-    data = fetch_all_guests_and_reservations()
+def _build_user_prompt(customer_name: str, data_format: str = "csv") -> str:
+    """Build the full user prompt with embedded DB data using the specified format."""
+    if data_format == "json":
+        data = fetch_all_as_json()
+    elif data_format == "xml":
+        data = fetch_all_as_xml()
+    else:
+        data = fetch_all_guests_and_reservations()
     return build_user_prompt(customer_name, data)
 
 
@@ -120,7 +128,7 @@ def _query_guest_with_llm(settings: TestSettings) -> str:
     )
 
     model_name = settings.model_name or "Qwen/Qwen3.6-27B"
-    user_prompt = settings.user_prompt or _build_user_prompt(settings.customer_name)
+    user_prompt = settings.user_prompt or _build_user_prompt(settings.customer_name, settings.data_format)
 
     response = client.chat.completions.create(
         model=model_name,
@@ -155,7 +163,7 @@ def run_single_request(
     """
     # Resolve the user_prompt once (cache on settings for subsequent calls)
     if not settings.user_prompt:
-        settings.user_prompt = _build_user_prompt(settings.customer_name)
+        settings.user_prompt = _build_user_prompt(settings.customer_name, settings.data_format)
 
     request_sent_time = datetime.now(timezone.utc).isoformat()
     response = _query_guest_with_llm(settings)
@@ -314,7 +322,7 @@ def run_sequential_batch_multi_guest(
     seq_count = settings.sequential_batch_size
     for i in range(seq_count):
         customer_name = guest_names[i] if i < len(guest_names) else guest_names[-1]
-        user_prompt = _build_user_prompt(customer_name)
+        user_prompt = _build_user_prompt(customer_name, settings.data_format)
         result = run_single_request_with_guest(
             "sequential", i + 1, run_id, settings, logger, customer_name, user_prompt
         )
@@ -338,12 +346,11 @@ def run_concurrent_batch_multi_guest(
     conc_count = settings.concurrent_batch_size
     seq_count = settings.sequential_batch_size
     # Pre-build all user prompts for the concurrent guests (thread-safe since DB reads are independent)
-    guest_data = fetch_all_guests_and_reservations()
     prompts: list[tuple[str, str]] = []
     for i in range(conc_count):
         guest_idx = seq_count + i
         customer_name = guest_names[guest_idx] if guest_idx < len(guest_names) else guest_names[-1]
-        user_prompt = build_user_prompt(customer_name, guest_data)
+        user_prompt = _build_user_prompt(customer_name, settings.data_format)
         prompts.append((customer_name, user_prompt))
 
     with ThreadPoolExecutor(max_workers=conc_count) as executor:
@@ -406,6 +413,7 @@ def run_tests(settings: Optional[TestSettings] = None) -> dict[str, Any]:
     print(f"  Model: {settings.model_name}")
     print(f"  vLLM Version: {settings.vllm_version}")
     print(f"  Thinking Enabled: {settings.thinking_enabled}")
+    print(f"  Data Format: {settings.data_format}")
     print(f"  Sequential: {settings.sequential_batch_size}, Concurrent: {settings.concurrent_batch_size}")
     print(f"  Database: {db_path}")
 

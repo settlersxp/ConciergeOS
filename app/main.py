@@ -121,6 +121,7 @@ async def api_run_performance_testing(request: Request) -> dict[str, Any]:
         system_prompt=body.get("system_prompt", ""),
         user_prompt=body.get("user_prompt", ""),
         expected_response_format=body.get("expected_response_format", "auto"),
+        data_format=body.get("data_format", "csv"),
     )
 
     # Generate a UUID if not provided
@@ -290,6 +291,39 @@ async def api_generate_xml() -> dict[str, Any]:
             "ok": True,
             "path": "data/guests_data.csv",
             "size_bytes": len(csv_output.encode("utf-8")),
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e),
+        }
+
+
+@app.post("/api/performance-testing/generate-all")
+async def api_generate_all() -> dict[str, Any]:
+    """Regenerate all 3 data file formats (CSV, JSON, XML) and return their paths."""
+    from app.services.llm import fetch_all_as_json, fetch_all_as_xml, fetch_all_guests_and_reservations  # noqa: cwd
+
+    try:
+        csv_output = fetch_all_guests_and_reservations()
+        json_output = fetch_all_as_json()
+        xml_output = fetch_all_as_xml()
+        return {
+            "ok": True,
+            "files": {
+                "csv": {
+                    "path": "data/guests_data.csv",
+                    "size_bytes": len(csv_output.encode("utf-8")),
+                },
+                "json": {
+                    "path": "data/guests_data.json",
+                    "size_bytes": len(json_output.encode("utf-8")),
+                },
+                "xml": {
+                    "path": "data/guests_data.xml",
+                    "size_bytes": len(xml_output.encode("utf-8")),
+                },
+            },
         }
     except Exception as e:
         return {

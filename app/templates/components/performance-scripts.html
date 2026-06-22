@@ -123,6 +123,8 @@
 
     function gatherSettings() {
         var isMulti = document.querySelector('input[name="testMode"][value="multi"]').checked;
+        var dataFormatRadio = document.querySelector('input[name="dataFormat"]:checked');
+        var dataFormat = dataFormatRadio ? dataFormatRadio.value : 'csv';
         return {
             test_mode: isMulti ? "multi" : "single",
             batch_uuid: document.getElementById('batchUuid').value.trim() || generateUuid(),
@@ -138,6 +140,7 @@
             system_prompt: document.getElementById('systemPrompt').value.trim(),
             user_prompt: document.getElementById('userPrompt').value.trim(),
             expected_response_format: document.getElementById('expectedFormat').value,
+            data_format: dataFormat,
         };
     }
 
@@ -838,16 +841,16 @@
         return div.innerHTML;
     }
 
-    // ---- XML Generation ----
+    // ---- Data File Generation ----
 
-    async function generateXML() {
-        var btn = document.getElementById('generateXmlBtn');
+    async function generateAll() {
+        var btn = document.getElementById('generateDataBtn');
         btn.disabled = true;
         btn.textContent = 'Generating...';
-        showStatus('Generating guests XML data...', 'running');
+        showStatus('Generating all data files (CSV, JSON, XML)...', 'running');
 
         try {
-            var res = await fetch('/api/performance-testing/generate-xml', {
+            var res = await fetch('/api/performance-testing/generate-all', {
                 method: 'POST',
             });
 
@@ -859,19 +862,21 @@
             var data = await res.json();
 
             if (!data.ok) {
-                throw new Error(data.error || 'XML generation failed');
+                throw new Error(data.error || 'Data generation failed');
             }
 
-            var sizeKB = (data.size_bytes / 1024).toFixed(1);
+            var csvKB = (data.files.csv.size_bytes / 1024).toFixed(1);
+            var jsonKB = (data.files.json.size_bytes / 1024).toFixed(1);
+            var xmlKB = (data.files.xml.size_bytes / 1024).toFixed(1);
             showStatus(
-                'XML generated successfully! (' + sizeKB + ' KB saved to ' + data.path + ')',
+                'All data files generated! CSV: ' + csvKB + ' KB, JSON: ' + jsonKB + ' KB, XML: ' + xmlKB + ' KB',
                 'success'
             );
         } catch (err) {
-            showStatus('Error generating XML: ' + err.message, 'error');
+            showStatus('Error generating data files: ' + err.message, 'error');
         } finally {
             btn.disabled = false;
-            btn.textContent = 'Generate XML';
+            btn.textContent = 'Generate Data Files';
         }
     }
 
