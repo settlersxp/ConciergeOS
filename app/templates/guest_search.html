@@ -54,6 +54,40 @@
         line-height: 1.7;
         color: var(--text);
     }
+    .debug-info {
+        background: #1a1a2e;
+        color: #e0e0e0;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        padding: 16px;
+        border-radius: 6px;
+        margin-top: 16px;
+        max-height: 300px;
+        overflow-y: auto;
+        display: none;
+    }
+    .debug-info.visible { display: block; }
+    .debug-toggle {
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        padding: 6px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        margin-top: 12px;
+    }
+    .debug-toggle:hover {
+        border-color: var(--primary);
+        color: var(--text);
+    }
+    .error-msg {
+        color: #e74c3c;
+    }
+    .loading {
+        color: #3498db;
+        font-style: italic;
+    }
 </style>
 {% endblock %}
 
@@ -70,7 +104,36 @@
     <div class="result-card" id="resultCard">
         <h2 id="resultTitle">Results for: <span id="resultQuery"></span></h2>
         <div class="result-content" id="resultContent"></div>
+        <button id="debugToggle" class="debug-toggle" style="display:none;">Show Debug Info</button>
+        <pre id="debugInfo" class="debug-info"></pre>
     </div>
+    
+    <script>
+    // Show the debug toggle button when the result card is visible
+    (function() {
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                    var resultCard = document.getElementById('resultCard');
+                    var debugToggle = document.getElementById('debugToggle');
+                    if (resultCard && debugToggle) {
+                        if (resultCard.classList.contains('visible')) {
+                            debugToggle.style.display = 'inline-block';
+                        } else {
+                            debugToggle.style.display = 'none';
+                            document.getElementById('debugInfo').classList.remove('visible');
+                        }
+                    }
+                }
+            });
+        });
+        
+        var resultCard = document.getElementById('resultCard');
+        if (resultCard) {
+            observer.observe(resultCard, { attributes: true });
+        }
+    })();
+    </script>
 {% endblock %}
 
 {% block scripts %}
@@ -92,7 +155,11 @@
         resultCard.classList.add('visible');
         resultQuery.textContent = name;
         resultContent.className = 'result-content loading';
-        resultContent.textContent = 'Querying LLM, please wait...';
+        resultContent.textContent = 'Querying LLM with tool calling, please wait...';
+        
+        // Clear any previous debug info
+        var debugDiv = document.getElementById('debugInfo');
+        if (debugDiv) debugDiv.classList.remove('visible');
 
         try {
             var res = await fetch('/api/guest-search', {
@@ -101,21 +168,67 @@
                 body: JSON.stringify({ customer_name: name }),
             });
 
+            var rawResponse = await res.text();
+            
             if (!res.ok) {
-                var errData = await res.json().catch(function() { return null; });
-                throw new Error(errData?.detail || 'Server error: ' + res.status);
+                throw new Error('Server error: ' + res.status + ' | Response: ' + rawResponse);
             }
 
-            var data = await res.json();
-            resultContent.className = 'result-content';
-            resultContent.textContent = data.llm_response;
+            var data;
+            try {
+                data = JSON.parse(rawResponse);
+            } catch (e) {
+                throw new Error('Invalid JSON response from server: ' + rawResponse.substring(0, 200));
+            }
+            
+            // Show debug info to help troubleshoot
+            var debugDiv = document.getElementById('debugInfo');
+            debugDiv.textContent = JSON.stringify({
+                endpoint: '/api/guest-search',
+                statusCode: res.status,
+                requestQuery: name,
+                responseKeys: Object.keys(data),
+                llm_response_length: data.llm_response ? data.llm_response.length : 0,
+                llm_response_preview: data.llm_response ? data.llm_response.substring(0, 100) + '...' : '(empty)',
+            }, null, 2);
+            
+            if (data.llm_response && data.llm_response !== 'The LLM returned an empty response.') {
+                resultContent.className = 'result-content';
+                resultContent.textContent = data.llm_response;
+            } else {
+                resultContent.className = 'result-content error-msg';
+                resultContent.textContent = 'Results for: ' + name + '\n\n' + (data.llm_response || '(empty response)');
+                debugDiv.classList.add('visible');
+            }
         } catch (err) {
             resultContent.className = 'result-content error-msg';
             resultContent.textContent = 'Error: ' + err.message;
+            
+            var debugDiv = document.getElementById('debugInfo');
+            debugDiv.textContent = 'Request Error:\n' + err.message + '\n\n' +
+                'Check that:\n' +
+                '1. The FastAPI server is running on port 8000\n' +
+                '2. The LLM endpoint is configured correctly in Settings\n' +
+                '3. The model supports tool calling\n\n' +
+                'You can also test the API directly:\n' +
+                '  curl -X POST http://localhost:8000/api/guest-search \\\n' +
+                '    -H "Content-Type: application/json" \\\n' +
+                '    -d \'{"customer_name": "fares"}\'';
+            debugDiv.classList.add('visible');
         } finally {
             btn.disabled = false;
             btn.textContent = 'Search';
         }
     });
+    
+    // Toggle debug info visibility
+    var debugToggle = document.getElementById('debugToggle');
+    if (debugToggle) {
+        debugToggle.addEventListener('click', function() {
+            var debugDiv = document.getElementById('debugInfo');
+            debugDiv.classList.toggle('visible');
+            this.textContent = debugDiv.classList.contains('visible') ? 'Hide Debug Info' : 'Show Debug Info';
+        });
+    }
 </script>
 {% endblock %}
