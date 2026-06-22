@@ -1,6 +1,15 @@
 <script>
     const statusBar = document.getElementById('statusBar');
 
+    // Global settings loaded from API
+    var appSettings = {
+        models_endpoint: '',
+        model_name: '',
+        vllm_version: '',
+        thinking_enabled: false,
+        expected_format: 'auto'
+    };
+
     // Lookup map: result id -> row data object
     var rowDataMap = {};
 
@@ -121,6 +130,28 @@
         }
     }
 
+    async function loadAppSettings() {
+        try {
+            const res = await fetch('/api/settings');
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.test_settings) {
+                appSettings.models_endpoint = data.test_settings.models_endpoint || '';
+                appSettings.model_name = data.test_settings.model_name || '';
+                appSettings.vllm_version = data.test_settings.vllm_version || '';
+                appSettings.thinking_enabled = data.test_settings.thinking_enabled || false;
+                appSettings.expected_format = data.test_settings.expected_format || 'auto';
+                
+                // Derive vllm_url from models_endpoint (remove '/models' suffix)
+                if (data.test_settings.models_endpoint) {
+                    appSettings.vllm_url = data.test_settings.models_endpoint.replace('/models', '').replace('/v1/models', '');
+                }
+            }
+        } catch (err) {
+            console.error('Failed to load app settings:', err);
+        }
+    }
+
     function gatherSettings() {
         var isMulti = document.querySelector('input[name="testMode"][value="multi"]').checked;
         var dataFormatRadio = document.querySelector('input[name="dataFormat"]:checked');
@@ -130,16 +161,16 @@
             batch_uuid: document.getElementById('batchUuid').value.trim() || generateUuid(),
             friendly_name: document.getElementById('friendlyName').value.trim(),
             customer_name: document.getElementById('customerName').value.trim(),
-            vllm_url: document.getElementById('vllmUrl').value.trim(),
-            models_endpoint: document.getElementById('modelsEndpoint').value.trim(),
+            vllm_url: appSettings.vllm_url || '',
+            models_endpoint: appSettings.models_endpoint,
             sequential_batch_size: parseInt(document.getElementById('sequentialBatch').value) || 5,
             concurrent_batch_size: parseInt(document.getElementById('concurrentBatch').value) || 8,
-            model_name: document.getElementById('modelName').value.trim(),
-            vllm_version: document.getElementById('vllmVersion').value.trim(),
-            thinking_enabled: document.getElementById('thinkingEnabled').checked,
+            model_name: appSettings.model_name,
+            vllm_version: appSettings.vllm_version,
+            thinking_enabled: appSettings.thinking_enabled,
             system_prompt: document.getElementById('systemPrompt').value.trim(),
             user_prompt: document.getElementById('userPrompt').value.trim(),
-            expected_response_format: document.getElementById('expectedFormat').value,
+            expected_response_format: appSettings.expected_format,
             data_format: dataFormat,
         };
     }
@@ -1001,4 +1032,7 @@
     whenReady(function initGuestList() {
         refreshGuestList();
     });
+
+    // Load app settings on page load (deferred until DOM ready)
+    whenReady(loadAppSettings);
 </script>

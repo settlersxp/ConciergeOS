@@ -9,10 +9,12 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import JSONResponse
 
 from app.schemas import GuestSearchRequest, GuestSearchResponse
 from app.services import get_reservations_summary, query_guest_with_llm
 from app.services.debug import debug_router
+from app.config import config_manager, TestSettings
 
 app = FastAPI(title="ConciergeOS")
 
@@ -58,6 +60,54 @@ async def api_guest_search(body: GuestSearchRequest) -> GuestSearchResponse:
         query=body.customer_name,
         llm_response=llm_response,
     )
+
+
+# ── Settings ─────────────────────────────────────────────────────────────────
+
+@app.get("/settings")
+async def settings_page(request: Request):
+    """Serve the model settings page."""
+    from dataclasses import asdict
+    return templates.TemplateResponse(request, "settings.html", {
+        "request": request,
+        "test_settings": asdict(config_manager.test_settings),
+        "current_page": "settings",
+    })
+
+
+@app.get("/api/settings")
+async def api_get_settings() -> JSONResponse:
+    """Get current global configuration settings."""
+    from dataclasses import asdict
+    return JSONResponse(content={"test_settings": asdict(config_manager.test_settings)})
+
+
+@app.post("/api/settings")
+async def api_update_settings(body: dict[str, Any]) -> JSONResponse:
+    """Update global configuration settings."""
+    try:
+        ts_data = body.get("test_settings", {})
+        if ts_data:
+            new_ts = TestSettings(**ts_data)
+            config_manager.test_settings = new_ts
+        config_manager.save()
+        return JSONResponse(content={"message": "Settings updated successfully"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/api/models")
+async def api_get_models() -> JSONResponse:
+    """Proxy request to the configured vLLM models endpoint."""
+    models_endpoint = config_manager.test_settings.models_endpoint
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(models_endpoint)
+            resp.raise_for_status()
+            return JSONResponse(content=resp.json())
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 # ── Performance Testing ─────────────────────────────────────────────────────

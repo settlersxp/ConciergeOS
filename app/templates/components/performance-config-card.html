@@ -27,6 +27,4 @@
         form_group(label='Sequential Requests', field_html='<input type="number" id="sequentialBatch" value="5" min="1" max="50" />') ~
         form_group(label='Concurrent Requests', field_html='<input type="number" id="concurrentBatch" value="8" min="1" max="50" />')
     ) }}
-    {{ text_input(id='vllmUrl', value='http://10.0.0.227:8000/v1', label='vLLM Base URL') }}
-    {{ text_input(id='modelsEndpoint', value='http://10.0.0.227:8000/v1/models', label='Models Endpoint') }}
 </div>

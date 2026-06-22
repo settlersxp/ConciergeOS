@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -34,26 +34,28 @@ except ImportError:
     from PerformanceTesting.db import PerformanceTestLogger, ensure_database, get_next_run_id  # noqa: cwd
 
 
+from app.config import config_manager
+
 # ── Test settings ────────────────────────────────────────────────────────────
 
 @dataclass
 class TestSettings:
     """All configurable settings for a performance test run."""
     customer_name: str = "عائشة إبراهيم"
-    vllm_url: str = "http://10.0.0.227:8000/v1"
-    models_endpoint: str = "http://10.0.0.227:8000/v1/models"
+    vllm_url: str = ""  # Derived from models_endpoint if not provided
+    models_endpoint: str = "http://localhost:8000/v1/models"
     database_path: Path = field(default_factory=lambda: Path(__file__).parent.parent / "performance_tests.db")
     sequential_batch_size: int = 5
     concurrent_batch_size: int = 8
     # Test mode: "single" (one guest for all tests) or "multi" (different guest per test)
     test_mode: str = "single"
     # Guest names for multi-guest mode (first N for sequential, remaining for concurrent)
-    guest_names: list[str] = field(default_factory=list)
+    guest_names: List[str] = field(default_factory=list)
     # Batch identification
     batch_uuid: str = ""
     friendly_name: str = ""
     # Model metadata (auto-filled from vLLM API, but editable by user)
-    model_name: str = "google/gemma-4-26B-A4B-it"
+    model_name: str = ""
     vllm_version: str = ""
     thinking_enabled: bool = False
     # Prompt settings
@@ -73,29 +75,30 @@ def fetch_model_info(url: str) -> dict[str, Any]:
     resp.raise_for_status()
     data = resp.json()
 
-    models = data.get("data", [])
+    models: List[Dict[str, Any]] = data.get("data", [])
     if not models:
         return {"model_name": "unknown", "vllm_version": "unknown", "thinking_enabled": False}
 
-    model = models[0]
-    model_name = model.get("id", model.get("model", "unknown"))
+    model: Dict[str, Any] = models[0]
+    model_name: str = str(model.get("id", model.get("model", "unknown")))
 
     # Try to extract vllm version from various possible fields
-    vllm_version = model.get("vllm_version", "")
-    if not vllm_version:
-        vllm_version = (
-            model.get("extra", {}).get("vllm_version", "unknown")
-            if isinstance(model.get("extra"), dict)
-            else "unknown"
-        )
+    vllm_version: str = str(model.get("vllm_version", ""))
+    if not vllm_version or vllm_version == "None":
+        extra = model.get("extra")
+        if isinstance(extra, dict):
+            vllm_version = str(extra.get("vllm_version", "unknown"))
+        else:
+            vllm_version = "unknown"
 
     # Check if thinking is enabled
-    thinking_enabled = False
-    capabilities = model.get("capabilities", {})
+    thinking_enabled: bool = False
+    capabilities = model.get("capabilities")
     if isinstance(capabilities, dict):
-        thinking_enabled = capabilities.get("thinking", False)
-    model_type = model.get("type", "")
-    if "thinking" in str(model_type).lower():
+        thinking_enabled = bool(capabilities.get("thinking", False))
+    
+    model_type = str(model.get("type", "")).lower()
+    if "thinking" in model_type:
         thinking_enabled = True
 
     return {
@@ -312,8 +315,8 @@ def run_sequential_batch_multi_guest(
     run_id: int,
     settings: TestSettings,
     logger: PerformanceTestLogger,
-    guest_names: list[str],
-) -> list[dict[str, Any]]:
+    guest_names: List[str],
+) -> List[Dict[str, Any]]:
     """Run sequential requests, each querying a different guest.
 
     Uses the first `sequential_batch_size` guests from the provided list.
@@ -335,8 +338,8 @@ def run_concurrent_batch_multi_guest(
     run_id: int,
     settings: TestSettings,
     logger: PerformanceTestLogger,
-    guest_names: list[str],
-) -> list[dict[str, Any]]:
+    guest_names: List[str],
+) -> List[Dict[str, Any]]:
     """Run concurrent requests, each querying a different guest.
 
     Uses guests starting at index `sequential_batch_size` (i.e., the guests

@@ -8,25 +8,46 @@ import io
 import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from openai import OpenAI
 
 from app.db import SessionLocal
 from app.models import Guest, Reservation, Room
+from app.config import config_manager
 
 
-# Local vLLM instance (OpenAI-compatible)
-_LLM_CLIENT = OpenAI(
-    base_url="http://10.0.0.227:8000/v1",
-    api_key="none",
-)
-_LLM_MODEL = "google/gemma-4-26B-A4B-it"
+def get_llm_config() -> tuple[OpenAI, str]:
+    """
+    Dynamically fetch the LLM client and model name from the global configuration.
+    If the vLLM server is unreachable, returns a fallback client and model.
+    Derives base_url from models_endpoint by removing '/models' suffix.
+    """
+    models_endpoint = config_manager.test_settings.models_endpoint
+    model_name = config_manager.test_settings.model_name
+    
+    # Derive base URL from models endpoint (remove '/models' suffix)
+    base_url = models_endpoint.rstrip('/').replace('/models', '')
+    
+    client = OpenAI(base_url=base_url, api_key="none")
+    try:
+        # Verify connectivity and model availability
+        models = client.models.list()
+        if models.data:
+            # If the configured model is in the list, use it. 
+            # Otherwise, use the first available model.
+            available_model_ids = [m.id for m in models.data]
+            if model_name in available_model_ids:
+                return client, model_name
+            else:
+                print(f"Warning: Configured model '{model_name}' not found. Using first available: {models.data[0].id}")
+                return client, models.data[0].id
+    except Exception as e:
+        print(f"Warning: Failed to fetch LLM config dynamically: {e}. Using fallback.")
+    
+    # Extremely basic fallback if everything fails
+    return client, "facebook/opt-125m"
 
-# Output paths
-_CSV_OUTPUT_PATH = Path("data/guests_data.csv")
-_JSON_OUTPUT_PATH = Path("data/guests_data.json")
-_XML_OUTPUT_PATH = Path("data/guests_data.xml")
 
 # ── Shared prompts (single source of truth) ─────────────────────────────────
 
@@ -49,10 +70,12 @@ def build_user_prompt(customer_name: str, data: str) -> str:
     )
 
 
-def _fetch_raw_data():
+# ── Data Fetching & Transformation ──────────────────────────────────────────
+
+def _fetch_raw_data() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """
     Fetch all guests, rooms, and reservations from the database.
-    Returns structured data: (rooms_list, guests_dict_with_reservations)
+    Returns structured data: (rooms_list, guests_list)
     """
     db = SessionLocal()
     try:
@@ -60,15 +83,16 @@ def _fetch_raw_data():
         guests = db.query(Guest).order_by(Guest.guest_id).all()
         reservations = db.query(Reservation).order_by(Reservation.reservation_id).all()
 
-        rooms_list = []
-        for room in rooms:
-            rooms_list.append({
+        rooms_list: list[dict[str, Any]] = [
+            {
                 "room_id": room.room_id,
                 "name": room.name,
                 "allowed_booking_channel": room.allowed_booking_channel.value,
                 "checkin_time": room.checkin_time,
                 "checkout_time": room.checkout_time,
-            })
+            }
+            for room in rooms
+        ]
 
         # Build guest dict with nested reservations
         guests_dict: dict[int, dict[str, Any]] = {}
@@ -100,14 +124,21 @@ def _fetch_raw_data():
         db.close()
 
 
-def fetch_all_guests_and_reservations() -> str:
-    """
-    Fetch all guests, rooms, and reservations from the database
-    and return as a CSV string. Also saves the CSV to disk.
-    """
-    rooms_list, guests_list = _fetch_raw_data()
+def _save_to_disk(path: Path, content: str) -> None:
+    """Helper to ensure directory exists and write content to file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
 
-    # Build CSV using StringIO
+
+# Output paths
+_OUTPUT_PATHS: dict[str, Path] = {
+    "csv": Path("data/guests_data.csv"),
+    "json": Path("data/guests_data.json"),
+    "xml": Path("data/guests_data.xml"),
+}
+
+
+def _to_csv(rooms_list: list[dict[str, Any]], guests_list: list[dict[str, Any]]) -> str:
     headers = [
         "room_id", "room_name", "allowed_booking_channel",
         "checkin_time", "checkout_time",
@@ -116,15 +147,13 @@ def fetch_all_guests_and_reservations() -> str:
         "reservation_id", "check_in", "check_out",
         "status", "booking_source", "created_at",
     ]
-
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=headers)
     writer.writeheader()
 
     for guest in guests_list:
         for res in guest["reservations"]:
-            # Find the room info
-            room_info = next((r for r in rooms_list if r["room_id"] == res["room_id"]), {})
+            room_info: dict[str, Any] = next((r for r in rooms_list if r["room_id"] == res["room_id"]), {"name": "", "allowed_booking_channel": "", "checkin_time": "", "checkout_time": ""})
             writer.writerow({
                 "room_id": res["room_id"],
                 "room_name": room_info.get("name", ""),
@@ -144,48 +173,17 @@ def fetch_all_guests_and_reservations() -> str:
                 "booking_source": res["booking_source"],
                 "created_at": res["created_at"],
             })
-
-    csv_output = output.getvalue()
-    output.close()
-
-    # Save to disk
-    _CSV_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _CSV_OUTPUT_PATH.write_text(csv_output, encoding="utf-8")
-
-    return csv_output
+    return output.getvalue()
 
 
-def fetch_all_as_json() -> str:
-    """
-    Fetch all guests, rooms, and reservations and return as a JSON string.
-    Also saves the JSON to disk.
-    """
-    rooms_list, guests_list = _fetch_raw_data()
-
-    data = {
-        "rooms": rooms_list,
-        "guests": guests_list,
-    }
-
-    json_output = json.dumps(data, indent=2, ensure_ascii=False)
-
-    # Save to disk
-    _JSON_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _JSON_OUTPUT_PATH.write_text(json_output, encoding="utf-8")
-
-    return json_output
+def _to_json(rooms_list: list[dict[str, Any]], guests_list: list[dict[str, Any]]) -> str:
+    data = {"rooms": rooms_list, "guests": guests_list}
+    return json.dumps(data, indent=2, ensure_ascii=False)
 
 
-def fetch_all_as_xml() -> str:
-    """
-    Fetch all guests, rooms, and reservations and return as an XML string.
-    Also saves the XML to disk.
-    """
-    rooms_list, guests_list = _fetch_raw_data()
-
+def _to_xml(rooms_list: list[dict[str, Any]], guests_list: list[dict[str, Any]]) -> str:
     root = ET.Element("hotel_data")
 
-    # Rooms section
     rooms_elem = ET.SubElement(root, "rooms")
     for room in rooms_list:
         room_e = ET.SubElement(rooms_elem, "room")
@@ -195,7 +193,6 @@ def fetch_all_as_xml() -> str:
         ET.SubElement(room_e, "checkin_time").text = room["checkin_time"]
         ET.SubElement(room_e, "checkout_time").text = room["checkout_time"]
 
-    # Guests section
     guests_elem = ET.SubElement(root, "guests")
     for guest in guests_list:
         guest_e = ET.SubElement(guests_elem, "guest")
@@ -204,10 +201,8 @@ def fetch_all_as_xml() -> str:
         ET.SubElement(guest_e, "last_name").text = guest["last_name"]
         ET.SubElement(guest_e, "date_of_birth").text = guest["date_of_birth"]
         ET.SubElement(guest_e, "is_special_guest").text = str(guest["is_special_guest"]).lower()
-        prefs = ET.SubElement(guest_e, "special_preferences")
-        prefs.text = guest["special_preferences"]
+        ET.SubElement(guest_e, "special_preferences").text = guest["special_preferences"]
 
-        # Reservations nested inside guest
         res_elem = ET.SubElement(guest_e, "reservations")
         for res in guest["reservations"]:
             res_e = ET.SubElement(res_elem, "reservation")
@@ -217,39 +212,62 @@ def fetch_all_as_xml() -> str:
             ET.SubElement(res_e, "check_out").text = res["check_out"]
             ET.SubElement(res_e, "status").text = res["status"]
             ET.SubElement(res_e, "booking_source").text = res["booking_source"]
-            created = ET.SubElement(res_e, "created_at")
-            created.text = res["created_at"]
+            ET.SubElement(res_e, "created_at").text = res["created_at"]
 
-    # Convert to string with proper formatting
     xml_decl = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-    xml_body = ET.tostring(root, encoding="unicode")
-    xml_output = xml_decl + xml_body
+    return xml_decl + ET.tostring(root, encoding="unicode")
 
-    # Save to disk
-    _XML_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _XML_OUTPUT_PATH.write_text(xml_output, encoding="utf-8")
 
-    return xml_output
+def _fetch_and_save(format_key: str) -> str:
+    """Orchestrates fetching, transforming, and saving data."""
+    rooms, guests = _fetch_raw_data()
+    
+    # Explicit type hint for the registry to ensure type safety and analyzer stability
+    transformers: dict[str, Callable[[list[dict[str, Any]], list[dict[str, Any]]], str]] = {
+        "csv": _to_csv,
+        "json": _to_json,
+        "xml": _to_xml
+    }
+    
+    content: str = transformers[format_key](rooms, guests)
+    _save_to_disk(_OUTPUT_PATHS[format_key], content)
+    return content
+
+
+# ── Public API ─────────────────────────────────────────────────────────────
+
+def fetch_all_guests_and_reservations() -> str:
+    """Returns CSV string and saves to disk."""
+    return _fetch_and_save("csv")
+
+
+def fetch_all_as_json() -> str:
+    """Returns JSON string and saves to disk."""
+    return _fetch_and_save("json")
+
+
+def fetch_all_as_xml() -> str:
+    """Returns XML string and saves to disk."""
+    return _fetch_and_save("xml")
 
 
 def query_guest_with_llm(customer_name: str) -> str:
     """
-    Query the LLM for all information about a given guest.
-    Sends the full guest/reservation dataset as context and asks
-    the LLM to return everything related to the requested customer.
+    Query the LLM for all information about a given guest using JSON context.
     """
-    data = fetch_all_guests_and_reservations()
-
+    # Using JSON instead of CSV for better LLM context quality
+    data = fetch_all_as_json()
     user_prompt = build_user_prompt(customer_name, data)
+    client, model = get_llm_config()
 
-    response = _LLM_CLIENT.chat.completions.create(
-        model=_LLM_MODEL,
+    response = client.chat.completions.create(
+        model=model,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        temperature=0,
-        max_tokens=40960,
+        temperature=0.7,
+        max_tokens=512,
     )
 
     return response.choices[0].message.content or "The LLM returned an empty response."
