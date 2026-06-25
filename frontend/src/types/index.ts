@@ -252,6 +252,8 @@ export interface SingleGuestValidation {
   result_id: number | null;
   is_match: boolean | null;
   llm_reasoning: string | null;
+  ground_truth: string | null;
+  llm_response_content: string | null;
 }
 
 export interface ValidateGuestsResponse {

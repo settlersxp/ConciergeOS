@@ -268,6 +268,8 @@ class SingleGuestValidation(BaseModel):
     result_id: int | None = None
     is_match: bool | None = None
     llm_reasoning: str | None = None
+    ground_truth: str | None = None
+    llm_response_content: str | None = None
 
 
 class ValidateGuestsResponse(BaseModel):

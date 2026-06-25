@@ -414,15 +414,11 @@ export default function PerformanceTesting() {
 
     setValidating(true);
     setStatus({
-      message: "Populating identifiers and validating guests with LLM... This may take a moment.",
+      message: "Validating guests with LLM... This may take a moment.",
       type: "running",
     });
 
     try {
-      // Step 1: Populate identifiers if needed
-      await performanceApi.populateIdentifiers(batchToValidate);
-
-      // Step 2: Run validation
       const data = await performanceApi.validateGuests(batchToValidate);
 
       if (data.ok) {
@@ -562,6 +558,7 @@ export default function PerformanceTesting() {
           results={validationResults}
           summary={validationSummary}
           onClose={handleValidationClose}
+          onMarkValid={handleToggleValid}
         />
       )}
     </div>

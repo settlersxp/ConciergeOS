@@ -98,3 +98,27 @@ code {
 .dark .compare-diff-pre .diff-removed {
   background-color: rgba(248, 113, 113, 0.15);
 }
+
+/* ── Validation Diff Highlighting ── */
+
+.validation-diff-pre .diff-missing {
+  background-color: rgba(239, 68, 68, 0.35);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.validation-diff-pre .diff-mismatch {
+  background-color: rgba(239, 68, 68, 0.25);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.dark .validation-diff-pre .diff-missing {
+  background-color: rgba(239, 68, 68, 0.3);
+}
+
+.dark .validation-diff-pre .diff-mismatch {
+  background-color: rgba(239, 68, 68, 0.2);
+}

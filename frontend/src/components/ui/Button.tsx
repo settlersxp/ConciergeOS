@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-type ButtonVariant = "primary" | "secondary" | "danger" | "accent" | "ghost";
+type ButtonVariant = "primary" | "secondary" | "danger" | "success" | "accent" | "ghost";
 type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps {
@@ -21,6 +21,8 @@ const variantClasses: Record<ButtonVariant, string> = {
     "bg-surface-200 text-primary-700 hover:bg-surface-300 dark:bg-primary-700 dark:text-primary-200 dark:hover:bg-primary-600 disabled:bg-surface-100 dark:disabled:bg-primary-800",
   danger:
     "bg-accent-600 text-white hover:bg-accent-700 disabled:bg-accent-400",
+  success:
+    "bg-green-600 text-white hover:bg-green-700 disabled:bg-green-400",
   accent:
     "bg-accent-400 text-white hover:bg-accent-500 disabled:bg-accent-300",
   ghost:

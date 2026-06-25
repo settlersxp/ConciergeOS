@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Performance testing routes."""
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -403,8 +404,14 @@ async def api_get_guest_detail(guest_id: int) -> GuestDetailSchema:
 
 # ── Validation Helpers ───────────────────────────────────────────────────────
 
-def _validate_single_pair(ground_truth_name: str, response_content: str | None) -> tuple[bool | None, str | None]:
+def _validate_single_pair(
+    ground_truth_json: str,
+    ground_truth_name: str,
+    response_content: str | None,
+) -> tuple[bool | None, str | None]:
     """Validate a single guest-response pair using the LLM.
+
+    Compares the full ground-truth JSON against the LLM response field-by-field.
 
     Returns (is_match, llm_reasoning).
     """
@@ -415,18 +422,36 @@ def _validate_single_pair(ground_truth_name: str, response_content: str | None) 
     client, model = get_llm_config()
 
     system_prompt = (
-        "You are a validation engine. Your job is to compare ground-truth guest information "
-        "against an LLM-generated response and determine whether the response correctly contains "
-        "the guest's information. Respond with a JSON object having two fields: "
-        "'is_match' (boolean) and 'reasoning' (string)."
+        "You are a strict validation engine. Your job is to compare ground-truth guest "
+        "information (provided as JSON) against an LLM-generated text response and determine "
+        "whether the response correctly contains **all** of the guest's information.\n\n"
+        "You must check EVERY field in the ground truth:\n"
+        "1. **Guest fields**: guest_id, first_name, last_name, date_of_birth, "
+        "is_special_guest, special_preferences\n"
+        "2. **Each reservation**: reservation_id, room_id, room_name, check_in_date, "
+        "check_out_date, status, booking_source\n\n"
+        "Rules:\n"
+        "- is_match = true ONLY if the LLM response contains correct information for ALL "
+        "ground-truth fields and ALL reservations.\n"
+        "- If the response lists the correct guest among several candidates but does not "
+        "include full reservation details for that guest, is_match = false.\n"
+        "- If any reservation from the ground truth is missing from the response, "
+        "is_match = false.\n"
+        "- If any field value differs between ground truth and response, is_match = false.\n"
+        "- If the response is empty or clearly unrelated, is_match = false.\n\n"
+        "Respond with a JSON object having two fields:\n"
+        "- 'is_match' (boolean)\n"
+        "- 'reasoning' (string) — list every field that is missing or incorrect, "
+        "and which reservations are missing."
     )
 
     user_prompt = (
         f"Ground-truth guest name: {ground_truth_name}\n\n"
+        f"Ground-truth JSON:\n{ground_truth_json}\n\n"
         f"LLM response to validate:\n{response_content or '(empty response)'}\n\n"
-        "Does the LLM response correctly contain information about this guest? "
-        "Check that the guest's name appears and the associated reservation details are present. "
-        "Return your answer as a JSON object with 'is_match' (boolean) and 'reasoning' (string)."
+        "Compare the LLM response against the ground-truth JSON field by field. "
+        "Return your answer as a JSON object with 'is_match' (boolean) and "
+        "'reasoning' (string)."
     )
 
     try:
@@ -497,7 +522,40 @@ async def api_validate_guests(
             full_name = f"{guest.first_name} {guest.last_name}"
             matched_result = results_by_identifier.get(full_name)
 
+            # Build ground truth JSON for this guest (reservations)
+            guest_reservations = (
+                hotel_db.query(Reservation)
+                .join(Room, Reservation.room_id == Room.room_id)
+                .filter(Reservation.guest_id == guest.guest_id)
+                .order_by(Reservation.reservation_id)
+                .all()
+            )
+
+            ground_truth_obj = {
+                "guest_id": guest.guest_id,
+                "first_name": guest.first_name,
+                "last_name": guest.last_name,
+                "date_of_birth": str(guest.date_of_birth) if guest.date_of_birth else None,
+                "is_special_guest": guest.is_special_guest,
+                "special_preferences": guest.special_preferences,
+                "reservations": [
+                    {
+                        "reservation_id": r.reservation_id,
+                        "room_id": r.room_id,
+                        "room_name": r.room.name,
+                        "check_in_date": str(r.check_in_date),
+                        "check_out_date": str(r.check_out_date),
+                        "status": r.status.value,
+                        "booking_source": r.booking_source.value,
+                    }
+                    for r in guest_reservations
+                ],
+            }
+
+            ground_truth_json = json.dumps(ground_truth_obj, indent=2, default=str)
+
             is_match, reasoning = _validate_single_pair(
+                ground_truth_json=ground_truth_json,
                 ground_truth_name=full_name,
                 response_content=matched_result.response_content if matched_result else None,
             )
@@ -509,6 +567,8 @@ async def api_validate_guests(
                     result_id=matched_result.id if matched_result else None,
                     is_match=is_match,
                     llm_reasoning=reasoning,
+                    ground_truth=ground_truth_json,
+                    llm_response_content=matched_result.response_content if matched_result else None,
                 )
             )
 
