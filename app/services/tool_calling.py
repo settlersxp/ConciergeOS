@@ -208,7 +208,7 @@ TOOL_EXECUTORS = {
 def call_llm_with_db_tools(
     user_message: str,
     model: str | None = None,
-    max_turns: int = 10,
+    max_turns: int = 100,
 ) -> str:
     """
     Call the LLM with database tools and handle the tool calling loop.

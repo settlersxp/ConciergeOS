@@ -1,184 +1,203 @@
 # ConciergeOS
 
-ConciergeOS is a hotel concierge and reservation management system built with Python, FastAPI, and SQLite. It provides a web dashboard for reservation management, an LLM-powered guest search, a performance testing suite, and tools for generating test data including rooms, guests with multilingual names, and reservations with realistic date/status distributions.
+ConciergeOS is a hotel concierge and reservation management system built with Python, FastAPI, SQLite (backend) and React with TypeScript (frontend). It provides a web dashboard for reservation management, an LLM-powered guest search with tool calling support, a performance testing suite, and tools for generating and exporting test data.
 
-> **Last documented state:** Commit `d489d91` (20/06/2026) — "performance tests for multiple guests"
-> All changes up to and including this commit are documented below.
+## Architecture
+
+The project consists of two independent applications:
+
+| Component | Technology | Port | Description |
+|-----------|------------|------|-------------|
+| **Frontend** | React + TypeScript + Vite | 5173 | Single-page application with client-side routing |
+| **Backend** | FastAPI + SQLite | 8000 | REST API only (no server-rendered pages) |
+
+Both applications run independently and communicate via HTTP JSON API calls. The frontend is configured to proxy API requests to the backend.
+
+## Core Features
+
+### Reservation Management
+A web dashboard displaying all reservations grouped by room, with automatic error detection for:
+- **Erroneous statuses** — Reservations with incorrect status (e.g., `CANCELLED` instead of `CHECKED_IN`)
+- **Unsynchronized dates** — Check-in dates in the future for checked-out guests, or check-out dates in the past for checked-in guests
+
+Rooms are categorized by booking channel (`ANY`, `ON_SITE_ONLY`, `STAFF_ASSIGNMENT`), which determines allowed booking sources.
+
+### Guest Search
+LLM-powered natural language search for guest information. Type a guest name (in any supported language) and receive a structured response with personal details, rooms, and all reservations.
+
+The system supports two LLM interaction modes:
+- **Tool Calling** — The LLM invokes read-only database query tools (`query_guests`, `query_rooms`, `query_reservations`, `get_hotel_summary`) to fetch data on demand. This is the default mode and scales better with large datasets.
+- **Data Prompting** — All guest and reservation data is embedded in the prompt in CSV, JSON, or XML format. Useful for benchmarking and comparison.
+
+Guest records support multilingual names across 8 writing systems: Latin, Cyrillic, Chinese, Japanese, Arabic, Devanagari, Korean, and Nordic.
+
+### Performance Testing
+A built-in suite for benchmarking LLM query performance with the following capabilities:
+- **Sequential and concurrent batch testing** — Run N requests one-after-another or in parallel
+- **Single-guest and multi-guest modes** — Test with one repeated query or rotate across different guests
+- **Configurable data format** — Choose between tool calling, CSV, JSON, or XML data embedding
+- **Results persistence** — All results stored in SQLite with full metadata (model, version, timestamps, responses)
+- **Batch tracking** — Each test run is grouped by a unique batch ID with an optional friendly name
+- **Manual validation** — Flag individual results as valid/invalid for accuracy analysis
+- **Batch comparison** — Compare results across different test configurations
+
+### Configuration Management
+Persistent application settings managed through a dedicated web page:
+- LLM model endpoint and model selection
+- Thinking mode toggle
+- Expected response format
+- Settings are saved to disk and survive server restarts
+
+### Data Export
+Export all guest and reservation data in multiple formats:
+- **CSV** — Flat file with one row per reservation, including guest and room details
+- **JSON** — Nested structure with rooms and guests (with embedded reservations)
+- **XML** — Hierarchical markup format
+
+Exported files are saved to the `data/` directory and can be regenerated on demand from the web UI.
 
 ## Project Structure
 
 ```
 ConciergeOS/
-├── create_hotel_db.py                  # SQLite schema initialization
+├── create_hotel_db.py                  # SQLite database initialization
 ├── pyproject.toml                      # Project metadata & dependencies
-├── app/                                # FastAPI web application
-│   ├── __init__.py
-│   ├── db.py                           # SQLAlchemy engine, session, Base model
-│   ├── enums.py                        # BookingChannel, BookingSource, ReservationStatus enums
-│   ├── main.py                         # FastAPI app, routes, templates
-│   ├── models.py                       # SQLAlchemy ORM models (Room, Guest, Reservation)
+├── app/                                # FastAPI backend (REST API only)
+│   ├── config.json                     # Persistent configuration (auto-generated)
+│   ├── config.py                       # Configuration management
+│   ├── main.py                         # FastAPI app & route registration
+│   ├── db.py                           # Database session setup
+│   ├── enums.py                        # Shared enumerations
+│   ├── models.py                       # SQLAlchemy ORM models
 │   ├── schemas.py                      # Pydantic request/response schemas
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── core.py                     # Reservation queries & error detection
-│   │   ├── debug.py                    # Debug endpoints router
-│   │   └── llm.py                      # LLM integration (vLLM/OpenAI client)
-│   └── templates/
-│       ├── guest_search.html           # Guest search page
-│       ├── header.html                 # Shared header component
-│       ├── performance_testing.html    # Performance testing dashboard
-│       └── reservations.html           # Reservations dashboard
+│   ├── routes/                         # API route modules
+│   │   ├── __init__.py                 # Router exports
+│   │   ├── guest_search.py             # Guest search API endpoints
+│   │   ├── performance_testing.py      # Performance testing API endpoints
+│   │   ├── reservations.py             # Reservations API endpoints
+│   │   └── settings.py                 # Settings API endpoints
+│   └── services/                       # Business logic
+│       ├── core.py                     # Reservation queries & error detection
+│       ├── debug.py                    # Debug endpoints
+│       ├── llm.py                      # LLM client, prompts, data exporters
+│       └── tool_calling.py             # LLM tool-calling service
+├── frontend/                           # React SPA (Vite + TypeScript)
+│   ├── vite.config.ts                  # Vite build configuration
+│   ├── tsconfig.json                   # TypeScript configuration
+│   ├── index.html                      # HTML entry point
+│   └── src/                            # React source code
+│       ├── main.tsx                    # React entry point
+│       ├── App.tsx                     # Router configuration
+│       ├── components/                 # Shared UI components
+│       │   ├── Header.tsx              # Navigation header
+│       │   └── ui/                     # Reusable UI primitives
+│       ├── pages/                      # Page components
+│       │   ├── Reservations.tsx        # Reservations dashboard
+│       │   ├── GuestSearch.tsx         # Guest search page
+│       │   ├── PerformanceTesting.tsx  # Performance testing dashboard
+│       │   ├── Settings.tsx            # Configuration settings page
+│       │   └── components/             # Page-specific components
+│       ├── services/                   # API client
+│       │   └── api.ts                  # Fetch wrapper for backend API
+│       ├── types/                      # TypeScript type definitions
+│       └── utils/                      # Utility functions
+├── data/                               # Exported data files (auto-generated)
+│   ├── guests_data.csv
+│   ├── guests_data.json
+│   └── guests_data.xml
 ├── Generator/                          # Data generation & utility scripts
 │   ├── generate_names.py               # Multilingual name generator
 │   ├── generate_rooms.py               # Room data generator
-│   ├── populate_rooms.py               # Inserts rooms into database
-│   ├── populate_reservations.py        # Generates guests & reservations
-│   ├── shift_reservations.py           # Shifts all reservation dates by N days
-│   ├── setup_errors.py                 # Injects controlled errors into reservations
-│   ├── setup_performance_guests.py     # Creates 13 test guests with 4 reservations each
-│   ├── utils.py                        # Shared constants & DB connection helper
-│   ├── all_names.json                  # Master name list (8 alphabets)
-│   ├── *_names.txt                     # Per-alphabet name files
-│   ├── rooms.json                      # Structured room data
-│   ├── rooms.txt                       # Human-readable room list
-│   └── erroneous_reservations.json     # Persisted error IDs from setup_errors.py
-└── PerformanceTesting/                 # LLM performance testing suite
-    ├── __init__.py
-    ├── db.py                           # Performance test result database (SQLite)
-    ├── run_performance_tests.py        # Sequential & concurrent batch test runner
-    └── manual_performance_analysis.sql # SQL queries for manual analysis
+│   ├── populate_rooms.py               # Insert rooms into database
+│   ├── populate_reservations.py        # Generate guests & reservations
+│   ├── shift_reservations.py           # Shift all reservation dates by N days
+│   ├── setup_errors.py                 # Inject controlled errors for testing
+│   ├── setup_performance_guests.py     # Create dedicated performance test guests
+│   └── utils.py                        # Shared utilities
+├── PerformanceTesting/                 # LLM performance testing suite
+│   ├── db.py                           # Results database (SQLite)
+│   ├── run_performance_tests.py        # Test runner (sequential & concurrent)
+│   └── manual_performance_analysis.sql # SQL queries for manual analysis
+└── performance_tests.db                # Performance test results (auto-created)
 ```
 
-## What It Does
-
-ConciergeOS models a single-tenant hotel with three core entities:
-
-### Rooms
-Rooms are categorized by booking channel:
-- **ANY** — Bookable through any channel (OTA, website, phone)
-- **ON_SITE_ONLY** — Only bookable as walk-in reservations
-- **STAFF_ASSIGNMENT** — Internal staff assignments (no guest bookings)
-
-Each room has configurable check-in/check-out times. STAFF_ASSIGNMENT rooms use `00:00` for both times.
-
-### Guests
-Guest records support multilingual names across 8 writing systems:
-- Latin (European languages)
-- Cyrillic (Russian, Ukrainian, etc.)
-- Chinese (Simplified)
-- Japanese (Kanji/Kana)
-- Arabic
-- Devanagari (Hindi, Marathi, etc.)
-- Korean (Hangul)
-- Nordic (Scandinavian with special characters)
-
-Each guest has a first name, last name, date of birth, and optional special preferences.
+## API Endpoints
 
 ### Reservations
-Reservations link guests to rooms with the following statuses:
-- `PENDING` → `CONFIRMED` → `CHECKED_IN` → `CHECKED_OUT` (or `CANCELLED`)
+| Method | Route | Description |
+|--------|-------|-------------|
+| `GET` | `/api/reservations` | Reservations grouped by room with detected errors |
 
-The system supports 1-6 guests per reservation and tracks booking source based on room type:
-- ON_SITE_ONLY → `WALK_IN`
-- ANY → random of `WEBSITE`, `PHONE`, `OTA`
-- STAFF_ASSIGNMENT → `INTERNAL`
+### Guest Search
+| Method | Route | Description |
+|--------|-------|-------------|
+| `POST` | `/api/guest-search` | Query the LLM for guest information (body: `{ "customer_name": "..." }`) |
 
-## Web Application
+### Settings
+| Method | Route | Description |
+|--------|-------|-------------|
+| `GET` | `/api/settings` | Current global configuration |
+| `POST` | `/api/settings` | Update configuration (body: `{ "test_settings": { ... } }`) |
+| `GET` | `/api/models` | List available models from the configured LLM endpoint |
 
-### FastAPI Dashboard
+### Performance Testing
+| Method | Route | Description |
+|--------|-------|-------------|
+| `POST` | `/api/performance-testing` | Run performance tests with configurable settings |
+| `GET` | `/api/performance-testing/results` | Latest 100 test results |
+| `GET` | `/api/performance-testing/all-results` | All test results (no limit) |
+| `GET` | `/api/performance-testing/batches` | All unique test batches |
+| `GET` | `/api/performance-testing/results-by-batch?batch_uuid=...` | Results for a specific batch |
+| `PATCH` | `/api/performance-testing/result/{id}` | Update `valid_response` flag for a result |
+| `DELETE` | `/api/performance-testing/batch/{batch_uuid}` | Delete all results for a batch |
+| `POST` | `/api/performance-testing/setup-guests` | Create 13 dedicated test guests with 4 reservations each |
+| `GET` | `/api/performance-testing/test-guests` | List current performance test guests |
+| `POST` | `/api/performance-testing/generate-xml` | Regenerate CSV data file |
+| `POST` | `/api/performance-testing/generate-all` | Regenerate all data files (CSV, JSON, XML) |
 
-The `app/` package is a FastAPI application that serves a web dashboard and JSON API:
+### Debug
+| Method | Route | Description |
+|--------|-------|-------------|
+| `GET` | `/api/debug/tool-calling-info` | Info about available tools and LLM configuration |
+| `POST` | `/api/debug/test-tool-call` | Test a specific tool call directly |
+| `POST` | `/api/debug/test-llm-completion` | Test LLM completion with tool calling |
+| `POST` | `/api/debug/shift-reservations` | Shift reservation dates by N days |
 
-| Route | Method | Description |
-|-------|--------|-------------|
-| `/` | GET | Reservations dashboard — rooms grouped by name with error detection |
-| `/api/reservations` | GET | JSON endpoint returning the same reservations + errors payload |
-| `/guest-search` | GET | Guest search page |
-| `/api/guest-search` | POST | LLM-powered guest lookup (natural language query) |
-| `/performance-testing` | GET | Performance testing dashboard |
-| `/api/performance-testing` | POST | Run performance tests with configurable settings |
-| `/api/performance-testing/results` | GET | Latest 100 test results |
-| `/api/performance-testing/all-results` | GET | All test results (no limit) |
-| `/api/performance-testing/batches` | GET | All unique test batches |
-| `/api/performance-testing/results-by-batch` | GET | Results filtered by batch UUID |
-| `/api/performance-testing/result/{id}` | PATCH | Update `valid_response` flag for a result |
-| `/api/performance-testing/setup-guests` | POST | Setup 13 performance test guests |
-| `/api/performance-testing/test-guests` | GET | List performance test guests |
+## Data Model
 
-### Architecture
+### Rooms
+Each room has a name, booking channel (`ANY`, `ON_SITE_ONLY`, `STAFF_ASSIGNMENT`), and configurable check-in/check-out times. STAFF_ASSIGNMENT rooms use `00:00` for both times.
 
-- **`app/db.py`** — SQLAlchemy engine and session factory connected to `hotel.db`. Provides `SessionLocal` and `get_db` FastAPI dependency.
-- **`app/models.py`** — ORM models (`Room`, `Guest`, `Reservation`) mapped to the existing SQLite tables. Uses the enums from `app/enums.py`.
-- **`app/schemas.py`** — Pydantic schemas for request/response validation (`GuestSearchRequest`, `GuestSearchResponse`, `ReservationResponse`, `ErrorResponse`, `ReservationsSummary`).
-- **`app/enums.py`** — Python enums for `BookingChannel`, `BookingSource`, and `ReservationStatus`.
-- **`app/services/core.py`** — Business logic: fetches reservations grouped by room, loads error IDs from `erroneous_reservations.json`, and detects status/date errors.
-- **`app/services/llm.py`** — OpenAI-compatible client connecting to a local vLLM instance. Fetches all guest/reservation data from the database, builds a prompt, and returns the LLM response.
+### Guests
+Guest records include first name, last name, date of birth, special guest flag, and optional special preferences. Names support 8 writing systems (Latin, Cyrillic, Chinese, Japanese, Arabic, Devanagari, Korean, Nordic).
 
-### LLM Integration
+### Reservations
+Reservations link guests to rooms with the following status lifecycle:
+`PENDING` → `CONFIRMED` → `CHECKED_IN` → `CHECKED_OUT` (or `CANCELLED`)
 
-The guest search feature uses a local **vLLM** instance (default: `http://10.0.0.227:8000/v1`) running the model `Qwen/Qwen3.6-27B`. When a user searches for a guest by name, the service:
+Booking source is determined by room channel: `WALK_IN` for ON_SITE_ONLY, random of `WEBSITE`/`PHONE`/`OTA` for ANY, and `INTERNAL` for STAFF_ASSIGNMENT.
 
-1. Queries the database for all guests, rooms, and reservations.
-2. Serializes the data into a compact JSON string.
-3. Sends the data as context to the LLM along with a system prompt and the customer name query.
-4. Returns the LLM's natural-language response to the user.
+## Data Generation
 
-## Performance Testing
+### Generator Scripts
 
-The `PerformanceTesting/` package provides a suite for benchmarking LLM query performance:
-
-### Features
-- **Sequential batch mode** — Runs N requests one after another.
-- **Concurrent batch mode** — Runs N requests in parallel using `ThreadPoolExecutor`.
-- **Multi-guest mode** — Uses different guest names per request (from the 13 performance test guests) to avoid caching effects.
-- **Single-guest mode** — Uses the same guest name for all requests in a batch.
-- **Results persistence** — All results stored in `performance_tests.db` with full metadata (model name, vLLM version, thinking enabled, prompt, response, timestamps).
-- **Batch tracking** — Each test run is assigned a UUID and optional friendly name for grouping and comparison.
-
-### Test Settings (`TestSettings`)
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `customer_name` | "عائشة إبراهيم" | Default guest name (single mode) |
-| `vllm_url` | `http://10.0.0.227:8000/v1` | vLLM endpoint |
-| `models_endpoint` | `http://10.0.0.227:8000/v1/models` | Model info endpoint |
-| `database_path` | `performance_tests.db` | Results database |
-| `sequential_batch_size` | 5 | Number of sequential requests |
-| `concurrent_batch_size` | 8 | Number of concurrent requests |
-| `test_mode` | `"single"` | `"single"` or `"multi"` |
-| `guest_names` | `[]` | Guest names for multi mode |
-| `batch_uuid` | auto-generated | Unique batch identifier |
-| `model_name` | from API | Model identifier |
-| `thinking_enabled` | `False` | Whether vLLM thinking mode is on |
-| `system_prompt` | default | Custom system prompt |
-| `user_prompt` | auto-built | Custom user prompt |
-| `expected_response_format` | `"auto"` | `"json"`, `"text"`, or `"auto"` |
-
-### Performance Test Guest Setup
-
-The script `Generator/setup_performance_guests.py` creates a controlled set of test data for performance testing:
-
-- **13 guests** with Arabic names from the existing name list.
-- **4 reservations per guest** (52 total), distributed across four date buckets:
-  1. CHECKED_IN (checking out today)
-  2. CHECKED_IN (future checkout)
-  3. CHECKED_OUT
-  4. CONFIRMED
-- Guests are tagged with `special_preferences = "performance_test"` for easy filtering.
-- Ensures each guest has the same reservation count for consistent LLM output.
+| Script | Purpose |
+|--------|---------|
+| `generate_names.py` | Generate ~50 names per alphabet (400 total) across 8 writing systems |
+| `generate_rooms.py` | Create room definitions (~205 rooms across 3 wings) as `rooms.json` |
+| `populate_rooms.py` | Insert generated rooms into the database |
+| `populate_reservations.py` | Create realistic guest and reservation data with weighted status distribution and intentional name collisions |
+| `shift_reservations.py` | Shift all reservation dates by N days forward or backward |
+| `setup_errors.py` | Inject controlled status/date errors into existing reservations |
+| `setup_performance_guests.py` | Create 13 dedicated test guests with 4 reservations each for benchmarking |
 
 ## Quick Start
 
 ### Prerequisites
 - Python 3.12+
+- Node.js 18+
 - SQLite 3 (built into Python standard library)
-- Dependencies (installed via `pip` or `uv`):
-  - `fastapi` — Web framework
-  - `jinja2` — Template engine
-  - `openai` — OpenAI-compatible client (for vLLM)
-  - `pydantic` — Data validation
-  - `requests` — HTTP client
-  - `sqlalchemy` — ORM
-  - `uvicorn` — ASGI server
+- Python dependencies: `fastapi`, `openai`, `pydantic`, `requests`, `sqlalchemy`, `uvicorn`, `httpx`
 
 Install with:
 ```bash
@@ -189,50 +208,46 @@ uv pip install -e .
 
 ### Setup
 
-Follow these steps in order to initialize the database and generate test data:
-
 #### 1. Initialize the Database
 ```bash
 python create_hotel_db.py [--recreate]
 ```
-Creates `hotel.db` with the `Rooms`, `Guests`, and `Reservations` tables, including indexes for efficient date-range and guest lookups. Use `--recreate` to delete the existing database and start fresh.
+Creates `hotel.db` with tables for Rooms, Guests, and Reservations. Use `--recreate` to start fresh.
 
 #### 2. Generate Name Data
 ```bash
 python Generator/generate_names.py
 ```
-Generates ~50 names per alphabet (400 total) and saves them to individual `.txt` files and a consolidated `all_names.json`.
 
 #### 3. Generate and Populate Rooms
 ```bash
-python Generator/generate_rooms.py    # Creates rooms.json and rooms.txt
-python Generator/populate_rooms.py    # Inserts rooms into the database
+python Generator/generate_rooms.py
+python Generator/populate_rooms.py
 ```
-Generates ~205 rooms across three building wings (East, North, West), each mapped to a booking channel.
 
 #### 4. Populate Guests and Reservations
 ```bash
 python Generator/populate_reservations.py
 ```
-Creates realistic reservation data with:
-- **Weighted status distribution**: More CHECKED_IN than CHECKED_OUT or CONFIRMED
-- **Name collisions**: Intentional duplicate guest names across multiple rooms (for testing deduplication logic)
-- **STAFF_ASSIGNMENT handling**: All staff rooms are always CHECKED_IN with past check-in and future check-out dates
-- **Booking source enforcement**: Sources are determined by room booking channel
 
 #### 5. (Optional) Setup Performance Test Guests
 ```bash
 python Generator/setup_performance_guests.py
 ```
-Creates 13 dedicated test guests with 4 reservations each for the performance testing suite.
 
-### Running the Web Application
+### Running the Application
 
-Start the FastAPI development server:
+Start both the frontend and backend as independent servers:
+
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Terminal 1 — React frontend (port 5173)
+cd frontend && npm run dev
+
+# Terminal 2 — FastAPI backend (port 8000)
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
-Then open `http://localhost:8000` in your browser.
+
+Open `http://localhost:5173` in your browser. The frontend will automatically proxy API requests to `http://localhost:8000`.
 
 ### Utility Scripts
 
@@ -242,32 +257,12 @@ python Generator/shift_reservations.py              # Shift by 1 day (default)
 python Generator/shift_reservations.py --days 3     # Shift forward by 3 days
 python Generator/shift_reservations.py --days -2    # Shift backward by 2 days
 ```
-Shifts all `check_in_date` and `check_out_date` values in the `Reservations` table by the specified number of days. Positive values shift forward, negative values shift backward. A sample of dates before and after the shift is printed to stdout.
 
 #### Inject Controlled Errors (for testing)
 ```bash
 python Generator/setup_errors.py
 ```
-Finds reservations with name collisions (same guest name on 2+ different rooms) and introduces two types of controlled errors:
-
-- **Error Type A — Erroneous Status** (2 reservations):
-  1. A `CHECKED_IN` reservation → status changed to `CANCELLED`
-  2. A `CONFIRMED` reservation → status changed to `CHECKED_OUT`
-
-- **Error Type B — Unsynchronized Dates** (2 reservations):
-  3. A `CHECKED_IN` reservation → `check_out_date` moved to the past
-  4. A `CHECKED_OUT` reservation → `check_in_date` moved to the future
-
-The affected reservation IDs are persisted to `Generator/erroneous_reservations.json` for repeatable testing. Excluded IDs can be configured in the `EXCLUDED_RESERVATION_IDS` list at the top of the script.
-
-### Shared Utilities (`Generator/utils.py`)
-
-All Generator scripts share a common utility module that provides:
-- **`BASE_DIR`** — Path to the `Generator/` directory
-- **`PROJECT_ROOT`** — Path to the project root (`ConciergeOS/`)
-- **`DB_NAME`** — Database filename (`hotel.db`)
-- **`DB_PATH`** — Full path to the database file
-- **`init_connection()`** — Creates a SQLite connection with foreign keys enforced and WAL journal mode enabled
+Finds reservations with name collisions and introduces controlled errors (erroneous statuses and unsynchronized dates). Affected IDs are persisted to `Generator/erroneous_reservations.json`.
 
 ## License
 

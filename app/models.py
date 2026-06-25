@@ -69,3 +69,37 @@ class Reservation(Base):
 
     room: Mapped[Room] = relationship(back_populates="reservations")
     guest: Mapped[Guest] = relationship(back_populates="reservations")
+
+
+# ---------------------------------------------------------------------------
+# Performance testing model ( lives in performance_tests.db, not hotel.db )
+# ---------------------------------------------------------------------------
+
+class PerformanceTestResult(Base):
+    """Maps to the test_results table in performance_tests.db.
+
+    This model shares the same `Base` as hotel models but is always queried
+    against the *performance* engine via `app.db_performance`.
+    """
+
+    __tablename__ = "test_results"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    batch_uuid: Mapped[str] = mapped_column(String, nullable=False, server_default="")
+    friendly_name: Mapped[str | None] = mapped_column(String, nullable=True, server_default="")
+    batch_type: Mapped[str] = mapped_column(String, nullable=False)
+    request_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    model_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    context_length: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    vllm_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    thinking_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    system_prompt: Mapped[str | None] = mapped_column(String, nullable=True)
+    user_prompt: Mapped[str | None] = mapped_column(String, nullable=True)
+    response_format: Mapped[str | None] = mapped_column(String, nullable=True)
+    json_malformed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    response_length: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    request_sent_time: Mapped[str | None] = mapped_column(String, nullable=True)
+    response_received_time: Mapped[str | None] = mapped_column(String, nullable=True)
+    response_content: Mapped[str | None] = mapped_column(String, nullable=True)
+    valid_response: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
