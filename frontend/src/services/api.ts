@@ -1,6 +1,7 @@
 import type {
   AppSettings,
   Batch,
+  GuestDetail,
   GuestSearchResponse,
   ModelsApiResponse,
   PerformanceTestRequest,
@@ -110,4 +111,7 @@ export const performanceApi = {
     }),
 
   getTestGuests: () => request<TestGuest[]>('/api/performance-testing/test-guests'),
+
+  getGuestDetail: (guestId: number) =>
+    request<GuestDetail>(`/api/performance-testing/guest/${guestId}`),
 };

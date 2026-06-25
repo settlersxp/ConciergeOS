@@ -159,6 +159,27 @@ export interface TestGuest {
   reservation_count: number;
 }
 
+export interface ReservationDetail {
+  reservation_id: number;
+  room_id: number;
+  room_name: string;
+  check_in_date: string;
+  check_out_date: string;
+  status: string;
+  booking_source: string;
+  created_at: string | null;
+}
+
+export interface GuestDetail {
+  guest_id: number;
+  first_name: string;
+  last_name: string;
+  date_of_birth: string | null;
+  is_special_guest: boolean | null;
+  special_preferences: string | null;
+  reservations: ReservationDetail[];
+}
+
 export interface GenerateAllResponse {
   ok: boolean;
   error?: string;

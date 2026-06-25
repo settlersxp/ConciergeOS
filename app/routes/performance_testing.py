@@ -10,14 +10,16 @@ from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.db_performance import get_performance_db
-from app.models import Guest, PerformanceTestResult, Reservation
+from app.models import Guest, PerformanceTestResult, Reservation, Room
 from app.schemas import (
     DeleteBatchResponse,
     GenerateAllResponse,
     GenerateXmlResponse,
+    GuestDetailSchema,
     PerformanceTestBatchSchema,
     PerformanceTestRequest,
     PerformanceTestResultSchema,
+    ReservationDetailSchema,
     SetupGuestsResponse,
     TestGuestSchema,
     UpdateValidResponseRequest,
@@ -335,5 +337,60 @@ async def api_get_test_guests() -> list[TestGuestSchema]:
             )
 
         return result
+    finally:
+        db.close()
+
+
+@router.get("/api/performance-testing/guest/{guest_id}")
+async def api_get_guest_detail(guest_id: int) -> GuestDetailSchema:
+    """Get detailed information for a single guest including all reservations."""
+    db = SessionLocal()
+    try:
+        guest = (
+            db.query(Guest)
+            .filter(Guest.guest_id == guest_id)
+            .first()
+        )
+
+        if guest is None:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail=f"Guest {guest_id} not found")
+
+        reservations = (
+            db.query(Reservation)
+            .join(Room, Reservation.room_id == Room.room_id)
+            .filter(Reservation.guest_id == guest_id)
+            .order_by(Reservation.reservation_id)
+            .all()
+        )
+
+        reservation_details: list[ReservationDetailSchema] = []
+        for r in reservations:
+            created_at: str | None = None
+            if r.created_at is not None:
+                created_at = r.created_at.isoformat()
+
+            reservation_details.append(
+                ReservationDetailSchema(
+                    reservation_id=r.reservation_id,
+                    room_id=r.room_id,
+                    room_name=r.room.name,
+                    check_in_date=r.check_in_date,
+                    check_out_date=r.check_out_date,
+                    status=r.status,
+                    booking_source=r.booking_source,
+                    created_at=created_at,
+                )
+            )
+
+        return GuestDetailSchema(
+            guest_id=guest.guest_id,
+            first_name=guest.first_name,
+            last_name=guest.last_name,
+            date_of_birth=guest.date_of_birth,
+            is_special_guest=guest.is_special_guest,
+            special_preferences=guest.special_preferences,
+            reservations=reservation_details,
+        )
     finally:
         db.close()

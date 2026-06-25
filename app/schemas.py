@@ -245,3 +245,34 @@ class UpdateValidResponseResponse(BaseModel):
     id: int | None = None
     valid_response: bool | None = None
     error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Guest detail schemas (expandable guest rows)
+# ---------------------------------------------------------------------------
+
+class ReservationDetailSchema(BaseModel):
+    """Detailed reservation information for guest detail view."""
+
+    reservation_id: int
+    room_id: int
+    room_name: str
+    check_in_date: date
+    check_out_date: date
+    status: ReservationStatus
+    booking_source: BookingSource
+    created_at: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class GuestDetailSchema(BaseModel):
+    """Detailed guest information including all reservations."""
+
+    guest_id: int
+    first_name: str
+    last_name: str
+    date_of_birth: str | None = None
+    is_special_guest: bool | None = None
+    special_preferences: str | None = None
+    reservations: List[ReservationDetailSchema] = []
