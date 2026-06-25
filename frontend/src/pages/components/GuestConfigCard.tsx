@@ -9,6 +9,8 @@ interface GuestConfigCardProps {
   loading: boolean;
   onSetupGuests: () => void;
   onRefreshList: () => void;
+  onValidateGuests: () => void;
+  validating: boolean;
 }
 
 export default function GuestConfigCard({
@@ -17,6 +19,8 @@ export default function GuestConfigCard({
   loading,
   onSetupGuests,
   onRefreshList,
+  onValidateGuests,
+  validating,
 }: GuestConfigCardProps) {
   const expectedReservations = 4;
 
@@ -72,12 +76,15 @@ export default function GuestConfigCard({
       title="Test Guests Configuration"
       description="Create 13 test guests with exactly 4 reservations each to ensure constant LLM output and avoid caching effects."
     >
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-4 flex-wrap">
         <Button variant="primary" loading={loading} onClick={onSetupGuests}>
           Setup 13 Test Guests
         </Button>
         <Button variant="secondary" loading={loading} onClick={onRefreshList}>
           Refresh List
+        </Button>
+        <Button variant="secondary" loading={validating} onClick={onValidateGuests} disabled={guests.length === 0}>
+          Validate with LLM
         </Button>
       </div>
 

@@ -66,6 +66,7 @@ def _execute_and_log(
         response=response_text,
         request_sent_time=request_sent_time,
         response_received_time=response_received_time,
+        identifier=name,
     )
 
     elapsed = (

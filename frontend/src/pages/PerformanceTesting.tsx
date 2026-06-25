@@ -9,6 +9,8 @@ import type {
   DataFormat,
   StatusType,
   SummaryData,
+  SingleGuestValidation,
+  ValidateGuestsResponse,
 } from "../types";
 import { PageHeader } from "../components/ui";
 
@@ -21,6 +23,7 @@ import StatusBanner from "./components/StatusBanner";
 import SummaryCards from "./components/SummaryCards";
 import ResultsList from "./components/ResultsList";
 import CompareModal from "./components/CompareModal";
+import ValidationModal from "./components/ValidationModal";
 
 function generateUuid(): string {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -74,6 +77,12 @@ export default function PerformanceTesting() {
   const [selectedBatchUuid, setSelectedBatchUuid] = useState("");
   const [selectedForCompare, setSelectedForCompare] = useState<TestResult[]>([]);
   const [compareModalOpen, setCompareModalOpen] = useState(false);
+
+  // Validation state
+  const [validating, setValidating] = useState(false);
+  const [validationModalOpen, setValidationModalOpen] = useState(false);
+  const [validationResults, setValidationResults] = useState<SingleGuestValidation[]>([]);
+  const [validationSummary, setValidationSummary] = useState<ValidateGuestsResponse['summary'] | undefined>(undefined);
 
   // Load batches on mount
   useEffect(() => {
@@ -294,6 +303,19 @@ export default function PerformanceTesting() {
     }
   };
 
+  const handleUpdateIdentifier = async (id: number, identifier: string) => {
+    try {
+      await performanceApi.updateResultIdentifier(id, identifier);
+      // Update local state
+      setResults((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, identifier } : r))
+      );
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setStatus({ message: `Error updating identifier: ${msg}`, type: "error" });
+    }
+  };
+
   const handleSetupGuests = async () => {
     setGuestLoading(true);
     setStatus({
@@ -374,6 +396,61 @@ export default function PerformanceTesting() {
     setCompareModalOpen(false);
   };
 
+  // ── Validation Handler ─────────────────────────────────────────────────────
+
+  const handleValidateGuests = async () => {
+    // Determine which batch to validate: use the currently loaded batch's UUID
+    const batchToValidate = results.length > 0
+      ? results[0].batch_uuid
+      : selectedBatchUuid;
+
+    if (!batchToValidate) {
+      setStatus({
+        message: "No batch selected for validation. Please run a test or load a batch first.",
+        type: "error",
+      });
+      return;
+    }
+
+    setValidating(true);
+    setStatus({
+      message: "Populating identifiers and validating guests with LLM... This may take a moment.",
+      type: "running",
+    });
+
+    try {
+      // Step 1: Populate identifiers if needed
+      await performanceApi.populateIdentifiers(batchToValidate);
+
+      // Step 2: Run validation
+      const data = await performanceApi.validateGuests(batchToValidate);
+
+      if (data.ok) {
+        setValidationResults(data.results);
+        setValidationSummary(data.summary);
+        setValidationModalOpen(true);
+        setStatus({
+          message: `Validation complete! Accuracy: ${((data.summary?.accuracy ?? 0) * 100).toFixed(1)}%`,
+          type: "success",
+        });
+      } else {
+        setStatus({
+          message: `Validation failed: ${data.error}`,
+          type: "error",
+        });
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setStatus({ message: `Error during validation: ${msg}`, type: "error" });
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleValidationClose = () => {
+    setValidationModalOpen(false);
+  };
+
   const summaryData = computeSummary(results);
   const hasResults = results.length > 0;
 
@@ -409,6 +486,8 @@ export default function PerformanceTesting() {
           loading={guestLoading}
           onSetupGuests={handleSetupGuests}
           onRefreshList={loadGuests}
+          onValidateGuests={handleValidateGuests}
+          validating={validating}
         />
       </div>
 
@@ -462,6 +541,7 @@ export default function PerformanceTesting() {
             selectedForCompare={selectedForCompare}
             onToggleCompare={handleToggleCompare}
             onToggleValid={handleToggleValid}
+            onUpdateIdentifier={handleUpdateIdentifier}
           />
         </div>
       )}
@@ -473,6 +553,15 @@ export default function PerformanceTesting() {
           resultB={selectedForCompare[1]}
           onClose={handleCompareClose}
           onToggleValid={handleToggleValid}
+        />
+      )}
+
+      {/* Validation Modal */}
+      {validationModalOpen && (
+        <ValidationModal
+          results={validationResults}
+          summary={validationSummary}
+          onClose={handleValidationClose}
         />
       )}
     </div>

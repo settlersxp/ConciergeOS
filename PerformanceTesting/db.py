@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS test_results (
     request_sent_time      DATETIME,
     response_received_time DATETIME,
     response_content       TEXT,
-    valid_response         BOOLEAN
+    valid_response         BOOLEAN,
+    identifier             TEXT    DEFAULT NULL
 )
 """
 
@@ -106,6 +107,7 @@ class PerformanceTestLogger:
         response: str,
         request_sent_time: str,
         response_received_time: str,
+        identifier: Optional[str] = None,
     ) -> None:
         """Insert a single performance test result (thread-safe)."""
         context_length = len(system_prompt) + len(user_prompt)
@@ -117,9 +119,9 @@ class PerformanceTestLogger:
                 run_id, batch_uuid, friendly_name, batch_type, request_index, model_name,
                 context_length, vllm_version, thinking_enabled, system_prompt, user_prompt,
                 response_format, json_malformed, response_length,
-                request_sent_time, response_received_time, response_content
+                request_sent_time, response_received_time, response_content, identifier
             ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
         """
 
@@ -141,6 +143,7 @@ class PerformanceTestLogger:
             request_sent_time,
             response_received_time,
             response,
+            identifier,
         )
 
         if self._connection is not None:

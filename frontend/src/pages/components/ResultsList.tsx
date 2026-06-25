@@ -1,11 +1,13 @@
 import { useState } from "react";
 import type { TestResult } from "../../types";
+import Button from "../../components/ui/Button";
 
 interface ResultsListProps {
   results: TestResult[];
   selectedForCompare: TestResult[];
   onToggleCompare: (result: TestResult) => void;
   onToggleValid: (id: number, valid: boolean) => void;
+  onUpdateIdentifier: (id: number, identifier: string) => void;
 }
 
 const formatDuration = (sent: string, received: string): string => {
@@ -23,6 +25,7 @@ interface ResultItemProps {
   onToggleExpand: () => void;
   onToggleValid: () => void;
   onToggleCompare: () => void;
+  onUpdateIdentifier: (id: number, identifier: string) => void;
 }
 
 const ResultItem: React.FC<ResultItemProps> = ({
@@ -32,6 +35,7 @@ const ResultItem: React.FC<ResultItemProps> = ({
   onToggleExpand,
   onToggleValid,
   onToggleCompare,
+  onUpdateIdentifier,
 }) => {
   const validLabel =
     result.valid_response === true
@@ -112,6 +116,31 @@ const ResultItem: React.FC<ResultItemProps> = ({
             <div>
               <span className="font-medium">Customer:</span> {result.customer_name || "—"}
             </div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Identifier:</span>
+              <input
+                type="text"
+                name={`identifier_${result.id}_${Math.random().toString(36).slice(2, 8)}`}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                autoSave="off"
+                spellCheck={false}
+                defaultValue={result.identifier || ""}
+                onBlur={(e) => {
+                  const val = e.target.value.trim();
+                  if (val !== (result.identifier || "")) {
+                    onUpdateIdentifier(result.id, val);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.currentTarget.blur();
+                  }
+                }}
+                className="flex-1 rounded-md border border-surface-200 dark:border-primary-600 bg-white dark:bg-primary-900 px-2 py-1 text-xs text-primary-700 dark:text-primary-300 focus:ring-1 focus:ring-accent-500 focus:border-accent-500 outline-none"
+              />
+            </div>
           </div>
 
           <div className="mb-3">
@@ -133,25 +162,20 @@ const ResultItem: React.FC<ResultItemProps> = ({
           </div>
 
           <div className="flex gap-2">
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={onToggleValid}
-              className="rounded-md border border-surface-300 dark:border-primary-600 px-3 py-1.5 text-xs hover:bg-surface-100 dark:hover:bg-primary-700 transition-colors"
             >
               Toggle Valid (→ {result.valid_response === true ? "Invalid" : "Valid"})
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleCompare();
-              }}
-              className={`rounded-md border px-3 py-1.5 text-xs transition-colors ${
-                isSelected
-                  ? "border-accent-300 dark:border-accent-600 bg-accent-50 dark:bg-accent-900/30 text-accent-600 dark:text-accent-400"
-                  : "border-surface-300 dark:border-primary-600 hover:bg-surface-100 dark:hover:bg-primary-700"
-              }`}
+            </Button>
+            <Button
+              variant={isSelected ? "accent" : "secondary"}
+              size="sm"
+              onClick={onToggleCompare}
             >
               {isSelected ? "✓ Selected for Compare" : "Select for Compare"}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -164,6 +188,7 @@ export default function ResultsList({
   selectedForCompare,
   onToggleCompare,
   onToggleValid,
+  onUpdateIdentifier,
 }: ResultsListProps) {
   const [expandedResult, setExpandedResult] = useState<number | null>(null);
 
@@ -198,6 +223,7 @@ export default function ResultsList({
               onToggleValid(r.id, !(r.valid_response ?? false))
             }
             onToggleCompare={() => onToggleCompare(r)}
+            onUpdateIdentifier={onUpdateIdentifier}
           />
         ))}</div>
       )}

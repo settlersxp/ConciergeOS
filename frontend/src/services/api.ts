@@ -9,6 +9,7 @@ import type {
   ShiftResponse,
   TestGuest,
   TestResult,
+  ValidateGuestsResponse,
 } from '../types';
 
 /** Generic fetch helper that parses JSON responses */
@@ -114,4 +115,27 @@ export const performanceApi = {
 
   getGuestDetail: (guestId: number) =>
     request<GuestDetail>(`/api/performance-testing/guest/${guestId}`),
+
+  // ── Validation ────────────────────────────────────────────────────────
+
+  validateGuests: (batchUuid: string, guestIds?: number[], resultIds?: number[]) =>
+    request<ValidateGuestsResponse>('/api/performance-testing/validate-guests', {
+      method: 'POST',
+      body: JSON.stringify({
+        batch_uuid: batchUuid,
+        guest_ids: guestIds,
+        result_ids: resultIds,
+      }),
+    }),
+
+  populateIdentifiers: (batchUuid: string) =>
+    request<Record<string, unknown>>(`/api/performance-testing/batch/${batchUuid}/populate-identifiers`, {
+      method: 'POST',
+    }),
+
+  updateResultIdentifier: (resultId: number, identifier: string) =>
+    request<Record<string, unknown>>(`/api/performance-testing/result/${resultId}/identifier`, {
+      method: 'PATCH',
+      body: JSON.stringify({ identifier }),
+    }),
 };

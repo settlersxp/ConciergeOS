@@ -111,6 +111,7 @@ export interface TestResult {
   response_received_time: string;
   response_content: string;
   valid_response: boolean | null;
+  identifier?: string | null;
   customer_name?: string;
 }
 
@@ -241,4 +242,26 @@ export interface ShiftResponse {
 export interface VLLMModel {
   id: string;
   object: string;
+}
+
+/** Validation */
+
+export interface SingleGuestValidation {
+  guest_id: number;
+  guest_name: string;
+  result_id: number | null;
+  is_match: boolean | null;
+  llm_reasoning: string | null;
+}
+
+export interface ValidateGuestsResponse {
+  ok: boolean;
+  error?: string;
+  results: SingleGuestValidation[];
+  summary?: {
+    total_guests: number;
+    matched: number;
+    total_validated: number;
+    accuracy: number;
+  };
 }

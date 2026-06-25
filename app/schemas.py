@@ -180,6 +180,7 @@ class PerformanceTestResultSchema(BaseModel):
     response_received_time: str | None = None
     response_content: str | None = None
     valid_response: bool | None = None
+    identifier: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -244,6 +245,52 @@ class UpdateValidResponseResponse(BaseModel):
     ok: bool = True
     id: int | None = None
     valid_response: bool | None = None
+    error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Validation schemas
+# ---------------------------------------------------------------------------
+
+class ValidateGuestsRequest(BaseModel):
+    """Request body for validating batch results against test guests."""
+
+    batch_uuid: str
+    guest_ids: List[int] | None = None
+    result_ids: List[int] | None = None
+
+
+class SingleGuestValidation(BaseModel):
+    """Validation result for a single guest-response pair."""
+
+    guest_id: int
+    guest_name: str
+    result_id: int | None = None
+    is_match: bool | None = None
+    llm_reasoning: str | None = None
+
+
+class ValidateGuestsResponse(BaseModel):
+    """Response from the validate-guests endpoint."""
+
+    ok: bool = True
+    results: List[SingleGuestValidation] = []
+    summary: Dict[str, Any] | None = None
+    error: str | None = None
+
+
+class UpdateIdentifierRequest(BaseModel):
+    """Request body for updating the identifier on a test result."""
+
+    identifier: str
+
+
+class UpdateIdentifierResponse(BaseModel):
+    """Response from the update-identifier endpoint."""
+
+    ok: bool = True
+    id: int | None = None
+    identifier: str | None = None
     error: str | None = None
 
 

@@ -21,9 +21,14 @@ from app.schemas import (
     PerformanceTestResultSchema,
     ReservationDetailSchema,
     SetupGuestsResponse,
+    SingleGuestValidation,
     TestGuestSchema,
+    UpdateIdentifierRequest,
+    UpdateIdentifierResponse,
     UpdateValidResponseRequest,
     UpdateValidResponseResponse,
+    ValidateGuestsRequest,
+    ValidateGuestsResponse,
 )
 
 router = APIRouter()
@@ -394,3 +399,210 @@ async def api_get_guest_detail(guest_id: int) -> GuestDetailSchema:
         )
     finally:
         db.close()
+
+
+# ── Validation Helpers ───────────────────────────────────────────────────────
+
+def _validate_single_pair(ground_truth_name: str, response_content: str | None) -> tuple[bool | None, str | None]:
+    """Validate a single guest-response pair using the LLM.
+
+    Returns (is_match, llm_reasoning).
+    """
+    from openai import OpenAI
+
+    from app.services.llm import get_llm_config
+
+    client, model = get_llm_config()
+
+    system_prompt = (
+        "You are a validation engine. Your job is to compare ground-truth guest information "
+        "against an LLM-generated response and determine whether the response correctly contains "
+        "the guest's information. Respond with a JSON object having two fields: "
+        "'is_match' (boolean) and 'reasoning' (string)."
+    )
+
+    user_prompt = (
+        f"Ground-truth guest name: {ground_truth_name}\n\n"
+        f"LLM response to validate:\n{response_content or '(empty response)'}\n\n"
+        "Does the LLM response correctly contain information about this guest? "
+        "Check that the guest's name appears and the associated reservation details are present. "
+        "Return your answer as a JSON object with 'is_match' (boolean) and 'reasoning' (string)."
+    )
+
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+        )
+        answer = resp.choices[0].message.content or "{}"
+
+        import json
+        parsed = json.loads(answer)
+        is_match = parsed.get("is_match")
+        reasoning = parsed.get("reasoning", "")
+        return is_match, reasoning
+    except Exception as e:
+        return None, f"Validation error: {e}"
+
+
+# ── Validate Guests Endpoint ─────────────────────────────────────────────────
+
+@router.post("/api/performance-testing/validate-guests")
+async def api_validate_guests(
+    body: ValidateGuestsRequest,
+    db: Session = Depends(get_performance_db),
+) -> ValidateGuestsResponse:
+    """Validate that all test guests are correctly found in a batch's test responses."""
+
+    # Fetch test guests
+    hotel_db = SessionLocal()
+    try:
+        query = hotel_db.query(Guest).filter(Guest.special_preferences == "performance_test")
+        if body.guest_ids:
+            query = query.filter(Guest.guest_id.in_(body.guest_ids))
+        test_guests = query.order_by(Guest.guest_id).all()
+    finally:
+        pass  # We close after the try/finally below
+
+    # Fetch batch results
+    batch_results = (
+        db.query(PerformanceTestResult)
+        .filter(PerformanceTestResult.batch_uuid == body.batch_uuid)
+        .order_by(PerformanceTestResult.request_index)
+        .all()
+    )
+
+    if not test_guests:
+        return ValidateGuestsResponse(ok=False, error=f"No test guests found for batch {body.batch_uuid}")
+
+    if not batch_results:
+        return ValidateGuestsResponse(ok=False, error=f"No results found for batch {body.batch_uuid}")
+
+    # Build a lookup: identifier -> result
+    results_by_identifier: dict[str, PerformanceTestResult] = {}
+    for r in batch_results:
+        if r.identifier:
+            results_by_identifier[r.identifier] = r
+
+    validation_results: list[SingleGuestValidation] = []
+    matches = 0
+    total = 0
+
+    try:
+        for guest in test_guests:
+            full_name = f"{guest.first_name} {guest.last_name}"
+            matched_result = results_by_identifier.get(full_name)
+
+            is_match, reasoning = _validate_single_pair(
+                ground_truth_name=full_name,
+                response_content=matched_result.response_content if matched_result else None,
+            )
+
+            validation_results.append(
+                SingleGuestValidation(
+                    guest_id=guest.guest_id,
+                    guest_name=full_name,
+                    result_id=matched_result.id if matched_result else None,
+                    is_match=is_match,
+                    llm_reasoning=reasoning,
+                )
+            )
+
+            if is_match is not None:
+                total += 1
+                if is_match:
+                    matches += 1
+
+        return ValidateGuestsResponse(
+            ok=True,
+            results=validation_results,
+            summary={
+                "total_guests": len(test_guests),
+                "matched": matches,
+                "total_validated": total,
+                "accuracy": round(matches / total, 4) if total > 0 else 0,
+            },
+        )
+    except Exception as e:
+        return ValidateGuestsResponse(ok=False, error=str(e))
+    finally:
+        hotel_db.close()
+
+
+# ── Identifier Endpoints ──────────────────────────────────────────────────────
+
+@router.patch("/api/performance-testing/result/{result_id}/identifier")
+async def api_update_identifier(
+    result_id: int,
+    body: UpdateIdentifierRequest,
+    db: Session = Depends(get_performance_db),
+) -> UpdateIdentifierResponse:
+    """Update the identifier for a specific test result."""
+    result = (
+        db.query(PerformanceTestResult)
+        .filter(PerformanceTestResult.id == result_id)
+        .first()
+    )
+
+    if result is None:
+        return UpdateIdentifierResponse(
+            ok=False,
+            error=f"No result found with id {result_id}",
+        )
+
+    result.identifier = body.identifier
+    db.commit()
+
+    return UpdateIdentifierResponse(
+        ok=True,
+        id=result_id,
+        identifier=body.identifier,
+    )
+
+
+@router.post("/api/performance-testing/batch/{batch_uuid}/populate-identifiers")
+async def api_populate_identifiers(
+    batch_uuid: str,
+    db: Session = Depends(get_performance_db),
+) -> dict[str, Any]:
+    """Populate identifiers for all results in a batch by mapping request_index to guest names."""
+    hotel_db = SessionLocal()
+    try:
+        test_guests = (
+            hotel_db.query(Guest)
+            .filter(Guest.special_preferences == "performance_test")
+            .order_by(Guest.guest_id)
+            .all()
+        )
+    finally:
+        hotel_db.close()
+
+    guest_names = [f"{g.first_name} {g.last_name}" for g in test_guests]
+
+    batch_results = (
+        db.query(PerformanceTestResult)
+        .filter(PerformanceTestResult.batch_uuid == batch_uuid)
+        .order_by(PerformanceTestResult.request_index)
+        .all()
+    )
+
+    updated = 0
+    for idx, result in enumerate(batch_results):
+        if not result.identifier:
+            # Map request_index to guest name (round-robin if more requests than guests)
+            guest_idx = result.request_index % len(guest_names) if guest_names else 0
+            result.identifier = guest_names[guest_idx] if guest_names else f"guest_{result.request_index}"
+            updated += 1
+
+    db.commit()
+
+    return {
+        "ok": True,
+        "batch_uuid": batch_uuid,
+        "updated_count": updated,
+        "total_results": len(batch_results),
+    }
