@@ -121,6 +121,7 @@ class GuestSearchRequest(BaseModel):
     customer_name: str = Field(..., description="Full or partial name of the customer to search for")
     prompt_id: str = Field(default="guest-search", description="Prompt ID to use for the LLM query")
     version: int | None = Field(default=None, description="Prompt version (uses default if None)")
+    runtime_variables: Dict[str, str] = Field(default_factory=dict, description="Runtime variables for {table.field} placeholders in the user_prompt")
 
 
 class GuestSearchResponse(BaseModel):
@@ -215,11 +216,15 @@ class PerformanceTestRequest(BaseModel):
     model_name: str = Field(default="")
     vllm_version: str = Field(default="")
     thinking_enabled: bool = Field(default=False)
-    system_prompt: str = Field(default="")
     user_prompt: str = Field(default="")
     expected_response_format: str = Field(default="auto")
     data_format: str = Field(default="csv")
     batch_uuid: str = Field(default="")
+    # Optional: resolve user_prompt from a prompt version
+    prompt_id: str | None = Field(default=None)
+    prompt_version: int | None = Field(default=None)
+    # Runtime variables for {table.field} placeholders in the user_prompt
+    runtime_variables: Dict[str, str] = Field(default_factory=dict)
 
 
 class UpdateValidResponseRequest(BaseModel):

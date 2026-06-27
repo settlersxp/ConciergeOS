@@ -3,6 +3,7 @@ import type { StatusType } from "../../types";
 interface StatusBannerProps {
   message: string;
   type: StatusType;
+  className?: string;
 }
 
 const styleMap: Record<StatusType, { bg: string; text: string; border: string }> = {
@@ -23,12 +24,12 @@ const styleMap: Record<StatusType, { bg: string; text: string; border: string }>
   },
 };
 
-export default function StatusBanner({ message, type }: StatusBannerProps) {
+export default function StatusBanner({ message, type, className = "" }: StatusBannerProps) {
   const style = styleMap[type];
 
   return (
     <div
-      className={`flex items-center gap-2 px-4 py-3 mb-4 rounded-lg border ${style.bg} ${style.text} ${style.border} text-sm font-medium transition-colors`}
+      className={`flex items-center gap-2 px-4 py-3 mb-4 rounded-lg border ${style.bg} ${style.text} ${style.border} text-sm font-medium transition-colors ${className}`}
       role="alert"
     >
       {type === "running" && (

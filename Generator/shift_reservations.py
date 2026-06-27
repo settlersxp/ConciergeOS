@@ -9,12 +9,13 @@ Usage:
 
 import argparse
 import sys
-from typing import Any, Dict
 
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from Generator.utils import DB_NAME, get_session
+from app.schemas import ShiftResponse, ShiftSampleEntry
+from app.db import DB_PATH
+from Generator.utils import get_session
 
 
 def parse_args() -> int:
@@ -37,14 +38,13 @@ def _build_modifier(days: int) -> str:
     return f"{sign}{abs_days} day"
 
 
-def shift_reservations(days: int = 1) -> Dict[str, Any]:
+def shift_reservations(days: int = 1) -> ShiftResponse:
     """
     Shift all reservation check_in and check_out dates by a given number
     of days and return a result summary.
 
-    Returns a dict with keys:
-        ok (bool), shifted (int), days (int), before (list), after (list),
-        and optionally error (str) or message (str).
+    Returns a ShiftResponse with ok, shifted, days, before, after,
+    and optionally error or message.
     """
     modifier = _build_modifier(days)
 
@@ -55,14 +55,12 @@ def shift_reservations(days: int = 1) -> Dict[str, Any]:
         # Count total reservations
         total = db.query(Reservation).count()
         if total == 0:
-            return {
-                "ok": True,
-                "shifted": 0,
-                "days": days,
-                "message": "No reservations found. Nothing to shift.",
-                "before": [],
-                "after": [],
-            }
+            return ShiftResponse(
+                ok=True,
+                shifted=0,
+                days=days,
+                message="No reservations found. Nothing to shift.",
+            )
 
         # Sample before (convert date objects to ISO strings for JSON serialization)
         sample_before = (
@@ -72,10 +70,10 @@ def shift_reservations(days: int = 1) -> Dict[str, Any]:
             .all()
         )
         before_list = [
-            {
-                "check_in": row.check_in_date.isoformat(),
-                "check_out": row.check_out_date.isoformat(),
-            }
+            ShiftSampleEntry(
+                check_in=row.check_in_date.isoformat(),
+                check_out=row.check_out_date.isoformat(),
+            )
             for row in sample_before
         ]
 
@@ -100,24 +98,24 @@ def shift_reservations(days: int = 1) -> Dict[str, Any]:
             .all()
         )
         after_list = [
-            {
-                "check_in": row.check_in_date.isoformat(),
-                "check_out": row.check_out_date.isoformat(),
-            }
+            ShiftSampleEntry(
+                check_in=row.check_in_date.isoformat(),
+                check_out=row.check_out_date.isoformat(),
+            )
             for row in sample_after
         ]
 
-        return {
-            "ok": True,
-            "shifted": shifted,
-            "days": days,
-            "before": before_list,
-            "after": after_list,
-        }
+        return ShiftResponse(
+            ok=True,
+            shifted=shifted,
+            days=days,
+            before=before_list,
+            after=after_list,
+        )
 
     except Exception as e:
         db.rollback()
-        return {"ok": False, "error": str(e)}
+        return ShiftResponse(ok=False, error=str(e))
     finally:
         db.close()
 
@@ -126,31 +124,31 @@ def main():
     days = parse_args()
     sign = "+" if days >= 0 else "-"
 
-    print(f"📅 Shifting all reservations by {sign}{days} day(s) in '{DB_NAME}' ...")
+    print(f"📅 Shifting all reservations by {sign}{days} day(s) in '{DB_PATH}' ...")
 
     result = shift_reservations(days)
 
-    if not result["ok"]:
-        print(f"❌ Error: {result['error']}")
+    if not result.ok:
+        print(f"❌ Error: {result.error}")
         sys.exit(1)
 
-    if result.get("message"):
-        print(result["message"])
+    if result.message:
+        print(result.message)
         return
 
-    total_before = len(result["before"])
+    total_before = len(result.before)
     print(f"\n📋 Sample before ({total_before} rows):")
     print(f"   {'Check-In':<14} {'Check-Out':<14}")
-    for row in result["before"]:
-        print(f"   {row['check_in']:<14} {row['check_out']:<14}")
+    for row in result.before:
+        print(f"   {row.check_in:<14} {row.check_out:<14}")
 
-    print(f"\n✅ Shifted {result['shifted']} reservation(s) by {sign}{days} day(s).")
+    print(f"\n✅ Shifted {result.shifted} reservation(s) by {sign}{days} day(s).")
 
-    total_after = len(result["after"])
+    total_after = len(result.after)
     print(f"\n📋 Sample after ({total_after} rows):")
     print(f"   {'Check-In':<14} {'Check-Out':<14}")
-    for row in result["after"]:
-        print(f"   {row['check_in']:<14} {row['check_out']:<14}")
+    for row in result.after:
+        print(f"   {row.check_in:<14} {row.check_out:<14}")
 
 
 if __name__ == "__main__":

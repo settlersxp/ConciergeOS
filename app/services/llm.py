@@ -194,16 +194,6 @@ You have access to the following database query tools:
 Use these tools to answer questions about the hotel database. Always call the appropriate tool rather than guessing at data.
 """
 
-# Legacy system prompt (for backward compatibility - data-prompting approach)
-SYSTEM_PROMPT = (
-    "You are a helpful hotel concierge assistant. "
-    "You will receive a JSON dataset containing all guests with their rooms and reservations. "
-    "Given a customer name, return all available information about that guest, "
-    "including personal details, rooms, and all reservations. "
-    "If the guest is not found, say so clearly. "
-    "Format your response in a clear, readable way."
-)
-
 # Exported unified system prompt
 SHARED_SYSTEM_PROMPT = _SYSTEM_PROMPT_WITH_SCHEMA
 
@@ -572,6 +562,7 @@ def query_guest_with_llm(
     customer_name: str,
     prompt_id: str = "guest-search",
     version: int | None = None,
+    runtime_variables: dict[str, str] | None = None,
 ) -> tuple[str, bool]:
     """
     Query the LLM for all information about a given guest using tool calling.
@@ -607,7 +598,36 @@ def query_guest_with_llm(
             final_system = system_prompt_text
         else:
             final_system = SHARED_SYSTEM_PROMPT
-        user_prompt = user_template.replace("{customer_name}", customer_name)
+
+        # Build runtime variables from the customer_name.
+        # The user_prompt_template may contain {table.field} placeholders that
+        # need to be resolved at query-time.  By default we map the customer name
+        # to the conventional "customers.first_name" and "customers.last_name"
+        # keys, but the template author can use any keys they like.
+        from app.services.placeholders import resolve_all_placeholders
+        runtime_vars: dict[str, str] = {}
+
+        # Split customer_name into first/last for common {table.field} patterns
+        name_parts = customer_name.strip().split(None, 1)
+        if len(name_parts) == 2:
+            first, last = name_parts
+            runtime_vars["customers.first_name"] = first
+            runtime_vars["customers.last_name"] = last
+            runtime_vars["customers.name"] = customer_name
+        elif len(name_parts) == 1:
+            runtime_vars["customers.first_name"] = name_parts[0]
+            runtime_vars["customers.last_name"] = ""
+            runtime_vars["customers.name"] = name_parts[0]
+        else:
+            runtime_vars["customers.first_name"] = ""
+            runtime_vars["customers.last_name"] = ""
+            runtime_vars["customers.name"] = customer_name
+
+        # Merge user-provided runtime_variables (allow overrides from user input)
+        if runtime_variables:
+            runtime_vars.update(runtime_variables)
+
+        user_prompt = resolve_all_placeholders(user_template, runtime_vars)
     except ValueError:
         # Prompt not found — fall back to legacy hardcoded behavior
         final_system = SHARED_SYSTEM_PROMPT
@@ -621,7 +641,10 @@ def query_guest_with_llm(
         )
     
     try:
-        result, was_cached = call_llm_with_db_tools_with_cache_flag(user_prompt)
+        result, was_cached = call_llm_with_db_tools_with_cache_flag(
+            user_prompt,
+            system_prompt=final_system,
+        )
         
         if was_cached:
             logger.info(f"Served cached response for guest: {customer_name}")

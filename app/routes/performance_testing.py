@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal, get_db
-from app.models import Guest, PerformanceTestResult, Reservation, Room
+from app.models import Guest, PerformanceTestResult, Reservation, Room, PromptVersion
 from app.schemas import (
     DeleteBatchResponse,
     GenerateAllResponse,
@@ -31,6 +31,7 @@ from app.schemas import (
     ValidateGuestsRequest,
     ValidateGuestsResponse,
 )
+from app.services.response_cache import generate_http_cache_key, _get_http_cache
 
 router = APIRouter()
 
@@ -46,7 +47,7 @@ async def api_run_performance_testing(body: PerformanceTestRequest) -> dict[str,
     """Run performance tests with the provided settings."""
 
     from PerformanceTesting.run_performance_tests import TestSettings, run_tests  # noqa: cwd
-    from app.services.llm import SYSTEM_PROMPT, TOOL_DEFINITIONS  # noqa: cwd
+    from app.services.llm import SHARED_SYSTEM_PROMPT, TOOL_DEFINITIONS  # noqa: cwd
 
     test_mode = body.test_mode
     guest_names: list[str] = []
@@ -71,6 +72,58 @@ async def api_run_performance_testing(body: PerformanceTestRequest) -> dict[str,
         finally:
             db.close()
 
+    # Log the incoming request for debugging
+    logger.info(
+        "[PERF TEST REQ] test_mode=%s | prompt_id=%s | prompt_version=%s | data_format=%s | batch_size_seq=%d | batch_size_conc=%d",
+        test_mode,
+        getattr(body, 'prompt_id', 'NOT_SET'),
+        getattr(body, 'prompt_version', 'NOT_SET'),
+        body.data_format,
+        body.sequential_batch_size,
+        body.concurrent_batch_size,
+    )
+
+    # Resolve prompt_id and prompt_version from the request body
+    prompt_id = getattr(body, 'prompt_id', None) or ''
+    prompt_version = getattr(body, 'prompt_version', None)
+
+    # Resolve prompt template from DB if both prompt_id and prompt_version are provided
+    user_prompt = body.user_prompt
+    system_prompt = SHARED_SYSTEM_PROMPT
+
+    if prompt_id and prompt_version:
+        db = SessionLocal()
+        try:
+            pv = (
+                db.query(PromptVersion)
+                .filter(
+                    PromptVersion.prompt_id == prompt_id,
+                    PromptVersion.version == prompt_version,
+                )
+                .first()
+            )
+            if pv:
+                user_prompt = pv.user_prompt_template or user_prompt
+                system_prompt = "\n\n".join(
+                    part for part in (pv.intention, pv.restrictions, pv.output_structure) if part
+                )
+                logger.info(
+                    "[PROMPT RESOLVED] prompt_id=%s | version=%d | name=%s",
+                    prompt_id, prompt_version, pv.name,
+                )
+            else:
+                logger.warning(
+                    "[PROMPT NOT FOUND] prompt_id=%s | version=%d - using defaults",
+                    prompt_id, prompt_version,
+                )
+        finally:
+            db.close()
+    elif prompt_id and not prompt_version:
+        logger.info(
+            "[PROMPT INFO] prompt_id=%s | version=NOT SET (will default to 'guest-search' in query_guest_with_llm)",
+            prompt_id,
+        )
+
     settings = TestSettings(
         customer_name=body.customer_name,
         vllm_url=body.vllm_url,
@@ -85,12 +138,15 @@ async def api_run_performance_testing(body: PerformanceTestRequest) -> dict[str,
         model_name=body.model_name,
         vllm_version=body.vllm_version,
         thinking_enabled=body.thinking_enabled,
-        system_prompt=body.system_prompt or SYSTEM_PROMPT,
-        user_prompt=body.user_prompt,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
         expected_response_format=body.expected_response_format,
         data_format=body.data_format,
         use_tool_calling=use_tool_calling,
         tool_definitions=TOOL_DEFINITIONS if use_tool_calling else [],
+        runtime_variables=body.runtime_variables,
+        prompt_id=getattr(body, 'prompt_id', "") or "",
+        prompt_version=getattr(body, 'prompt_version', None),
     )
 
     # Generate a UUID if not provided
@@ -301,12 +357,37 @@ async def api_delete_batch(
     db: Session = Depends(get_db),
 ) -> DeleteBatchResponse:
     """Delete all test results for a specific batch identified by UUID."""
+    # First, count the records to verify they exist and log the operation
+    count = (
+        db.query(PerformanceTestResult)
+        .filter(PerformanceTestResult.batch_uuid == batch_uuid)
+        .count()
+    )
+    logger.info(f"Deleting batch_uuid={batch_uuid}, found {count} records")
+
     deleted_count = (
         db.query(PerformanceTestResult)
         .filter(PerformanceTestResult.batch_uuid == batch_uuid)
         .delete(synchronize_session="fetch")
     )
+    db.flush()
     db.commit()
+
+    # Refresh session to ensure state is fully synchronized with the database
+    db.expire_all()
+
+    logger.info(f"Deleted {deleted_count} records for batch_uuid={batch_uuid}")
+
+    # Invalidate the HTTP cache for the batches list endpoint
+    # so the next GET request fetches fresh data from the database
+    batches_cache_key = generate_http_cache_key("/api/performance-testing/batches")
+    http_cache = _get_http_cache()
+    http_cache.delete(batches_cache_key)
+    logger.info(f"Invalidated HTTP cache for batches list (key={batches_cache_key[:12]}...)")
+
+    # Also invalidate the specific batch results cache if it exists
+    results_cache_key = generate_http_cache_key(f"/api/performance-testing/results-by-batch?batch_uuid={batch_uuid}")
+    http_cache.delete(results_cache_key)
 
     return DeleteBatchResponse(
         ok=True,

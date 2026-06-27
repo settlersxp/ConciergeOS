@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { guestSearchApi } from "../services/api";
 import type { GuestSearchResponse } from "../types";
-import { PageHeader, Card, FormField, Input, Button, Toast } from "../components/ui";
+import { PageHeader, Card, FormField, Input, Button, Toast, RuntimeVariablesEditor } from "../components/ui";
 import PromptSelector from "../components/ui/PromptSelector";
 
 export default function GuestSearch() {
@@ -12,6 +12,14 @@ export default function GuestSearch() {
   const [selectedPrompt, setSelectedPrompt] = useState<{ prompt_id: string; version?: number }>({
     prompt_id: "guest-search",
   });
+
+  // Runtime variable key (pre-populated for easy editing)
+  const [runtimeVarKey, setRuntimeVarKey] = useState("customer_name");
+
+  // Build runtime variables from the current query
+  const runtimeVariables: Record<string, string> = query.trim() 
+    ? { [runtimeVarKey]: query.trim() } 
+    : {};
 
   const handleSearch = async () => {
     if (!query.trim()) {
@@ -24,6 +32,7 @@ export default function GuestSearch() {
       const data = await guestSearchApi.search(query, {
         prompt_id: selectedPrompt.prompt_id,
         version: selectedPrompt.version,
+        runtime_variables: runtimeVariables,
       });
       setResult(data);
     } catch (e: unknown) {
@@ -66,6 +75,12 @@ export default function GuestSearch() {
             />
           </FormField>
         </div>
+
+        <RuntimeVariablesEditor
+          variableKey={runtimeVarKey}
+          variableValue={query}
+          onKeyChange={setRuntimeVarKey}
+        />
 
         <div className="mt-4 flex justify-end">
           <Button variant="primary" loading={loading} onClick={handleSearch}>

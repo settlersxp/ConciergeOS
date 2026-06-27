@@ -2,11 +2,13 @@
 """
 FastAPI router for prompt version CRUD operations.
 
-Provides 9 REST endpoints:
+Provides REST endpoints:
   GET    /api/prompts                          — List all prompt IDs (summary)
-  GET    /api/prompts/{prompt_id}              — List all versions for a prompt ID
+  GET    /api/prompts/placeholders             — List all available placeholders
+  POST   /api/prompts/{prompt_id}/{version}/preview — Preview rendered prompt
   GET    /api/prompts/{prompt_id}/default      — Get the default version (resolved)
   GET    /api/prompts/{prompt_id}/{version}    — Get specific version
+  GET    /api/prompts/{prompt_id}              — List all versions for a prompt ID
   POST   /api/prompts/{prompt_id}              — Create new version (auto-increments)
   PUT    /api/prompts/{prompt_id}/{version}    — Update existing version
   DELETE /api/prompts/{prompt_id}/{version}    — Delete a version
@@ -82,6 +84,8 @@ def _prompt_to_schema(pv: Any) -> dict[str, Any]:
 
 # ---------------------------------------------------------------------------
 # Endpoints
+# NOTE: Static routes (e.g., /placeholders) MUST come before parameterized
+# routes (e.g., /{prompt_id}) so FastAPI matches them correctly.
 # ---------------------------------------------------------------------------
 
 @router.get("")
@@ -97,21 +101,39 @@ async def list_all_prompts():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{prompt_id}")
-async def list_versions(prompt_id: str):
-    """List all versions for a prompt ID."""
+@router.get("/placeholders")
+async def list_available_placeholders():
+    """Return all available placeholder definitions for the frontend."""
+    from app.services.placeholders import get_all_placeholders
+    placeholders = get_all_placeholders()
+    return {"placeholders": [{"key": key, **meta} for key, meta in placeholders.items()]}
+
+
+@router.get("/field-schema")
+async def get_field_schema():
+    """Return structured database schema info for runtime variable discovery.
+
+    Returns a dict mapping table names to lists of column info dicts,
+    so the frontend can show users what {table.field} variables are available.
+    """
+    from app.services.placeholders import _get_db_schema
+    schema = _get_db_schema()
+    return schema
+
+
+@router.post("/{prompt_id}/{version:int}/preview")
+async def preview_prompt(prompt_id: str, version: int):
+    """Resolve all placeholders and return the fully rendered prompt."""
     from app.services.prompts import PromptStore
+    from app.services.placeholders import resolve_placeholders
     store = PromptStore()
-    try:
-        versions = store.list_prompts(prompt_id)
-        if not versions:
-            raise HTTPException(status_code=404, detail=f"Prompt '{prompt_id}' not found.")
-        return [_prompt_to_schema(v) for v in versions]
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error listing versions for {prompt_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    prompt = store.get_prompt(prompt_id, version)
+    if prompt is None:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    system_prompt = "\n\n".join(p for p in [prompt.intention, prompt.restrictions, prompt.output_structure] if p)
+    resolved_system = resolve_placeholders(system_prompt)
+    resolved_user = prompt.user_prompt_template.replace("{customer_name}", "John Doe")
+    return {"resolved_system_prompt": resolved_system, "resolved_user_template": resolved_user}
 
 
 @router.get("/{prompt_id}/default")
@@ -148,6 +170,23 @@ async def get_version(prompt_id: str, version: int):
         raise
     except Exception as e:
         logger.error(f"Error getting {prompt_id}:v{version}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{prompt_id}")
+async def list_versions(prompt_id: str):
+    """List all versions for a prompt ID."""
+    from app.services.prompts import PromptStore
+    store = PromptStore()
+    try:
+        versions = store.list_prompts(prompt_id)
+        if not versions:
+            raise HTTPException(status_code=404, detail=f"Prompt '{prompt_id}' not found.")
+        return [_prompt_to_schema(v) for v in versions]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing versions for {prompt_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

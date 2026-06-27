@@ -1,17 +1,61 @@
 # Database Population Guide
 
-This document provides a comprehensive guide for populating a fresh ConciergeOS database. It covers all scripts in the Generator folder organized into three sections: Data Generation, Database Population, and Errors Setup.
+This document provides a comprehensive guide for populating a fresh ConciergeOS database. It covers all scripts in the Generator folder organized into three categories: Data Generation, Database Population, and Error Setup.
+
+Each category has a **wrapper script** that runs all scripts in that category in the correct order, making setup simpler and more reliable.
 
 ## Prerequisites
 
 Before running any Generator scripts:
 
 1. **Database must be initialized**: Run `python create_hotel_db.py [--recreate]` first
-2. **Name data must exist**: Run `python Generator/generate_names.py` to generate `Generator/all_names.json`
+
+---
+
+## Wrapper Scripts Overview
+
+| Category | Wrapper Script | Command | Description |
+|----------|---------------|---------|-------------|
+| **Generation** | `run_generation.py` | `python Generator/run_generation.py` | Generates raw data files (names, rooms) |
+| **Population** | `run_population.py` | `python Generator/run_population.py` | Inserts rooms, guests, reservations, and prompt versions into the database |
+| **Error Setup** | `run_errors.py` | `python Generator/run_errors.py` | Injects controlled errors for testing |
+
+### Wrapper Script Options
+
+All wrapper scripts support:
+
+| Flag | Description |
+|------|-------------|
+| `--verbose` | Show full script output (stdout and stderr) |
+| `--skip-*` | Skip optional scripts in that category (varies by wrapper) |
+
+---
+
+## Complete Setup Sequence
+
+For a fresh database, run these three wrapper scripts in order:
+
+```bash
+# 1. Initialize the database
+python create_hotel_db.py
+
+# 2. Run all setup wrappers in order
+python Generator/run_generation.py
+python Generator/run_population.py          # includes room, guest, reservation, and prompt seeding
+python Generator/run_errors.py
+```
+
+### Optional: Skip performance test guests
+
+```bash
+python Generator/run_population.py --skip-performance
+```
 
 ---
 
 ## Section 1: Data Generation
+
+**Wrapper**: `python Generator/run_generation.py`
 
 Generates raw name data and room definitions as JSON/text files. These files serve as input for the database population step.
 
@@ -19,7 +63,7 @@ Generates raw name data and room definitions as JSON/text files. These files ser
 
 **Script**: `generate_names.py`
 
-**Command**:
+**Command** (standalone):
 ```bash
 python Generator/generate_names.py
 ```
@@ -39,7 +83,7 @@ python Generator/generate_names.py
 
 **Script**: `generate_rooms.py`
 
-**Command**:
+**Command** (standalone):
 ```bash
 python Generator/generate_rooms.py
 ```
@@ -60,13 +104,24 @@ python Generator/generate_rooms.py
 
 ## Section 2: Database Population
 
+**Wrapper**: `python Generator/run_population.py`
+
 Inserts generated data into the SQLite database (`database.db`).
+
+Database tables created/modified:
+
+| Table | Description |
+|-------|-------------|
+| `Rooms` | Room definitions with booking channels and check-in/out times |
+| `Guests` | Guest records with names, DOB, and special preferences |
+| `Reservations` | Reservations linking guests to rooms with dates and statuses |
+| `PromptVersions` | Versioned LLM prompts (seeded on first run, idempotent) |
 
 ### 2.1 Populate Rooms
 
 **Script**: `populate_rooms.py`
 
-**Command**:
+**Command** (standalone):
 ```bash
 python Generator/populate_rooms.py
 ```
@@ -86,7 +141,7 @@ python Generator/populate_rooms.py
 
 **Script**: `populate_reservations.py`
 
-**Command**:
+**Command** (standalone):
 ```bash
 python Generator/populate_reservations.py
 ```
@@ -152,7 +207,7 @@ On completion, the script prints:
 
 **Script**: `setup_performance_guests.py`
 
-**Command**:
+**Command** (standalone):
 ```bash
 python Generator/setup_performance_guests.py
 ```
@@ -166,7 +221,40 @@ python Generator/setup_performance_guests.py
 
 ---
 
-## Section 3: Errors Setup
+### 2.4 Seed Prompt Versions
+
+**Script**: `seed_prompts.py`
+
+**Command** (standalone):
+```bash
+python Generator/seed_prompts.py
+```
+
+**Description**:
+- Creates the `PromptVersions` table if it doesn't exist
+- Seeds `guest-search:v1` (Guest Search prompt) from hardcoded prompts in `app/services/llm.py`
+- **Idempotent**: Only seeds if the table is empty — safe to run on every population
+
+**Seeded Prompt**:
+
+| Field | Value |
+|-------|-------|
+| `prompt_id` | `guest-search` |
+| `version` | 1 |
+| `name` | `Guest Search v1` |
+| `intention` | Combined from `SHARED_SYSTEM_PROMPT` in `app/services/llm.py` |
+| `restrictions` | Empty |
+| `output_structure` | Empty |
+| `user_prompt_template` | Guest search query template with multilingual name support |
+| `is_default` | 1 (true) |
+
+**Dependencies**: None — creates its own table and seeds from hardcoded app prompts
+
+---
+
+## Section 3: Error Setup
+
+**Wrapper**: `python Generator/run_errors.py`
 
 Injects controlled errors into existing reservations for testing error detection features.
 
@@ -174,7 +262,7 @@ Injects controlled errors into existing reservations for testing error detection
 
 **Script**: `setup_errors.py`
 
-**Command**:
+**Command** (standalone):
 ```bash
 python Generator/setup_errors.py
 ```
@@ -219,34 +307,9 @@ The script prints:
 
 ---
 
-## Complete Setup Sequence
+## Section 4: Utility Scripts
 
-For a fresh database, run these commands in order:
-
-```bash
-# 1. Initialize the database
-python create_hotel_db.py
-
-# 2. Generate name data
-python Generator/generate_names.py
-
-# 3. Generate and populate rooms
-python Generator/generate_rooms.py
-python Generator/populate_rooms.py
-
-# 4. Populate guests and reservations
-python Generator/populate_reservations.py
-
-# 5. (Optional) Setup performance test guests
-python Generator/setup_performance_guests.py
-
-# 6. Inject errors for testing
-python Generator/setup_errors.py
-```
-
----
-
-## Utility Scripts
+These scripts can be run independently and are not part of the wrapper scripts.
 
 ### Shift Reservation Dates
 
@@ -266,16 +329,13 @@ python Generator/shift_reservations.py --days -2    # Shift backward by 2 days
 ## Data Flow Diagram
 
 ```
-generate_names.py          →  all_names.json
-generate_rooms.py          →  rooms.json, rooms.txt
-                                ↓
-populate_rooms.py          →  Rooms table (database.db)
-populate_reservations.py   →  Guests + Reservations tables (database.db)
-                                ↓
-setup_performance_guests.py →  Additional test guests + reservations
-setup_errors.py            →  Modified reservations (erroneous)
-                                ↓
-erroneous_reservations.json (persisted IDs)
+run_generation.py                    →  all_names.json, rooms.json, rooms.txt
+                                              ↓
+run_population.py                    →  Rooms, Guests, Reservations, PromptVersions tables (database.db)
+                                              ↓
+run_errors.py                        →  Modified reservations (erroneous)
+                                              ↓
+                                         erroneous_reservations.json (persisted IDs)
 ```
 
 ---
@@ -284,8 +344,9 @@ erroneous_reservations.json (persisted IDs)
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| `Names file not found: all_names.json` | `generate_names.py` not run | Run `python Generator/generate_names.py` first |
+| `Names file not found: all_names.json` | `generate_names.py` not run | Run `python Generator/run_generation.py` first |
 | `Database not found at database.db` | Database not initialized | Run `python create_hotel_db.py` first |
-| `No rooms found in the database` | Rooms not populated | Run `python Generator/populate_rooms.py` first |
+| `Not enough rooms in the database` | Rooms not populated | Run `python Generator/run_population.py` first |
 | `Not enough collision reservations` | Not enough data for error injection | Run `populate_reservations.py` again or increase data |
 | `EXCLUDED_RESERVATION_IDS` blocking errors | IDs in exclusion list | Edit `EXCLUDED_RESERVATION_IDS` in `setup_errors.py` |
+| `PromptVersions` table empty after population | `seed_prompts.py` not included in population | Add `seed_prompts.py` to `POPULATION_SCRIPTS` in `run_population.py` |

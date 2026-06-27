@@ -53,6 +53,13 @@ export function getByVersion(promptId: string, version: number): Promise<PromptV
 }
 
 /**
+ * Get a specific version by prompt ID and version number (alias for getByVersion).
+ */
+export function getPrompt(promptId: string, version: number): Promise<PromptVersion> {
+  return getByVersion(promptId, version);
+}
+
+/**
  * Create a new prompt version.
  */
 export function create(
@@ -129,3 +136,43 @@ export const promptsApi = {
   duplicate,
   setDefault,
 };
+/**
+ * Fetch all available placeholders.
+ */
+export function listPlaceholders(): Promise<import('../types/placeholder').PlaceholderDefinition[]> {
+  return request<import('../types/placeholder').PlaceholderDefinition[]>('/api/prompts/placeholders');
+}
+
+/**
+ * Preview a prompt with resolved placeholders.
+ */
+export function previewPrompt(
+  promptId: string,
+  version: number,
+): Promise<{ resolved_system_prompt: string; resolved_user_template: string }> {
+  return request<{ resolved_system_prompt: string; resolved_user_template: string }>(
+    `/api/prompts/${encodeURIComponent(promptId)}/${version}/preview`,
+    { method: 'POST' },
+  );
+}
+
+/**
+ * Fetch the database field schema for runtime variable discovery.
+ */
+export function getFieldSchema(): Promise<Record<string, Array<{
+  field: string;
+  type: string;
+  constraints: string[];
+  nullable: boolean;
+  primary_key: boolean;
+  foreign_keys: string[];
+}>>> {
+  return request<Record<string, Array<{
+    field: string;
+    type: string;
+    constraints: string[];
+    nullable: boolean;
+    primary_key: boolean;
+    foreign_keys: string[];
+  }>>>('/api/prompts/field-schema');
+}

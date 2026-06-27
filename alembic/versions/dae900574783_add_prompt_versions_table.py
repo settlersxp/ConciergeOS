@@ -56,8 +56,8 @@ When providing information about a guest, always use the following markdown stru
 
 
 def upgrade() -> None:
-    """Add prompt_versions table and seed default prompts."""
-    op.create_table('prompt_versions',
+    """Add PromptVersions table and seed default prompts."""
+    op.create_table('PromptVersions',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('prompt_id', sa.String(length=100), nullable=False),
         sa.Column('version', sa.Integer(), nullable=False),
@@ -78,7 +78,7 @@ def upgrade() -> None:
     bind = op.get_bind()
     for row in _get_default_prompts():
         bind.execute(
-            sa.table('prompt_versions',
+            sa.table('PromptVersions',
                 sa.column('prompt_id', sa.String),
                 sa.column('version', sa.Integer),
                 sa.column('name', sa.String),
@@ -95,5 +95,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Remove prompt_versions table and all data."""
-    op.drop_table('prompt_versions')
+    """Remove PromptVersions table and all data."""
+    op.drop_table('PromptVersions')

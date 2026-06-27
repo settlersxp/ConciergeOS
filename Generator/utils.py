@@ -6,7 +6,12 @@ Provides a single source of truth for:
   - Directory paths (BASE_DIR, PROJECT_ROOT)
   - Database connection initialization (raw sqlite3 and SQLAlchemy session)
 
-Note: DB_PATH and DB_NAME are imported from app.db to avoid duplication.
+All other shared utilities (name parsing, date helpers, booking mappings,
+date classification) are re-exported from ``app.services.generator_utils``
+so that the main app can import from the same source of truth.
+
+Generator scripts import via: ``from utils import ...``
+The app imports via:           ``from app.services.generator_utils import ...``
 """
 
 import os
@@ -22,6 +27,29 @@ PROJECT_ROOT = os.path.dirname(BASE_DIR)
 
 # Import DB configuration from app to avoid duplication
 from app.db import DB_NAME, DB_PATH
+
+
+# ---------------------------------------------------------------------------
+# Re-export shared utilities from app.services.generator_utils
+# so Generator scripts can use ``from utils import ...``
+# ---------------------------------------------------------------------------
+from app.services.generator_utils import (
+    CHANNEL_TIMES_MAP,
+    WING_CHANNEL_MAP,
+    DEFAULT_BUCKET_RANGES,
+    DEFAULT_BUCKET_WEIGHTS,
+    booking_channel_to_source,
+    generate_random_dob,
+    get_bucket_dates,
+    get_booking_channel,
+    get_checkin_checkout_times,
+    is_checked_in_type,
+    is_checked_out_type,
+    is_confirmed_type,
+    split_name,
+    weighted_random_bucket,
+    classify_reservation_type,
+)
 
 
 # ---------------------------------------------------------------------------

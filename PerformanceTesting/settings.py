@@ -58,6 +58,11 @@ class TestSettings:
     # Tool calling support
     use_tool_calling: bool = False  # Whether to use function/tool calling instead of embedding data
     tool_definitions: list[dict[str, Any]] = field(default_factory=list)  # Tool definitions to send to LLM
+    # Runtime variables for {table.field} placeholders in user_prompt templates
+    runtime_variables: dict[str, str] = field(default_factory=dict)
+    # Prompt versioning support (used to call query_guest_with_llm with prompt resolution)
+    prompt_id: str = ""  # e.g., "guest-search"
+    prompt_version: int | None = None  # e.g., 1, None for latest
 
     def resolve_vllm_url(self) -> str:
         """Return the configured vLLM URL, falling back to models_endpoint base."""

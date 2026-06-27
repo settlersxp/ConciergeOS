@@ -331,6 +331,10 @@ class PromptStore:
             parts.append(prompt.output_structure)
 
         system_prompt = "\n\n".join(parts) if parts else ""
+
+        # Resolve placeholders at query time
+        from app.services.placeholders import resolve_placeholders
+        system_prompt = resolve_placeholders(system_prompt)
         return system_prompt, prompt.user_prompt_template
 
     # ------------------------------------------------------------------

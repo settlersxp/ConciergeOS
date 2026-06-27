@@ -37,11 +37,25 @@ def query_guest_with_llm(
 
     This is the single, shared implementation that both single-guest and
     multi-guest code paths delegate to.
+
+    Args:
+        base_url: The vLLM server URL.
+        model_name: The model name to use.
+        system_content: The system prompt to use.
+        user_prompt: The user's query (customer name).
+        use_tool_calling: Whether to use tool calling mode.
+        tool_definitions: Optional tool definitions for the LLM.
     """
     if use_tool_calling:
         # Use the response_cache wrapper which handles tool calling loop + logging
+        # Forward system_content and tool_definitions to ensure the correct prompts are used
         from app.services.response_cache import call_llm_with_db_tools
-        return call_llm_with_db_tools(user_prompt, model=model_name)
+        return call_llm_with_db_tools(
+            user_prompt,
+            model=model_name,
+            system_prompt=system_content,
+            tool_definitions=tool_definitions,
+        )
 
     # Non-tool-calling mode: direct chat completion
     client = create_openai_client(base_url)

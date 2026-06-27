@@ -23,6 +23,8 @@ Booking source rules:
   ANY           → random of WEBSITE, PHONE, OTA
   STAFF_ASSIGNMENT → INTERNAL
 
+Uses SQLAlchemy ORM models from the app package.
+
 Usage:
     python Generator/populate_reservations.py
 """
@@ -30,15 +32,25 @@ Usage:
 import json
 import os
 import random
-import sqlite3
 import sys
 from datetime import date, timedelta
-from typing import Tuple, List, cast
+from typing import Dict, List
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.enums import BookingChannel, ReservationStatus
-from utils import BASE_DIR, DB_PATH, init_connection
+from app.db import SessionLocal
+from app.enums import BookingChannel, BookingSource, ReservationStatus
+from app.models import Guest, Reservation, Room
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+from utils import (
+    BASE_DIR,
+    booking_channel_to_source,
+    generate_random_dob,
+    get_bucket_dates,
+    split_name,
+    weighted_random_bucket,
+)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -48,14 +60,6 @@ NAMES_JSON_PATH = os.path.join(BASE_DIR, "all_names.json")
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-BUCKET: dict[str, dict[str, object]] = {
-    "1": {"label": "CHECKED_IN (checking out today)", "weight": 1},
-    "2": {"label": "CHECKED_IN (future checkout)", "weight": 3},
-    "3": {"label": "CHECKED_OUT", "weight": 1},
-    "4": {"label": "CONFIRMED", "weight": 1},
-}
-
-BOOKING_SOURCES_ANY = ["WEBSITE", "PHONE", "OTA"]
 MAX_GUESTS_PER_RESERVATION = 6
 MIN_GUESTS_PER_RESERVATION = 1
 NUM_CHECKED_OUT_COLLISIONS = 5
@@ -88,116 +92,55 @@ def load_names(json_path: str) -> List[str]:
     return all_names
 
 
-def split_name(full_name: str) -> Tuple[str, str]:
-    """Split a full name string into (first_name, last_name)."""
-    parts = full_name.strip().split()
-    if len(parts) == 1:
-        return parts[0], ""
-    return parts[0], " ".join(parts[1:])
-
-
 # ---------------------------------------------------------------------------
-# Date helpers
+# Database operations (SQLAlchemy ORM)
 # ---------------------------------------------------------------------------
-def random_date_between(start: date, end: date) -> str:
-    """Return a random date as YYYY-MM-DD string between start and end (inclusive)."""
-    delta = (end - start).days
-    if delta < 0:
-        delta = 0
-    random_day = start + timedelta(days=random.randint(0, delta))
-    return random_day.isoformat()
-
-
-def get_bucket_dates(bucket: str, today: date) -> Tuple[str, str, ReservationStatus]:
-    """Return (check_in_date, check_out_date, status) for a given bucket."""
-    if bucket == "1":
-        check_in = random_date_between(today - timedelta(days=30), today - timedelta(days=7))
-        return check_in, today.isoformat(), ReservationStatus.CHECKED_IN
-
-    elif bucket == "2":
-        check_in = random_date_between(today - timedelta(days=30), today - timedelta(days=7))
-        check_out = random_date_between(today + timedelta(days=1), today + timedelta(days=7))
-        return check_in, check_out, ReservationStatus.CHECKED_IN
-
-    elif bucket == "3":
-        check_out_str = random_date_between(today - timedelta(days=10), today - timedelta(days=2))
-        check_out_date = date.fromisoformat(check_out_str)
-        check_in = random_date_between(today - timedelta(days=60), check_out_date - timedelta(days=1))
-        return check_in, check_out_str, ReservationStatus.CHECKED_OUT
-
-    elif bucket == "4":
-        check_out = random_date_between(today + timedelta(days=1), today + timedelta(days=7))
-        return today.isoformat(), check_out, ReservationStatus.CONFIRMED
-
-    raise ValueError(f"Unknown bucket: {bucket}")
-
-
-def weighted_random_bucket() -> str:
-    """Pick a bucket key (1-4) using defined weights."""
-    keys = list(BUCKET.keys())
-    weights = [cast(int, BUCKET[k]["weight"]) for k in keys]
-    return random.choices(keys, weights=weights, k=1)[0]
-
-
-# ---------------------------------------------------------------------------
-# Booking source
-# ---------------------------------------------------------------------------
-def get_booking_source(allowed_booking_channel: BookingChannel) -> str:
-    """Determine booking_source based on room's allowed_booking_channel."""
-    if allowed_booking_channel == BookingChannel.ON_SITE_ONLY:
-        return "WALK_IN"
-    elif allowed_booking_channel == BookingChannel.ANY:
-        return random.choice(BOOKING_SOURCES_ANY)
-    elif allowed_booking_channel == BookingChannel.STAFF_ASSIGNMENT:
-        return "INTERNAL"
-    raise ValueError(f"Unknown booking channel: {allowed_booking_channel}")
-
-
-# ---------------------------------------------------------------------------
-# Database operations
-# ---------------------------------------------------------------------------
-def insert_guest(conn: sqlite3.Connection, first_name: str, last_name: str) -> int:
-    """Insert a guest into the Guests table and return the guest_id."""
-    # Generate a random date of birth (between 18 and 80 years old)
-    min_dob = date.today() - timedelta(days=80 * 365)
-    max_dob = date.today() - timedelta(days=18 * 365)
-    dob = random_date_between(min_dob, max_dob)
-
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO Guests (first_name, last_name, date_of_birth, is_special_guest, special_preferences) "
-        "VALUES (?, ?, ?, 0, NULL)",
-        (first_name, last_name, dob),
+def insert_guest(db: Session, first_name: str, last_name: str) -> Guest:
+    """Insert a guest into the Guests table and return the Guest object."""
+    guest = Guest(
+        first_name=first_name,
+        last_name=last_name,
+        date_of_birth=generate_random_dob(),
+        is_special_guest=False,
+        special_preferences=None,
     )
-    return cursor.lastrowid  # type: ignore[return-value]
+    db.add(guest)
+    db.commit()
+    db.refresh(guest)
+    return guest
 
 
 def insert_reservation(
-    conn: sqlite3.Connection,
+    db: Session,
     room_id: int,
     guest_id: int,
     check_in_date: str,
     check_out_date: str,
-    status: str,
-    booking_source: str,
-) -> int:
-    """Insert a reservation row and return the reservation_id."""
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO Reservations (room_id, guest_id, check_in_date, check_out_date, status, booking_source) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (room_id, guest_id, check_in_date, check_out_date, status, booking_source),
+    status: ReservationStatus,
+    booking_source: BookingSource,
+) -> Reservation:
+    """Insert a reservation row and return the Reservation object."""
+    reservation = Reservation(
+        room_id=room_id,
+        guest_id=guest_id,
+        check_in_date=date.fromisoformat(check_in_date),
+        check_out_date=date.fromisoformat(check_out_date),
+        status=status,
+        booking_source=booking_source,
     )
-    return cursor.lastrowid  # type: ignore[return-value]
+    db.add(reservation)
+    db.commit()
+    db.refresh(reservation)
+    return reservation
 
 
 # ---------------------------------------------------------------------------
 # Main logic
 # ---------------------------------------------------------------------------
 def create_collision_reservations(
-    conn: sqlite3.Connection,
+    db: Session,
     all_names: List[str],
-    rooms_by_channel: dict[str, list[dict[str, object]]],
+    rooms_by_channel: Dict[str, List[Room]],
     today: date,
     collision_count: int,
     bucket: str,
@@ -213,10 +156,10 @@ def create_collision_reservations(
     first_name, last_name = split_name(collision_name)
 
     # Select rooms for collisions (non-STAFF_ASSIGNMENT preferred for collisions)
-    available_channels = ["ANY", "ON_SITE_ONLY"]
-    candidate_rooms: list[dict[str, object]] = []
+    available_channels = [BookingChannel.ANY, BookingChannel.ON_SITE_ONLY]
+    candidate_rooms: List[Room] = []
     for ch in available_channels:
-        candidate_rooms.extend(rooms_by_channel.get(ch, []))
+        candidate_rooms.extend(rooms_by_channel.get(ch.value, []))
 
     if len(candidate_rooms) < collision_count:
         raise ValueError(
@@ -248,25 +191,25 @@ def create_collision_reservations(
 
     total_rows = 0
     for room in selected_rooms:
-        room_id = cast(int, room["room_id"])
-        channel = BookingChannel(cast(str, room["allowed_booking_channel"]))
-        booking_source = get_booking_source(channel)
+        room_id = room.room_id
+        channel = room.allowed_booking_channel
+        booking_source = booking_channel_to_source(channel)
 
         # Each collision reservation also has 1-6 guests, but the PRIMARY guest
         # (first inserted) always has the collision name
         num_guests = random.randint(MIN_GUESTS_PER_RESERVATION, MAX_GUESTS_PER_RESERVATION)
 
         # Insert the collision-named guest first
-        guest_id = insert_guest(conn, first_name, last_name)
-        insert_reservation(conn, room_id, guest_id, fixed_check_in, fixed_check_out, status.value, booking_source)
+        guest = insert_guest(db, first_name, last_name)
+        insert_reservation(db, room_id, guest.guest_id, fixed_check_in, fixed_check_out, status, booking_source)
         total_rows += 1
 
         # Then insert additional guests with random names
         for _ in range(num_guests - 1):
             other_name = random.choice(all_names)
             other_first, other_last = split_name(other_name)
-            other_guest_id = insert_guest(conn, other_first, other_last)
-            insert_reservation(conn, room_id, other_guest_id, fixed_check_in, fixed_check_out, status.value, booking_source)
+            other_guest = insert_guest(db, other_first, other_last)
+            insert_reservation(db, room_id, other_guest.guest_id, fixed_check_in, fixed_check_out, status, booking_source)
             total_rows += 1
 
     return total_rows
@@ -279,36 +222,29 @@ def populate_reservations() -> None:
     # Load names
     all_names = load_names(NAMES_JSON_PATH)
 
-    # Connect to database
-    if not os.path.exists(DB_PATH):
-        raise FileNotFoundError(f"Database not found at {DB_PATH}\n"
-                                "Please run 'python create_hotel_db.py' first.")
-
-    conn = init_connection(DB_PATH)
+    db: Session = SessionLocal()
 
     try:
-        cursor = conn.cursor()
-
         # Clear existing data to allow re-running
-        del_res = cursor.execute("DELETE FROM Reservations").rowcount
-        del_guests = cursor.execute("DELETE FROM Guests").rowcount
+        del_res = db.query(Reservation).count()
+        del_guests = db.query(Guest).count()
         if del_res > 0 or del_guests > 0:
-            conn.commit()
+            db.query(Reservation).delete()
+            db.query(Guest).delete()
+            db.commit()
             print(f"🗑️  Cleared {del_guests} guest(s) and {del_res} reservation(s) from database.")
 
         # Load all rooms
-        cursor.execute("SELECT room_id, name, allowed_booking_channel FROM Rooms ORDER BY room_id")
-        rooms = [{"room_id": r[0], "name": r[1], "allowed_booking_channel": r[2]} for r in cursor.fetchall()]
+        rooms = db.query(Room).order_by(Room.room_id).all()
         print(f"🏨 Loaded {len(rooms)} rooms from database.")
 
         if not rooms:
             raise ValueError("No rooms found in the database. Run 'python Generator/populate_rooms.py' first.")
 
         # Group rooms by channel for collision selection
-        rooms_by_channel: dict[str, list[dict[str, object]]] = {}
+        rooms_by_channel: Dict[str, List[Room]] = {}
         for room in rooms:
-            ch = room["allowed_booking_channel"]
-            rooms_by_channel.setdefault(ch, []).append(room)
+            rooms_by_channel.setdefault(room.allowed_booking_channel.value, []).append(room)
 
         # -----------------------------------------------------------------------
         # Step 1: Create name collision reservations first
@@ -316,34 +252,34 @@ def populate_reservations() -> None:
         collision_rows = 0
 
         out_coll_rooms = create_collision_reservations(
-            conn, all_names, rooms_by_channel, today,
+            db, all_names, rooms_by_channel, today,
             NUM_CHECKED_OUT_COLLISIONS, "3"  # CHECKED_OUT
         )
         collision_rows += out_coll_rooms
 
         in_coll_rooms = create_collision_reservations(
-            conn, all_names, rooms_by_channel, today,
+            db, all_names, rooms_by_channel, today,
             NUM_CHECKED_IN_COLLISIONS, "2"  # CHECKED_IN
         )
         collision_rows += in_coll_rooms
 
         # Track which rooms already have collision reservations
-        cursor.execute("SELECT DISTINCT room_id FROM Reservations")
-        occupied_room_ids = {r[0] for r in cursor.fetchall()}
+        occupied_room_ids = {r.room_id for r in db.query(Reservation.room_id).distinct().all()}
         print(f"\n📝 Collision reservations occupy {len(occupied_room_ids)} rooms.")
 
         # -----------------------------------------------------------------------
         # Step 2: Create normal reservations for remaining rooms
         # -----------------------------------------------------------------------
-        remaining_rooms = [r for r in rooms if r["room_id"] not in occupied_room_ids]
+        occupied_set = set(occupied_room_ids)
+        remaining_rooms = [r for r in rooms if r.room_id not in occupied_set]
         print(f"📋 Creating normal reservations for {len(remaining_rooms)} remaining rooms...")
 
         normal_rows = 0
-        status_counts: dict[str, int] = {"CHECKED_IN": 0, "CHECKED_OUT": 0, "CONFIRMED": 0}
+        status_counts: Dict[str, int] = {"CHECKED_IN": 0, "CHECKED_OUT": 0, "CONFIRMED": 0}
 
         for room in remaining_rooms:
-            room_id = room["room_id"]
-            channel = BookingChannel(room["allowed_booking_channel"])
+            room_id = room.room_id
+            channel = room.allowed_booking_channel
 
             # Determine bucket
             if channel == BookingChannel.STAFF_ASSIGNMENT:
@@ -352,7 +288,7 @@ def populate_reservations() -> None:
                 bucket = weighted_random_bucket()
 
             check_in, check_out, status = get_bucket_dates(bucket, today)
-            booking_source = get_booking_source(channel)
+            booking_source = booking_channel_to_source(channel)
 
             # Pick 1-6 guests
             num_guests = random.randint(MIN_GUESTS_PER_RESERVATION, MAX_GUESTS_PER_RESERVATION)
@@ -360,13 +296,11 @@ def populate_reservations() -> None:
 
             for full_name in selected_names:
                 first_name, last_name = split_name(full_name)
-                guest_id = insert_guest(conn, first_name, last_name)
-                insert_reservation(conn, room_id, guest_id, check_in, check_out, status.value, booking_source)
+                guest = insert_guest(db, first_name, last_name)
+                insert_reservation(db, room_id, guest.guest_id, check_in, check_out, status, booking_source)
                 normal_rows += 1
 
             status_counts[status.value] = status_counts.get(status.value, 0) + 1
-
-        conn.commit()
 
         # -----------------------------------------------------------------------
         # Summary
@@ -375,14 +309,9 @@ def populate_reservations() -> None:
         print("📊 POPULATION SUMMARY")
         print("=" * 50)
 
-        cursor.execute("SELECT COUNT(*) FROM Guests")
-        total_guests = cursor.fetchone()[0]
-
-        cursor.execute("SELECT COUNT(*) FROM Reservations")
-        total_reservations = cursor.fetchone()[0]
-
-        cursor.execute("SELECT COUNT(DISTinct room_id) FROM Reservations")
-        rooms_with_reservations = cursor.fetchone()[0]
+        total_guests = db.query(func.count(Guest.guest_id)).scalar()
+        total_reservations = db.query(func.count(Reservation.reservation_id)).scalar()
+        rooms_with_reservations = db.query(func.count(Reservation.room_id.distinct())).scalar()
 
         print(f"  Guests inserted:        {total_guests}")
         print(f"  Reservation rows:       {total_reservations}")
@@ -390,31 +319,38 @@ def populate_reservations() -> None:
         print(f"    • Name collisions:    {collision_rows}")
         print(f"  Rooms with reservations: {rooms_with_reservations}")
         print(f"\n  Status distribution (normal reservations):")
-        for status, count in sorted(status_counts.items()):
-            print(f"    • {status}: {count}")
+        for st, count in sorted(status_counts.items()):
+            print(f"    • {st}: {count}")
 
         # Show collision details
         print(f"\n  🔍 Name collision verification:")
-        cursor.execute(
-            "SELECT g.first_name, g.last_name, COUNT(DISTINCT r.room_id) as room_count, r.status, r.check_in_date "
-            "FROM Reservations r "
-            "JOIN Guests g ON r.guest_id = g.guest_id "
-            "GROUP BY g.first_name, g.last_name, r.status "
-            "HAVING room_count >= 2 "
-            "ORDER BY room_count DESC LIMIT 20"
+        collision_distinct = func.count(Reservation.room_id.distinct()).label("room_count")
+        collisions = (
+            db.query(
+                Guest.first_name,
+                Guest.last_name,
+                collision_distinct,
+                Reservation.status,
+                Reservation.check_in_date,
+            )
+            .join(Reservation, Guest.guest_id == Reservation.guest_id)
+            .group_by(Guest.first_name, Guest.last_name, Reservation.status)
+            .having(collision_distinct >= 2)
+            .order_by(collision_distinct.desc())
+            .limit(20)
+            .all()
         )
-        collisions = cursor.fetchall()
-        for first, last, cnt, status, check_in in collisions:
-            print(f"    • '{first} {last}' → {cnt} rooms (status={status}, check_in={check_in})")
+        for first, last, cnt, st, check_in in collisions:
+            print(f"    • '{first} {last}' → {cnt} rooms (status={st.value}, check_in={check_in})")
 
         print("\n✅ Done! Guests and Reservations populated successfully.")
 
     except Exception as e:
-        conn.rollback()
+        db.rollback()
         print(f"❌ Error: {e}")
         raise
     finally:
-        conn.close()
+        db.close()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import type { TestGuest, GuestDetail } from "../../types";
 import { Card, Button, Badge } from "../../components/ui";
 import { performanceApi } from "../../services/api";
@@ -114,7 +114,7 @@ export default function GuestConfigCard({
                 const isExpanded = expandedGuestId === g.guest_id;
 
                 return (
-                  <>
+                  <React.Fragment key={g.guest_id}>
                     <tr
                       key={g.guest_id}
                       className={`border-b border-surface-100 dark:border-primary-700/50 cursor-pointer transition-colors ${
@@ -176,7 +176,7 @@ export default function GuestConfigCard({
                         </td>
                       </tr>
                     )}
-                  </>
+                  </React.Fragment>
                 );
               })}
             </tbody>

@@ -16,6 +16,7 @@ async def api_guest_search(body: GuestSearchRequest) -> GuestSearchResponse:
         body.customer_name,
         prompt_id=body.prompt_id,
         version=body.version,
+        runtime_variables=body.runtime_variables if body.runtime_variables else None,
     )
     return GuestSearchResponse(
         query=body.customer_name,

@@ -616,9 +616,19 @@ def _call_llm_impl(
     model: str | None,
     max_turns: int,
     use_cache: bool,
+    system_prompt: str | None = None,
+    tool_definitions: list[dict] | None = None,
 ) -> tuple[str, bool]:
     """
     Internal implementation of the LLM call with caching.
+
+    Args:
+        user_message: The user's question or request (customer name).
+        model: Optional model name.
+        max_turns: Maximum number of LLM turns.
+        use_cache: If True, check cache before LLM call and store result after.
+        system_prompt: Optional custom system prompt. Uses SHARED_SYSTEM_PROMPT if None.
+        tool_definitions: Optional custom tool definitions. Uses TOOL_DEFINITIONS if None.
 
     Returns:
         (response_text, was_cached) tuple.
@@ -629,6 +639,10 @@ def _call_llm_impl(
     client, model_name = get_llm_config()
     if model:
         model_name = model
+
+    # Use provided prompts/tools or fall back to defaults
+    effective_system_prompt = system_prompt if system_prompt is not None else SHARED_SYSTEM_PROMPT
+    effective_tool_definitions = tool_definitions if tool_definitions is not None else TOOL_DEFINITIONS
 
     response_logger = _get_logger()
     cache = _get_cache()
@@ -657,26 +671,26 @@ def _call_llm_impl(
     if use_cache:
         logger.info(f"[CACHE] MISS for key={cache_key[:12]}... | calling LLM")
 
-    # Initialize conversation
+    # Initialize conversation with effective system prompt
     messages: list[dict] = [
-        {"role": "system", "content": SHARED_SYSTEM_PROMPT},
+        {"role": "system", "content": effective_system_prompt},
         {"role": "user", "content": user_message},
     ]
 
     # Generate conversation hash for diagnostic logging
-    conversation_hash = response_logger.generate_conversation_hash(messages, TOOL_DEFINITIONS)
+    conversation_hash = response_logger.generate_conversation_hash(messages, effective_tool_definitions)
 
     for turn in range(1, max_turns + 1):
         # Log request
         response_logger.log_request(
-            conversation_hash, messages, TOOL_DEFINITIONS, model_name, turn
+            conversation_hash, messages, effective_tool_definitions, model_name, turn
         )
 
         # Call LLM with tools
         response = client.chat.completions.create(
             model=model_name,
             messages=messages,
-            tools=TOOL_DEFINITIONS,  # type: ignore[arg-type]
+            tools=effective_tool_definitions,  # type: ignore[arg-type]
             temperature=0.1,
             max_tokens=102400,
         )
@@ -792,6 +806,8 @@ def call_llm_with_db_tools(
     model: str | None = None,
     max_turns: int = 100,
     use_cache: bool = True,
+    system_prompt: str | None = None,
+    tool_definitions: list[dict] | None = None,
 ) -> str:
     """
     Call the LLM with database tools and handle the tool calling loop.
@@ -810,6 +826,8 @@ def call_llm_with_db_tools(
         model: Optional model name (uses configured model from llm.py if None)
         max_turns: Maximum number of LLM turns (default 100)
         use_cache: If True, check cache before LLM call and store result after (default True)
+        system_prompt: Optional custom system prompt. Uses SHARED_SYSTEM_PROMPT if None.
+        tool_definitions: Optional custom tool definitions. Uses TOOL_DEFINITIONS if None.
 
     Returns:
         The final response text from the LLM (possibly from cache)
@@ -818,7 +836,7 @@ def call_llm_with_db_tools(
         >>> response = call_llm_with_db_tools("Show me all special guests")
         >>> response = call_llm_with_db_tools("John Doe", use_cache=False)  # bypass cache
     """
-    result, _ = _call_llm_impl(user_message, model, max_turns, use_cache)
+    result, _ = _call_llm_impl(user_message, model, max_turns, use_cache, system_prompt, tool_definitions)
     return result
 
 
@@ -827,6 +845,8 @@ def call_llm_with_db_tools_with_cache_flag(
     model: str | None = None,
     max_turns: int = 100,
     use_cache: bool = True,
+    system_prompt: str | None = None,
+    tool_definitions: list[dict] | None = None,
 ) -> tuple[str, bool]:
     """
     Call the LLM with database tools and caching.
@@ -840,5 +860,13 @@ def call_llm_with_db_tools_with_cache_flag(
 
     The original call_llm_with_db_tools() is preserved for backward compatibility
     and only returns the response string.
+
+    Args:
+        user_message: The user's question or request
+        model: Optional model name
+        max_turns: Maximum number of LLM turns
+        use_cache: If True, check cache before LLM call
+        system_prompt: Optional custom system prompt
+        tool_definitions: Optional custom tool definitions
     """
-    return _call_llm_impl(user_message, model, max_turns, use_cache)
+    return _call_llm_impl(user_message, model, max_turns, use_cache, system_prompt, tool_definitions)
