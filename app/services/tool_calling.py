@@ -56,32 +56,36 @@ def _format_reservation(reservation: Reservation) -> dict[str, Any]:
 
 
 def _execute_query_guests(params: dict[str, Any]) -> str:
-    """Query guests from the database based on filters."""
+    """Query guests from the database by their guest IDs.
+    
+    Accepts a single guest ID or an array of guest IDs.
+    Returns all matching guests with their details.
+    
+    Args:
+        params: Must contain 'guest_ids' - a single integer or array of integers.
+    
+    Returns:
+        JSON string with guest count and array of guest objects.
+    """
     db = SessionLocal()
     try:
-        query = db.query(Guest)
+        guest_ids = params.get("guest_ids")
+        if guest_ids is None:
+            return "No guest IDs provided. The 'guest_ids' parameter is required."
 
-        if "guest_id" in params and params["guest_id"] is not None:
-            query = query.filter(Guest.guest_id == params["guest_id"])
+        # Accept a single ID or an array of IDs
+        if isinstance(guest_ids, int):
+            guest_ids = [guest_ids]
 
-        if "first_name" in params and params["first_name"]:
-            query = query.filter(
-                Guest.first_name.ilike(f"%{params['first_name']}%")
-            )
+        if not isinstance(guest_ids, list) or not guest_ids:
+            return "Invalid 'guest_ids' parameter. Must be a single integer or an array of integers."
 
-        if "last_name" in params and params["last_name"]:
-            query = query.filter(
-                Guest.last_name.ilike(f"%{params['last_name']}%")
-            )
-
-        if "is_special_guest" in params and params["is_special_guest"] is not None:
-            is_special = bool(params["is_special_guest"])
-            query = query.filter(Guest.is_special_guest == is_special)
+        query = db.query(Guest).filter(Guest.guest_id.in_(guest_ids))
 
         guests = query.all()
 
         if not guests:
-            return "No guests found matching the criteria."
+            return f"No guests found with the provided IDs: {guest_ids}"
 
         results = [_format_guest(g) for g in guests]
         return json.dumps({"count": len(results), "guests": results}, indent=2)
@@ -122,38 +126,99 @@ def _execute_query_rooms(params: dict[str, Any]) -> str:
 
 
 def _execute_query_reservations(params: dict[str, Any]) -> str:
-    """Query reservations from the database based on filters."""
+    """Query reservations from the database with flexible filtering.
+    
+    All parameters are optional. The LLM can use any combination of filters:
+    - reservation_ids: Filter by specific reservation ID(s)
+    - guest_ids: Filter by guest ID(s)
+    - room_ids: Filter by room ID(s)
+    - statuses: Filter by reservation status(ies)
+    - check_in / check_out: Filter by date(s)
+    
+    If no parameters are provided, returns all reservations (not recommended for large datasets).
+    
+    Args:
+        params: Any combination of optional filter parameters.
+    
+    Returns:
+        JSON string with reservation count and array of reservation objects.
+    """
     db = SessionLocal()
     try:
         query = db.query(Reservation)
 
-        if "reservation_id" in params and params["reservation_id"] is not None:
-            query = query.filter(Reservation.reservation_id == params["reservation_id"])
+        # Filter: reservation_ids (array or single integer)
+        reservation_ids = params.get("reservation_ids")
+        if reservation_ids is not None:
+            if isinstance(reservation_ids, int):
+                reservation_ids = [reservation_ids]
+            elif not isinstance(reservation_ids, list):
+                reservation_ids = [reservation_ids]
+            if reservation_ids:
+                query = query.filter(Reservation.reservation_id.in_(reservation_ids))
 
-        if "guest_id" in params and params["guest_id"] is not None:
-            query = query.filter(Reservation.guest_id == params["guest_id"])
+        # Optional filter: guest_ids (array of integers)
+        guest_ids = params.get("guest_ids")
+        if guest_ids is not None:
+            if isinstance(guest_ids, int):
+                guest_ids = [guest_ids]
+            elif not isinstance(guest_ids, list):
+                guest_ids = [guest_ids]
+            if guest_ids:
+                query = query.filter(Reservation.guest_id.in_(guest_ids))
 
-        if "room_id" in params and params["room_id"] is not None:
-            query = query.filter(Reservation.room_id == params["room_id"])
+        # Optional filter: room_ids (array of integers)
+        room_ids = params.get("room_ids")
+        if room_ids is not None:
+            if isinstance(room_ids, int):
+                room_ids = [room_ids]
+            elif not isinstance(room_ids, list):
+                room_ids = [room_ids]
+            if room_ids:
+                query = query.filter(Reservation.room_id.in_(room_ids))
 
-        if "status" in params and params["status"]:
+        # Optional filter: statuses (array of string enum values)
+        statuses = params.get("statuses")
+        if statuses is not None:
             from app.enums import ReservationStatus
-            try:
-                status_enum = ReservationStatus(params["status"])
-                query = query.filter(Reservation.status == status_enum)
-            except ValueError:
-                return f"Invalid status: {params['status']}. Valid options: PENDING, CONFIRMED, CHECKED_IN, CHECKED_OUT, CANCELLED"
+            if isinstance(statuses, str):
+                # Accept single status string for backward compatibility
+                statuses = [statuses]
+            if isinstance(statuses, list) and statuses:
+                # Validate each status value against the enum
+                valid_statuses = []
+                invalid_statuses = []
+                for s in statuses:
+                    try:
+                        valid_statuses.append(ReservationStatus(s))
+                    except ValueError:
+                        invalid_statuses.append(s)
+                
+                if invalid_statuses:
+                    valid_options = ", ".join(s.value for s in ReservationStatus)
+                    return f"Invalid status values: {invalid_statuses}. Valid options: {valid_options}"
+                
+                if valid_statuses:
+                    query = query.filter(Reservation.status.in_(valid_statuses))
 
-        if "check_in" in params and params["check_in"]:
-            query = query.filter(Reservation.check_in_date == params["check_in"])
+        # Optional filter: check_in (date string)
+        check_in = params.get("check_in")
+        if check_in:
+            query = query.filter(Reservation.check_in_date == check_in)
 
-        if "check_out" in params and params["check_out"]:
-            query = query.filter(Reservation.check_out_date == params["check_out"])
+        # Optional filter: check_out (date string)
+        check_out = params.get("check_out")
+        if check_out:
+            query = query.filter(Reservation.check_out_date == check_out)
 
         reservations = query.all()
 
         if not reservations:
             return "No reservations found matching the criteria."
+
+        # Warn if too many results returned (no filters applied)
+        if len(reservations) > 1000:
+            return f"Warning: {len(reservations)} reservations found. Consider adding filters (reservation_ids, guest_ids, room_ids, statuses, check_in, check_out) to narrow results.\n\n" + json.dumps({"count": len(reservations), "reservations": [_format_reservation(r) for r in reservations]}, indent=2)
 
         results = [_format_reservation(r) for r in reservations]
         return json.dumps({"count": len(results), "reservations": results}, indent=2)

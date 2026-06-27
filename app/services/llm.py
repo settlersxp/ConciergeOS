@@ -186,9 +186,9 @@ _SYSTEM_PROMPT_WITH_SCHEMA = f"""\
 {_GUEST_INFORMATION}
 ## Available Tools
 You have access to the following database query tools:
-- `query_guests`: Search for guests by name, ID, or attributes
+- `query_guests`: Search for guests by their guest IDs (accepts 1 or more IDs)
 - `query_rooms`: Search for rooms by ID or name
-- `query_reservations`: Search for reservations by various criteria
+- `query_reservations`: Search for reservations by their reservation IDs (accepts 1 or more IDs), with optional filters for guest_ids, room_ids, statuses, and dates
 - `get_hotel_summary`: Get overall hotel statistics
 
 Use these tools to answer questions about the hotel database. Always call the appropriate tool rather than guessing at data.
@@ -207,28 +207,19 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "query_guests",
-            "description": "Search for guests in the hotel database. All parameters are optional filters.",
+            "description": "Search for guests in the hotel database by their guest IDs. Accepts 1 or more guest IDs.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "guest_id": {
-                        "type": "integer",
-                        "description": "Filter by specific guest ID",
-                    },
-                    "first_name": {
-                        "type": "string",
-                        "description": "Filter by first name (case-insensitive partial match)",
-                    },
-                    "last_name": {
-                        "type": "string",
-                        "description": "Filter by last name (case-insensitive partial match)",
-                    },
-                    "is_special_guest": {
-                        "type": "boolean",
-                        "description": "Filter by special guest status. true for special guests only, false for regular guests.",
+                    "guest_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "Array of guest IDs to retrieve. Accepts 1 or more IDs. Example: [1, 2, 3]",
                     },
                 },
-                "required": [],
+                "required": ["guest_ids"],
             },
         },
     },
@@ -257,26 +248,38 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "query_reservations",
-            "description": "Search for reservations in the hotel database. All parameters are optional filters.",
+            "description": "Search for reservations in the hotel database by their reservation IDs. Accepts 1 or more reservation IDs. Also supports optional filtering by guest_ids, room_ids, statuses, and dates.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "reservation_id": {
-                        "type": "integer",
-                        "description": "Filter by specific reservation ID",
+                    "reservation_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "Array of reservation IDs to retrieve. Accepts 1 or more IDs. Example: [1, 2, 3]",
                     },
-                    "guest_id": {
-                        "type": "integer",
-                        "description": "Filter by guest ID",
+                    "guest_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "Array of guest IDs to filter by. Accepts 1 or more guest IDs. Example: [1, 2]",
                     },
-                    "room_id": {
-                        "type": "integer",
-                        "description": "Filter by room ID",
+                    "room_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "Array of room IDs to filter by. Accepts 1 or more room IDs. Example: [101, 102]",
                     },
-                    "status": {
-                        "type": "string",
-                        "enum": ["PENDING", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELLED"],
-                        "description": "Filter by reservation status",
+                    "statuses": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": ["PENDING", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELLED"]
+                        },
+                        "description": "Array of reservation statuses to filter by. Accepts 1 or more status values. Example: [\"CONFIRMED\", \"CHECKED_IN\"]",
                     },
                     "check_in": {
                         "type": "string",
@@ -641,18 +644,23 @@ def query_guest_with_llm(
         )
     
     try:
+        # Resolve version to default if not specified
+        resolved_version = version if version is not None else 1
+
         result, was_cached = call_llm_with_db_tools_with_cache_flag(
             user_prompt,
             system_prompt=final_system,
+            prompt_id=prompt_id,
+            prompt_version=resolved_version,
         )
-        
+
         if was_cached:
-            logger.info(f"Served cached response for guest: {customer_name}")
+            logger.info(f"Served cached response for guest: {customer_name} | prompt={prompt_id} v{resolved_version}")
         elif result and result != "The LLM returned an empty response.":
-            logger.info(f"Successfully got response for guest: {customer_name}")
+            logger.info(f"Successfully got response for guest: {customer_name} | prompt={prompt_id} v{resolved_version}")
         else:
-            logger.warning(f"Empty response received for guest: {customer_name}")
-            
+            logger.warning(f"Empty response received for guest: {customer_name} | prompt={prompt_id} v{resolved_version}")
+
         return result, was_cached
         
     except Exception as e:

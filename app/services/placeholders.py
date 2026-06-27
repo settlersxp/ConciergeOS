@@ -43,7 +43,7 @@ AVAILABLE_PLACEHOLDERS: dict[str, dict] = {
         "description": "Human-readable description of all available database query tools",
         "category": "schema",
         "dynamic": True,
-        "example": "- query_guests: Search for guests by name, ID, or attributes\n- query_rooms: Search for rooms by ID or name",
+        "example": "- query_guests: Search for guests by their guest IDs (accepts 1 or more IDs)\n- query_rooms: Search for rooms by ID or name",
         "resolver": "_resolve_available_tools",
     },
 }

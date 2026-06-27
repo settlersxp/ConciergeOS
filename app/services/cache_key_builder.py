@@ -185,6 +185,9 @@ def format_resource_identifier(resolved: dict) -> str:
     """
     Format resolved parameters into a resource identifier string.
 
+    List values are sorted numerically to ensure deterministic keys
+    regardless of the order IDs are returned by the LLM.
+
     Args:
         resolved: Dictionary of column name → ID value (int or list of ints)
 
@@ -197,7 +200,9 @@ def format_resource_identifier(resolved: dict) -> str:
     parts = []
     for k, v in sorted_items:
         if isinstance(v, list):
-            parts.append(f"{k}=[{','.join(str(x) for x in v)}]")
+            # Sort list values numerically for deterministic cache keys
+            sorted_values = sorted(v, key=lambda x: int(x) if isinstance(x, (int, str)) else x)
+            parts.append(f"{k}=[{','.join(str(x) for x in sorted_values)}]")
         else:
             parts.append(f"{k}={v}")
     return ":".join(parts)

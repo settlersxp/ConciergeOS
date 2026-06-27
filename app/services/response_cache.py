@@ -38,6 +38,106 @@ from urllib.parse import urlencode, urlparse, parse_qs
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Tool call cache data structures
+# ---------------------------------------------------------------------------
+
+
+class ToolCallCacheEntry:
+    """A single cached tool call result with expiration tracking."""
+
+    def __init__(self, result: str, timestamp: float, ttl: int):
+        self.result = result
+        self.timestamp = timestamp
+        self.ttl = ttl
+
+    @property
+    def is_expired(self) -> bool:
+        """Return True if this entry has exceeded its TTL."""
+        return (time.time() - self.timestamp) >= self.ttl
+
+
+class ToolCallCacheStore:
+    """
+    In-memory cache for tool call results with TTL-based expiration.
+
+    Caches results by structured cache key (model_identifier:resource_identifier:prompt_id:prompt_version:model_name).
+
+    Usage:
+        store = ToolCallCacheStore(ttl=3600)
+        store.set("key", "result")
+        entry = store.get("key")
+        if entry and not entry.is_expired:
+            print(entry.result)
+    """
+
+    def __init__(self, ttl: int = 3600):
+        self._store: dict[str, ToolCallCacheEntry] = {}
+        self._ttl = ttl
+        self._hits = 0
+        self._misses = 0
+
+    @property
+    def ttl(self) -> int:
+        return self._ttl
+
+    @ttl.setter
+    def ttl(self, value: int) -> None:
+        self._ttl = value
+
+    def get(self, key: str) -> ToolCallCacheEntry | None:
+        entry = self._store.get(key)
+        if entry is None:
+            self._misses += 1
+            return None
+        if entry.is_expired:
+            del self._store[key]
+            self._misses += 1
+            return None
+        self._hits += 1
+        return entry
+
+    def set(self, key: str, result: str, ttl: int | None = None) -> None:
+        effective_ttl = ttl if ttl is not None else self._ttl
+        self._store[key] = ToolCallCacheEntry(
+            result=result,
+            timestamp=time.time(),
+            ttl=effective_ttl,
+        )
+
+    def delete(self, key: str) -> bool:
+        if key in self._store:
+            del self._store[key]
+            return True
+        return False
+
+    def clear(self) -> int:
+        count = len(self._store)
+        self._store.clear()
+        self._hits = 0
+        self._misses = 0
+        return count
+
+    def cleanup_expired(self) -> int:
+        expired_keys = [k for k, v in self._store.items() if v.is_expired]
+        for key in expired_keys:
+            del self._store[key]
+        return len(expired_keys)
+
+    @property
+    def stats(self) -> dict[str, Any]:
+        total = self._hits + self._misses
+        return {
+            "tool_cache_hits": self._hits,
+            "tool_cache_misses": self._misses,
+            "size": len(self._store),
+            "hit_rate": round(self._hits / total * 100, 1) if total > 0 else 0.0,
+        }
+
+    def __len__(self) -> int:
+        return len(self._store)
+
+
+# ---------------------------------------------------------------------------
 # Cache data structures
 # ---------------------------------------------------------------------------
 
@@ -377,6 +477,38 @@ def http_cache_stats() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Tool call cache singleton and helpers
+# ---------------------------------------------------------------------------
+
+_tool_call_cache = ToolCallCacheStore(ttl=3600)
+
+
+def _get_tool_call_cache() -> ToolCallCacheStore:
+    """Get the singleton ToolCallCacheStore instance."""
+    return _tool_call_cache
+
+
+def tool_call_cache_get(key: str) -> ToolCallCacheEntry | None:
+    """Get a cached tool call result by key."""
+    return _get_tool_call_cache().get(key)
+
+
+def tool_call_cache_set(key: str, result: str) -> None:
+    """Cache a tool call result."""
+    _get_tool_call_cache().set(key, result)
+
+
+def tool_call_cache_clear() -> int:
+    """Clear all cached tool call results."""
+    return _get_tool_call_cache().clear()
+
+
+def tool_call_cache_stats() -> dict[str, Any]:
+    """Return tool call cache statistics."""
+    return _get_tool_call_cache().stats
+
+
+# ---------------------------------------------------------------------------
 # ResponseLogger - diagnostic logging for LLM calls
 # ---------------------------------------------------------------------------
 
@@ -592,6 +724,76 @@ class ResponseLogger:
 
 
 # ---------------------------------------------------------------------------
+# Structured response cache helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_response_cache_key(
+    tool_cache_keys: list[str],
+    prompt_id: str,
+    prompt_version: int,
+    model_name: str,
+) -> str:
+    """
+    Build a deterministic response cache key from the tool cache keys used.
+
+    The key is derived from the sorted, joined tool cache keys, ensuring that:
+    - Same data fetched → same response cache key (regardless of input language)
+    - Different ID orderings → same key (lists are already sorted in tool keys)
+    - Same tools, different params → different keys
+
+    Args:
+        tool_cache_keys: List of structured tool cache keys used during execution
+        prompt_id: Prompt template identifier
+        prompt_version: Prompt version number
+        model_name: LLM model name
+
+    Returns:
+        SHA256 hex digest string
+    """
+    if not tool_cache_keys:
+        # No tools were called - fall back to a summary-style key
+        key_string = f"_no_tools:{prompt_id}:{prompt_version}:{model_name}"
+    else:
+        # Sort and join tool keys for deterministic ordering
+        sorted_keys = sorted(tool_cache_keys)
+        key_string = f"_response:{prompt_id}:{prompt_version}:{model_name}:{'|'.join(sorted_keys)}"
+
+    return hashlib.sha256(key_string.encode("utf-8")).hexdigest()
+
+
+def _store_structured_response(
+    cache: CacheStore,
+    tool_cache_keys: list[str],
+    prompt_id: str,
+    prompt_version: int,
+    model_name: str,
+    final_result: str,
+    use_cache: bool,
+) -> str:
+    """
+    Build a structured response cache key and store the response.
+
+    Returns the response cache key that was used (for logging/debugging).
+    """
+    if not use_cache:
+        return ""
+
+    response_cache_key = _build_response_cache_key(
+        tool_cache_keys, prompt_id, prompt_version, model_name
+    )
+    response_cache_key_preview = response_cache_key[:12]
+
+    cache.set(response_cache_key, final_result)
+    logger.info(
+        f"[CACHE] STRUCTURED STORED for key={response_cache_key_preview}... | "
+        f"tools_used={len(tool_cache_keys)} | response_len={len(final_result)} | ttl={cache.ttl}s"
+    )
+
+    return response_cache_key
+
+
+# ---------------------------------------------------------------------------
 # Singleton logger instance
 # ---------------------------------------------------------------------------
 
@@ -618,6 +820,8 @@ def _call_llm_impl(
     use_cache: bool,
     system_prompt: str | None = None,
     tool_definitions: list[dict] | None = None,
+    prompt_id: str = "default",
+    prompt_version: int = 1,
 ) -> tuple[str, bool]:
     """
     Internal implementation of the LLM call with caching.
@@ -629,10 +833,13 @@ def _call_llm_impl(
         use_cache: If True, check cache before LLM call and store result after.
         system_prompt: Optional custom system prompt. Uses SHARED_SYSTEM_PROMPT if None.
         tool_definitions: Optional custom tool definitions. Uses TOOL_DEFINITIONS if None.
+        prompt_id: Prompt template identifier (e.g., "guest-search").
+        prompt_version: Prompt version number.
 
     Returns:
         (response_text, was_cached) tuple.
     """
+    from app.services.cache_key_builder import build_cache_key
     from app.services.llm import TOOL_DEFINITIONS, SHARED_SYSTEM_PROMPT, get_llm_config
     from app.services.tool_calling import TOOL_EXECUTORS
 
@@ -646,17 +853,18 @@ def _call_llm_impl(
 
     response_logger = _get_logger()
     cache = _get_cache()
+    tool_cache = _get_tool_call_cache()
 
-    # Generate cache key from the raw user message (customer name)
+    # Generate cache key from the raw user message (customer name) - legacy
     cache_key = generate_cache_key(user_message)
 
     logger.info(
         f"[TOOL_CALL] Starting call_llm_with_db_tools | "
         f"user_msg_preview={user_message[:100]}... | "
-        f"cache_key={cache_key[:12]}... | use_cache={use_cache}"
+        f"cache_key={cache_key[:12]}... | prompt_id={prompt_id} v{prompt_version} | model={model_name} | use_cache={use_cache}"
     )
 
-    # --- Cache hit: return immediately ---
+    # --- Legacy cache hit: return immediately ---
     if use_cache:
         cached_entry = cache.get(cache_key)
         if cached_entry is not None:
@@ -676,6 +884,14 @@ def _call_llm_impl(
         {"role": "system", "content": effective_system_prompt},
         {"role": "user", "content": user_message},
     ]
+
+    # Track if any tool call was cached (for was_cached return value)
+    any_tool_cached = False
+
+    # Track all structured tool cache keys used during execution.
+    # This is used to build a deterministic response cache key that is
+    # independent of the input language/format (e.g., "أحمد" vs "Ahmed").
+    used_tool_cache_keys: list[str] = []
 
     # Generate conversation hash for diagnostic logging
     conversation_hash = response_logger.generate_conversation_hash(messages, effective_tool_definitions)
@@ -730,7 +946,7 @@ def _call_llm_impl(
             # No more tool calls - this is the final response
             final_result = assistant_message.content or "The LLM returned an empty response."
 
-            # Store in cache
+            # Store in legacy cache (for backward compatibility)
             if use_cache:
                 cache.set(cache_key, final_result)
                 logger.info(
@@ -738,12 +954,17 @@ def _call_llm_impl(
                     f"response_len={len(final_result)} | ttl={cache.ttl}s"
                 )
 
+                # Also store in structured response cache
+                _store_structured_response(
+                    cache, used_tool_cache_keys, prompt_id, prompt_version, model_name, final_result, use_cache
+                )
+
             # Log final response
             response_logger.log_final_response(
                 conversation_hash, user_message, final_result, turn
             )
 
-            return final_result, False
+            return final_result, any_tool_cached or use_cache and cache.get(cache_key) is not None
 
         # Append assistant message to conversation
         messages.append(assistant_message)  # type: ignore[arg-type]
@@ -754,21 +975,65 @@ def _call_llm_impl(
             func_args = json.loads(tool_call.function.arguments)  # type: ignore[attr-defined]
             call_id = tool_call.id
 
-            # Log tool result before execution
-            logger.info(
-                f"[TOOL_CALL] Turn {turn} EXECUTING | "
-                f"call_id={call_id} | func={func_name} | args={func_args}"
-            )
+            # --- Structured cache key for this tool call ---
+            try:
+                tool_cache_key = build_cache_key(
+                    tool_name=func_name,
+                    params=func_args,
+                    prompt_id=prompt_id,
+                    prompt_version=prompt_version,
+                    model_name=model_name,
+                )
+                tool_cache_key_preview = tool_cache_key[:12]
+            except Exception as e:
+                # If cache key generation fails, fall through to direct execution
+                tool_cache_key = None
+                tool_cache_key_preview = f"ERROR:{e}"
 
-            # Execute the tool
-            if func_name in TOOL_EXECUTORS:
-                try:
-                    result = TOOL_EXECUTORS[func_name](func_args)
-                except Exception as e:
-                    result = f"Error executing {func_name}: {str(e)}"
-                    response_logger.log_error(e, context=f"tool_execution:{func_name}")
+            # Check structured cache for this tool call
+            cached_tool_result = None
+            if use_cache and tool_cache_key:
+                cached_tool_result = tool_cache.get(tool_cache_key)
+                if cached_tool_result is not None:
+                    logger.info(
+                        f"[TOOL-CACHE] HIT for key={tool_cache_key_preview}... | "
+                        f"tool={func_name} | args_preview={str(func_args)[:50]} | "
+                        f"result_len={len(cached_tool_result.result)}"
+                    )
+                    any_tool_cached = True
+                # ALWAYS track tool cache keys (both hits and misses) for structured response cache.
+                # This ensures the response cache key accurately represents the data accessed,
+                # enabling cache hits for different user messages that access the same data
+                # (e.g., "Ahmed" vs "أحمد" querying the same guests).
+                used_tool_cache_keys.append(tool_cache_key)
+
+            if cached_tool_result is not None:
+                # Use cached tool result
+                result = cached_tool_result.result
             else:
-                result = f"Unknown tool: {func_name}"
+                # Log tool result before execution
+                logger.info(
+                    f"[TOOL_CALL] Turn {turn} EXECUTING | "
+                    f"call_id={call_id} | func={func_name} | args={func_args} | cache={'MISS' if tool_cache_key else 'SKIPPED'}"
+                )
+
+                # Execute the tool
+                if func_name in TOOL_EXECUTORS:
+                    try:
+                        result = TOOL_EXECUTORS[func_name](func_args)
+                    except Exception as e:
+                        result = f"Error executing {func_name}: {str(e)}"
+                        response_logger.log_error(e, context=f"tool_execution:{func_name}")
+                else:
+                    result = f"Unknown tool: {func_name}"
+
+                # Store in structured cache
+                if use_cache and tool_cache_key:
+                    tool_cache.set(tool_cache_key, result)
+                    logger.info(
+                        f"[TOOL-CACHE] STORED for key={tool_cache_key_preview}... | "
+                        f"tool={func_name} | result_len={len(result)}"
+                    )
 
             # Log tool result
             response_logger.log_tool_result(
@@ -784,11 +1049,50 @@ def _call_llm_impl(
                 }
             )
 
+        # After all tool calls in this turn complete, check if we can skip
+        # remaining LLM turns by looking up a cached response.
+        # This works because:
+        # 1. All tool results are now deterministic (either cached or freshly computed)
+        # 2. The conversation state (messages) fully determines the LLM's next response
+        # 3. If we've seen this exact conversation state before, the response will be the same
+        if use_cache and used_tool_cache_keys:
+            # Build a response cache key from the accumulated tool cache keys
+            # This represents the "data shape" of the conversation so far
+            pre_response_cache_key = _build_response_cache_key(
+                used_tool_cache_keys, prompt_id, prompt_version, model_name
+            )
+            pre_response_cache_key_preview = pre_response_cache_key[:12]
+
+            # Check if we already have a cached response for this data shape
+            cached_response_entry = cache.get(pre_response_cache_key)
+            if cached_response_entry is not None:
+                logger.info(
+                    f"[CACHE] PRE-FINAL HIT for key={pre_response_cache_key_preview}... | "
+                    f"tools_used={len(used_tool_cache_keys)} | "
+                    f"skipping remaining LLM turns | "
+                    f"response_len={len(cached_response_entry.response)}"
+                )
+                # Return the cached response directly - skip all remaining LLM calls
+                final_result = cached_response_entry.response
+
+                # Log final response
+                response_logger.log_final_response(
+                    conversation_hash, user_message, final_result, turn
+                )
+
+                return final_result, True
+
     # If we exhausted max_turns
     final_result = (
         f"The request exceeded the maximum of {max_turns} turns. "
         f"Please simplify your request."
     )
+
+    # Build structured response cache key from tool cache keys
+    _store_structured_response(
+        cache, used_tool_cache_keys, prompt_id, prompt_version, model_name, final_result, use_cache
+    )
+
     response_logger.log_final_response(
         conversation_hash, user_message, final_result, max_turns
     )
@@ -798,7 +1102,7 @@ def _call_llm_impl(
         f"max_turns={max_turns}. The conversation may be stuck in a tool-call loop."
     )
 
-    return final_result, False
+    return final_result, any_tool_cached
 
 
 def call_llm_with_db_tools(
@@ -808,6 +1112,8 @@ def call_llm_with_db_tools(
     use_cache: bool = True,
     system_prompt: str | None = None,
     tool_definitions: list[dict] | None = None,
+    prompt_id: str = "default",
+    prompt_version: int = 1,
 ) -> str:
     """
     Call the LLM with database tools and handle the tool calling loop.
@@ -816,9 +1122,9 @@ def call_llm_with_db_tools(
     that adds diagnostic logging and transparent response caching.
 
     Caching behavior:
-        - Cache key = SHA256(normalized user_message)
-        - Cache is checked BEFORE calling the LLM
-        - Cache is stored AFTER a successful response
+        - Legacy cache key = SHA256(normalized user_message)
+        - Tool cache key = SHA256(model_identifier:resource_identifier:prompt_id:prompt_version:model_name)
+        - Cache is checked BEFORE each tool execution
         - TTL = 3600 seconds (1 hour) by default
 
     Args:
@@ -828,6 +1134,8 @@ def call_llm_with_db_tools(
         use_cache: If True, check cache before LLM call and store result after (default True)
         system_prompt: Optional custom system prompt. Uses SHARED_SYSTEM_PROMPT if None.
         tool_definitions: Optional custom tool definitions. Uses TOOL_DEFINITIONS if None.
+        prompt_id: Prompt template identifier (e.g., "guest-search"). Affects cache key.
+        prompt_version: Prompt version number. Affects cache key.
 
     Returns:
         The final response text from the LLM (possibly from cache)
@@ -835,8 +1143,11 @@ def call_llm_with_db_tools(
     Examples:
         >>> response = call_llm_with_db_tools("Show me all special guests")
         >>> response = call_llm_with_db_tools("John Doe", use_cache=False)  # bypass cache
+        >>> response = call_llm_with_db_tools("Ahmed", prompt_id="guest-search", prompt_version=1)
     """
-    result, _ = _call_llm_impl(user_message, model, max_turns, use_cache, system_prompt, tool_definitions)
+    result, _ = _call_llm_impl(
+        user_message, model, max_turns, use_cache, system_prompt, tool_definitions, prompt_id, prompt_version
+    )
     return result
 
 
@@ -847,6 +1158,8 @@ def call_llm_with_db_tools_with_cache_flag(
     use_cache: bool = True,
     system_prompt: str | None = None,
     tool_definitions: list[dict] | None = None,
+    prompt_id: str = "default",
+    prompt_version: int = 1,
 ) -> tuple[str, bool]:
     """
     Call the LLM with database tools and caching.
@@ -868,5 +1181,9 @@ def call_llm_with_db_tools_with_cache_flag(
         use_cache: If True, check cache before LLM call
         system_prompt: Optional custom system prompt
         tool_definitions: Optional custom tool definitions
+        prompt_id: Prompt template identifier (affects cache key)
+        prompt_version: Prompt version number (affects cache key)
     """
-    return _call_llm_impl(user_message, model, max_turns, use_cache, system_prompt, tool_definitions)
+    return _call_llm_impl(
+        user_message, model, max_turns, use_cache, system_prompt, tool_definitions, prompt_id, prompt_version
+    )
