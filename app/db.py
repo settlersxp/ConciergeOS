@@ -14,7 +14,7 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 # Paths
 # ---------------------------------------------------------------------------
 _PROJECT_ROOT = Path(os.path.dirname(os.path.abspath(__file__))).parent
-DB_NAME = "hotel.db"
+DB_NAME = "database.db"
 DB_PATH = str(_PROJECT_ROOT / DB_NAME)
 
 # ---------------------------------------------------------------------------

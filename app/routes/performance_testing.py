@@ -10,8 +10,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.db import SessionLocal
-from app.db_performance import get_performance_db
+from app.db import SessionLocal, get_db
 from app.models import Guest, PerformanceTestResult, Reservation, Room
 from app.schemas import (
     DeleteBatchResponse,
@@ -37,7 +36,7 @@ router = APIRouter()
 
 logger = logging.getLogger(__name__)
 
-_DATABASE_PATH = Path(__file__).resolve().parent.parent.parent / "performance_tests.db"
+_DATABASE_PATH = Path(__file__).resolve().parent.parent.parent / "database.db"
 
 
 # ── Run Performance Tests ────────────────────────────────────────────────────
@@ -107,7 +106,7 @@ async def api_run_performance_testing(body: PerformanceTestRequest) -> dict[str,
 
 @router.get("/api/performance-testing/results")
 async def api_get_performance_results(
-    db: Session = Depends(get_performance_db),
+    db: Session = Depends(get_db),
 ) -> list[PerformanceTestResultSchema]:
     """Get the latest test results from the database."""
     rows = (
@@ -125,7 +124,7 @@ async def api_get_performance_results(
 
 @router.get("/api/performance-testing/all-results")
 async def api_get_all_performance_results(
-    db: Session = Depends(get_performance_db),
+    db: Session = Depends(get_db),
 ) -> list[PerformanceTestResultSchema]:
     """Get all test results from the database (no limit)."""
     rows = (
@@ -144,7 +143,7 @@ async def api_get_all_performance_results(
 
 @router.get("/api/performance-testing/batches")
 async def api_get_performance_batches(
-    db: Session = Depends(get_performance_db),
+    db: Session = Depends(get_db),
 ) -> list[PerformanceTestBatchSchema]:
     """Get all unique test batches with their UUID and friendly name."""
     rows = (
@@ -173,7 +172,7 @@ async def api_get_performance_batches(
 @router.get("/api/performance-testing/results-by-batch")
 async def api_get_results_by_batch(
     batch_uuid: str,
-    db: Session = Depends(get_performance_db),
+    db: Session = Depends(get_db),
 ) -> list[PerformanceTestResultSchema]:
     """Get test results for a specific batch identified by UUID."""
     rows = (
@@ -192,7 +191,7 @@ async def api_get_results_by_batch(
 async def api_update_valid_response(
     result_id: int,
     body: UpdateValidResponseRequest,
-    db: Session = Depends(get_performance_db),
+    db: Session = Depends(get_db),
 ) -> UpdateValidResponseResponse:
     """Update the valid_response flag for a specific test result."""
     result = (
@@ -299,7 +298,7 @@ async def api_generate_all() -> GenerateAllResponse:
 @router.delete("/api/performance-testing/batch/{batch_uuid}")
 async def api_delete_batch(
     batch_uuid: str,
-    db: Session = Depends(get_performance_db),
+    db: Session = Depends(get_db),
 ) -> DeleteBatchResponse:
     """Delete all test results for a specific batch identified by UUID."""
     deleted_count = (
@@ -542,7 +541,7 @@ def _validate_single_pair(
 @router.post("/api/performance-testing/validate-guests")
 async def api_validate_guests(
     body: ValidateGuestsRequest,
-    db: Session = Depends(get_performance_db),
+    db: Session = Depends(get_db),
 ) -> ValidateGuestsResponse:
     """Validate that all test guests are correctly found in a batch's test responses."""
 
@@ -666,7 +665,7 @@ async def api_validate_guests(
 async def api_update_identifier(
     result_id: int,
     body: UpdateIdentifierRequest,
-    db: Session = Depends(get_performance_db),
+    db: Session = Depends(get_db),
 ) -> UpdateIdentifierResponse:
     """Update the identifier for a specific test result."""
     result = (
@@ -694,7 +693,7 @@ async def api_update_identifier(
 @router.post("/api/performance-testing/batch/{batch_uuid}/populate-identifiers")
 async def api_populate_identifiers(
     batch_uuid: str,
-    db: Session = Depends(get_performance_db),
+    db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """Populate identifiers for all results in a batch by mapping request_index to guest names."""
     hotel_db = SessionLocal()

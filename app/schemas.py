@@ -119,6 +119,8 @@ class GuestSearchRequest(BaseModel):
     """Request body for searching a guest by name."""
 
     customer_name: str = Field(..., description="Full or partial name of the customer to search for")
+    prompt_id: str = Field(default="guest-search", description="Prompt ID to use for the LLM query")
+    version: int | None = Field(default=None, description="Prompt version (uses default if None)")
 
 
 class GuestSearchResponse(BaseModel):
@@ -128,6 +130,72 @@ class GuestSearchResponse(BaseModel):
     llm_response: str
     cached: bool = False
     """Indicates whether the response was served from cache (True) or generated fresh (False)."""
+
+
+# ---------------------------------------------------------------------------
+# Prompt versioning schemas
+# ---------------------------------------------------------------------------
+
+class PromptVersionSchema(BaseModel):
+    """Output schema for a single prompt version."""
+
+    id: int
+    prompt_id: str
+    version: int
+    name: str
+    intention: str
+    restrictions: str
+    output_structure: str
+    user_prompt_template: str
+    is_default: bool
+    metadata: dict | None = None
+    created_at: str
+    updated_at: str
+
+    model_config = {"from_attributes": True}
+
+
+class PromptSummarySchema(BaseModel):
+    """Summary for listing prompt IDs."""
+
+    prompt_id: str
+    default_version: int
+    version_count: int
+    name: str
+
+
+class CreatePromptRequest(BaseModel):
+    """Request body for creating a new prompt (v1)."""
+
+    name: str
+    intention: str
+    restrictions: str
+    output_structure: str
+    user_prompt_template: str
+    metadata: dict | None = None
+
+
+class UpdatePromptRequest(BaseModel):
+    """Request body for updating an existing prompt version."""
+
+    name: str | None = None
+    intention: str | None = None
+    restrictions: str | None = None
+    output_structure: str | None = None
+    user_prompt_template: str | None = None
+    metadata: dict | None = None
+
+
+class DuplicatePromptRequest(BaseModel):
+    """Request body for duplicating a prompt version."""
+
+    name: str | None = None
+
+
+class SetDefaultRequest(BaseModel):
+    """Request body for setting the default prompt version."""
+
+    version: int
 
 
 # ---------------------------------------------------------------------------

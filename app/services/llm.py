@@ -568,15 +568,25 @@ def fetch_all_as_xml() -> str:
     return _fetch_and_save("xml")
 
 
-def query_guest_with_llm(customer_name: str) -> tuple[str, bool]:
+def query_guest_with_llm(
+    customer_name: str,
+    prompt_id: str = "guest-search",
+    version: int | None = None,
+) -> tuple[str, bool]:
     """
     Query the LLM for all information about a given guest using tool calling.
-    
+
     This function uses the tool calling loop to allow the LLM to query the database
     directly via tools like query_guests, query_reservations, etc.
-    
+
+    If prompt_id is provided, resolves the prompt template from the PromptStore.
+    Falls back to hardcoded behavior if no prompt is found.
+
+    The system prompt is composed from: intention + restrictions + output_structure
+    The user message is composed from: user_prompt_template with {customer_name} replaced.
+
     Uses lazy import to avoid circular import with tool_calling module.
-    
+
     Returns:
         A tuple of (llm_response, was_cached) where was_cached is True if the
         response was served from the cache.
@@ -584,9 +594,31 @@ def query_guest_with_llm(customer_name: str) -> tuple[str, bool]:
     # Use response_cache wrapper for diagnostic logging and caching support.
     # This captures finish_reason, token usage, truncation warnings, and response checksums.
     # To enable: ensure response_cache.py log_level is set appropriately (INFO or DEBUG)
+    from app.services.prompts import PromptStore
     from app.services.response_cache import call_llm_with_db_tools_with_cache_flag
-    
-    user_prompt = f"Please find all information about the guest named. The guest's name can have it's name translated into the following languages Arabic, Chinese, Devanagari, Japanese, Jorean, Latin or Nordic. It is unclear if is the user's first name or last name. Retry once with every translated language if needed. Also bring the information about its reservations. : {customer_name}"
+
+    store = PromptStore()
+
+    try:
+        system_prompt_text, user_template = store.resolve_prompt(prompt_id, version)
+        if system_prompt_text:
+            # Use resolved prompt: combine stored system prompt with SHARED_SYSTEM_PROMPT
+            # The stored intention may already contain the base system instructions
+            final_system = system_prompt_text
+        else:
+            final_system = SHARED_SYSTEM_PROMPT
+        user_prompt = user_template.replace("{customer_name}", customer_name)
+    except ValueError:
+        # Prompt not found — fall back to legacy hardcoded behavior
+        final_system = SHARED_SYSTEM_PROMPT
+        user_prompt = (
+            f"Please find all information about the guest named. "
+            f"The guest's name can have it's name translated into the following languages "
+            f"Arabic, Chinese, Devanagari, Japanese, Korean, Latin or Nordic. "
+            f"It is unclear if is the user's first name or last name. "
+            f"Retry once with every translated language if needed. "
+            f"Also bring the information about its reservations. : {customer_name}"
+        )
     
     try:
         result, was_cached = call_llm_with_db_tools_with_cache_flag(user_prompt)

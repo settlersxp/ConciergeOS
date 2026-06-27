@@ -4,6 +4,7 @@ import Reservations from './pages/Reservations';
 import GuestSearch from './pages/GuestSearch';
 import PerformanceTesting from './pages/PerformanceTesting';
 import Settings from './pages/Settings';
+import PromptManagement from './pages/PromptManagement';
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
         <Route path="/" element={<Reservations />} />
         <Route path="/guest-search" element={<GuestSearch />} />
         <Route path="/performance-testing" element={<PerformanceTesting />} />
+        <Route path="/prompts" element={<PromptManagement />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </BrowserRouter>

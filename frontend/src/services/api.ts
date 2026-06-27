@@ -41,11 +41,20 @@ export const reservationsApi = {
 
 // ── Guest Search ────────────────────────────────────────────────────────────
 
+export interface GuestSearchOptions {
+  prompt_id?: string;
+  version?: number;
+}
+
 export const guestSearchApi = {
-  search: (customerName: string) =>
+  search: (customerName: string, options?: GuestSearchOptions) =>
     request<GuestSearchResponse>('/api/guest-search', {
       method: 'POST',
-      body: JSON.stringify({ customer_name: customerName }),
+      body: JSON.stringify({
+        customer_name: customerName,
+        prompt_id: options?.prompt_id ?? 'guest-search',
+        version: options?.version,
+      }),
     }),
 };
 

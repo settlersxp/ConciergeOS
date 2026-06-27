@@ -5,7 +5,7 @@ SQLAlchemy ORM models for the hotel database.
 
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, Enum, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -72,14 +72,14 @@ class Reservation(Base):
 
 
 # ---------------------------------------------------------------------------
-# Performance testing model ( lives in performance_tests.db, not hotel.db )
+# Performance testing model (stored in database.db alongside hotel models)
 # ---------------------------------------------------------------------------
 
 class PerformanceTestResult(Base):
-    """Maps to the test_results table in performance_tests.db.
+    """Maps to the test_results table in database.db.
 
-    This model shares the same `Base` as hotel models but is always queried
-    against the *performance* engine via `app.db_performance`.
+    This model shares the same `Base` as hotel models and uses the same
+    engine via `app.db`.
     """
 
     __tablename__ = "test_results"
@@ -104,3 +104,34 @@ class PerformanceTestResult(Base):
     response_content: Mapped[str | None] = mapped_column(String, nullable=True)
     valid_response: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     identifier: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# Prompt versioning model (stored in hotel.db)
+# ---------------------------------------------------------------------------
+
+class PromptVersion(Base):
+    """Maps to the prompt_versions table.
+
+    Each prompt is identified by a unique {prompt_id, version} pair and stores
+    the prompt in 4 structured fields that are combined at runtime.
+    """
+
+    __tablename__ = "prompt_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    prompt_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    intention: Mapped[str] = mapped_column(Text, nullable=False)
+    restrictions: Mapped[str] = mapped_column(Text, nullable=False)
+    output_structure: Mapped[str] = mapped_column(Text, nullable=False)
+    user_prompt_template: Mapped[str] = mapped_column(Text, nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    meta_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("prompt_id", "version", name="uq_prompt_version"),
+    )

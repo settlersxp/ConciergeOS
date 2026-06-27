@@ -13,6 +13,28 @@ The project consists of two independent applications:
 
 Both applications run independently and communicate via HTTP JSON API calls. The frontend is configured to proxy API requests to the backend.
 
+## Database Migrations
+
+This project uses [Alembic](https://alembic.sqlalchemy.org/) for database schema migrations. The database schema is defined in `app/models.py` and migrations are managed via Alembic.
+
+### Common Commands
+
+```bash
+alembic upgrade head              # Apply all pending migrations
+alembic downgrade -1              # Revert last migration
+alembic revision --autogenerate -m "description"  # Generate new migration from model changes
+alembic head                      # Show current head revision
+alembic history                   # Show migration history
+alembic current                   # Show current migration version
+```
+
+### Migration Workflow
+
+1. Modify models in `app/models.py`
+2. Generate migration: `alembic revision --autogenerate -m "description"`
+3. Review the generated migration file in `alembic/versions/`
+4. Apply: `alembic upgrade head`
+
 ## Core Features
 
 ### Reservation Management
@@ -60,8 +82,8 @@ Exported files are saved to the `data/` directory and can be regenerated on dema
 
 ```
 ConciergeOS/
-├── create_hotel_db.py                  # SQLite database initialization
-├── pyproject.toml                      # Project metadata & dependencies
+├── alembic.ini                       # Alembic database migration configuration
+├── pyproject.toml                    # Project metadata & dependencies
 ├── app/                                # FastAPI backend (REST API only)
 │   ├── config.json                     # Persistent configuration (auto-generated)
 │   ├── config.py                       # Configuration management
@@ -118,7 +140,7 @@ ConciergeOS/
 │   ├── db.py                           # Results database (SQLite)
 │   ├── run_performance_tests.py        # Test runner (sequential & concurrent)
 │   └── manual_performance_analysis.sql # SQL queries for manual analysis
-└── performance_tests.db                # Performance test results (auto-created)
+└── database.db                         # Application database (auto-created by Alembic)
 ```
 
 ## API Endpoints
@@ -179,17 +201,7 @@ Booking source is determined by room channel: `WALK_IN` for ON_SITE_ONLY, random
 
 ## Data Generation
 
-### Generator Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `generate_names.py` | Generate ~50 names per alphabet (400 total) across 8 writing systems |
-| `generate_rooms.py` | Create room definitions (~205 rooms across 3 wings) as `rooms.json` |
-| `populate_rooms.py` | Insert generated rooms into the database |
-| `populate_reservations.py` | Create realistic guest and reservation data with weighted status distribution and intentional name collisions |
-| `shift_reservations.py` | Shift all reservation dates by N days forward or backward |
-| `setup_errors.py` | Inject controlled status/date errors into existing reservations |
-| `setup_performance_guests.py` | Create 13 dedicated test guests with 4 reservations each for benchmarking |
+For detailed instructions on populating a new database, see [Generator/DATABASE_POPULATION.md](Generator/DATABASE_POPULATION.md).
 
 ## Quick Start
 
@@ -197,7 +209,8 @@ Booking source is determined by room channel: `WALK_IN` for ON_SITE_ONLY, random
 - Python 3.12+
 - Node.js 18+
 - SQLite 3 (built into Python standard library)
-- Python dependencies: `fastapi`, `openai`, `pydantic`, `requests`, `sqlalchemy`, `uvicorn`, `httpx`
+- Alembic (for database migrations)
+- Python dependencies: `fastapi`, `openai`, `pydantic`, `requests`, `sqlalchemy`, `uvicorn`, `httpx`, `alembic`
 
 Install with:
 ```bash
@@ -208,31 +221,16 @@ uv pip install -e .
 
 ### Setup
 
-#### 1. Initialize the Database
-```bash
-python create_hotel_db.py [--recreate]
-```
-Creates `hotel.db` with tables for Rooms, Guests, and Reservations. Use `--recreate` to start fresh.
+For the complete step-by-step setup sequence with all commands and explanations, see [Generator/DATABASE_POPULATION.md](Generator/DATABASE_POPULATION.md).
 
-#### 2. Generate Name Data
+Quick reference:
 ```bash
-python Generator/generate_names.py
-```
-
-#### 3. Generate and Populate Rooms
-```bash
-python Generator/generate_rooms.py
-python Generator/populate_rooms.py
-```
-
-#### 4. Populate Guests and Reservations
-```bash
-python Generator/populate_reservations.py
-```
-
-#### 5. (Optional) Setup Performance Test Guests
-```bash
-python Generator/setup_performance_guests.py
+alembic upgrade head                                            # 1. Initialize database via Alembic
+python Generator/generate_names.py                              # 2. Generate name data
+python Generator/generate_rooms.py && python Generator/populate_rooms.py  # 3. Populate rooms
+python Generator/populate_reservations.py                       # 4. Populate guests & reservations
+python Generator/setup_performance_guests.py                    # 5. (Optional) Performance test guests
+python Generator/setup_errors.py                                # 6. (Optional) Inject errors for testing
 ```
 
 ### Running the Application
@@ -249,20 +247,6 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 Open `http://localhost:5173` in your browser. The frontend will automatically proxy API requests to `http://localhost:8000`.
 
-### Utility Scripts
-
-#### Shift Reservation Dates
-```bash
-python Generator/shift_reservations.py              # Shift by 1 day (default)
-python Generator/shift_reservations.py --days 3     # Shift forward by 3 days
-python Generator/shift_reservations.py --days -2    # Shift backward by 2 days
-```
-
-#### Inject Controlled Errors (for testing)
-```bash
-python Generator/setup_errors.py
-```
-Finds reservations with name collisions and introduces controlled errors (erroneous statuses and unsynchronized dates). Affected IDs are persisted to `Generator/erroneous_reservations.json`.
 
 ## License
 

@@ -2,12 +2,16 @@ import { useState } from "react";
 import { guestSearchApi } from "../services/api";
 import type { GuestSearchResponse } from "../types";
 import { PageHeader, Card, FormField, Input, Button, Toast } from "../components/ui";
+import PromptSelector from "../components/ui/PromptSelector";
 
 export default function GuestSearch() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<GuestSearchResponse | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  const [selectedPrompt, setSelectedPrompt] = useState<{ prompt_id: string; version?: number }>({
+    prompt_id: "guest-search",
+  });
 
   const handleSearch = async () => {
     if (!query.trim()) {
@@ -17,7 +21,10 @@ export default function GuestSearch() {
     setLoading(true);
     setResult(null);
     try {
-      const data = await guestSearchApi.search(query);
+      const data = await guestSearchApi.search(query, {
+        prompt_id: selectedPrompt.prompt_id,
+        version: selectedPrompt.version,
+      });
       setResult(data);
     } catch (e: unknown) {
       setToast({ message: e instanceof Error ? e.message : "Search failed", type: "error" });
@@ -38,6 +45,15 @@ export default function GuestSearch() {
       />
 
       <Card>
+        <div className="mt-4">
+          <PromptSelector
+            promptId="guest-search"
+            value={selectedPrompt}
+            onChange={setSelectedPrompt}
+            label="Prompt Version"
+          />
+        </div>
+
         <div className="mt-4">
           <FormField htmlFor="guestQuery" label="Customer Name">
             <Input
