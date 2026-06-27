@@ -45,7 +45,14 @@ class HttpCacheMiddleware:
     - Bypasses cache if Cache-Control: no-cache header is present
     - Adds X-Cache header: "HIT" or "MISS"
     - Default TTL = 3600 seconds (1 hour)
+    - Skips caching for paths in _CACHE_EXCLUSION_PREFIXES
     """
+
+    # API paths that should never be cached (extendable by adding prefixes)
+    _CACHE_EXCLUSION_PREFIXES: tuple[str, ...] = (
+        "/api/prompts",
+        "/api/performance-testing/batches"
+    )
 
     def __init__(self, app: ASGIApp, ttl: int = 3600) -> None:
         self.app = app
@@ -68,6 +75,11 @@ class HttpCacheMiddleware:
         # Build full URL for cache key generation
         path = request.url.path
         query = request.url.query
+
+        # Skip caching for excluded paths
+        if any(path.startswith(prefix) for prefix in self._CACHE_EXCLUSION_PREFIXES):
+            await self.app(scope, receive, send)
+            return
         full_url = f"{request.url.scheme}://{request.url.netloc}{path}"
         if query:
             full_url += f"?{query}"

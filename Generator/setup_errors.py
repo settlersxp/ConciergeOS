@@ -16,21 +16,31 @@ across 2+ different rooms (name collisions) and introduces controlled errors:
 Console output displays the before/after for each affected reservation.
 IDs are persisted to erroneous_reservations.json for daily reuse.
 
+Uses SQLAlchemy ORM models from the app package.
+
 Usage:
     python Generator/setup_errors.py
 """
 
 import json
 import os
-import sqlite3
 import sys
-from datetime import date, timedelta
+from datetime import date
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.enums import ReservationStatus
-from utils import BASE_DIR, DB_PATH, init_connection
+from app.db import SessionLocal
+from app.enums import BookingSource, ReservationStatus
+from app.models import Guest, Reservation
+from sqlalchemy.orm import Session
+from utils import (
+    BASE_DIR,
+    DB_PATH,
+    is_checked_in_type,
+    is_confirmed_type,
+    is_checked_out_type,
+)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -49,18 +59,21 @@ EXCLUDED_RESERVATION_IDS: List[int] = [
 # ---------------------------------------------------------------------------
 VALID_STATUSES = tuple(s.value for s in ReservationStatus)
 
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def fetch_collision_reservation_ids(conn: sqlite3.Connection) -> List[int]:
+def fetch_collision_reservation_ids(db: Session) -> List[int]:
     """
     Return reservation_ids that belong to guests whose (first_name, last_name)
     appears on reservations in 2+ different rooms.
 
     These are the name-collision reservations created by populate_reservations.py.
     """
-    query = """
+    from sqlalchemy import text
+
+    result = db.execute(text("""
         SELECT DISTINCT r.reservation_id
         FROM Reservations r
         JOIN Guests g ON r.guest_id = g.guest_id
@@ -73,56 +86,32 @@ def fetch_collision_reservation_ids(conn: sqlite3.Connection) -> List[int]:
               AND r2.room_id <> r.room_id
         )
         ORDER BY r.reservation_id
-    """
-    cursor = conn.execute(query)
-    return [row[0] for row in cursor.fetchall()]
+    """))
+    return [row[0] for row in result.fetchall()]
 
 
-def fetch_reservation_details(conn: sqlite3.Connection, reservation_id: int) -> Optional[Dict[str, Any]]:
+def fetch_reservation_details(db: Session, reservation_id: int) -> Optional[Dict[str, Any]]:
     """Return full reservation row as a dict, or None if not found."""
-    query = """
-        SELECT r.reservation_id, r.room_id, r.guest_id, r.check_in_date, r.check_out_date,
-               r.status, r.booking_source, g.first_name, g.last_name
-        FROM Reservations r
-        JOIN Guests g ON r.guest_id = g.guest_id
-        WHERE r.reservation_id = ?
-    """
-    cursor = conn.execute(query, (reservation_id,))
-    row = cursor.fetchone()
-    if not row:
+    reservation = (
+        db.query(Reservation)
+        .filter(Reservation.reservation_id == reservation_id)
+        .first()
+    )
+    if not reservation:
         return None
+
+    guest = reservation.guest
     return {
-        "reservation_id": cast(int, row[0]),
-        "room_id": cast(int, row[1]),
-        "guest_id": cast(int, row[2]),
-        "check_in_date": cast(str, row[3]),
-        "check_out_date": cast(str, row[4]),
-        "status": cast(str, row[5]),
-        "booking_source": cast(str, row[6]),
-        "first_name": cast(str, row[7]),
-        "last_name": cast(str, row[8]),
+        "reservation_id": reservation.reservation_id,
+        "room_id": reservation.room_id,
+        "guest_id": reservation.guest_id,
+        "check_in_date": reservation.check_in_date.isoformat() if isinstance(reservation.check_in_date, date) else str(reservation.check_in_date),
+        "check_out_date": reservation.check_out_date.isoformat() if isinstance(reservation.check_out_date, date) else str(reservation.check_out_date),
+        "status": reservation.status.value if isinstance(reservation.status, ReservationStatus) else str(reservation.status),
+        "booking_source": reservation.booking_source.value if isinstance(reservation.booking_source, BookingSource) else str(reservation.booking_source),
+        "first_name": guest.first_name,
+        "last_name": guest.last_name,
     }
-
-
-def is_checked_in_type(check_in_date: str, check_out_date: str, today: date) -> bool:
-    """check_in is in the past, check_out is today or in the future → naturally CHECKED_IN."""
-    ci = date.fromisoformat(check_in_date)
-    co = date.fromisoformat(check_out_date)
-    return ci < today and co >= today
-
-
-def is_confirmed_type(check_in_date: str, check_out_date: str, today: date) -> bool:
-    """check_in is today, check_out is in the future → naturally CONFIRMED."""
-    ci = date.fromisoformat(check_in_date)
-    co = date.fromisoformat(check_out_date)
-    return ci == today and co > today
-
-
-def is_checked_out_type(check_in_date: str, check_out_date: str, today: date) -> bool:
-    """Both dates in the past → naturally CHECKED_OUT."""
-    ci = date.fromisoformat(check_in_date)
-    co = date.fromisoformat(check_out_date)
-    return ci < today and co < today
 
 
 # ---------------------------------------------------------------------------
@@ -149,9 +138,9 @@ class ErrorRecord:
         )
 
 
-def apply_errors(conn: sqlite3.Connection,
-                  collision_ids: List[int],
-                  today: date) -> Tuple[List[ErrorRecord], List[ErrorRecord]]:
+def apply_errors(db: Session,
+                 collision_ids: List[int],
+                 today: date) -> Tuple[List[ErrorRecord], List[ErrorRecord]]:
     """
     Pick up to 4 collision reservations and introduce errors:
       - 2 erroneous statuses
@@ -159,6 +148,8 @@ def apply_errors(conn: sqlite3.Connection,
 
     Returns (status_errors, date_errors).
     """
+    from typing import List, Tuple
+
     excluded_set = set(EXCLUDED_RESERVATION_IDS)
     candidates = [rid for rid in collision_ids if rid not in excluded_set]
 
@@ -174,12 +165,15 @@ def apply_errors(conn: sqlite3.Connection,
     for rid in candidates:
         if rid in used_ids:
             continue
-        rec = fetch_reservation_details(conn, rid)
+        rec = fetch_reservation_details(db, rid)
         if not rec:
             continue
         if rec["status"] == ReservationStatus.CHECKED_IN.value and is_checked_in_type(cast(str, rec["check_in_date"]), cast(str, rec["check_out_date"]), today):
             old_status = cast(str, rec["status"])
-            conn.execute("UPDATE Reservations SET status = ? WHERE reservation_id = ?", (ReservationStatus.CANCELLED.value, rid))
+            reservation = db.query(Reservation).filter(Reservation.reservation_id == rid).first()
+            if reservation:
+                reservation.status = ReservationStatus.CANCELLED
+                db.commit()
             status_errors.append(ErrorRecord(
                 reservation_id=rid, error_type="status",
                 field="status", before=old_status, after=ReservationStatus.CANCELLED.value,
@@ -193,12 +187,15 @@ def apply_errors(conn: sqlite3.Connection,
     for rid in candidates:
         if rid in used_ids:
             continue
-        rec = fetch_reservation_details(conn, rid)
+        rec = fetch_reservation_details(db, rid)
         if not rec:
             continue
         if rec["status"] == ReservationStatus.CONFIRMED.value and is_confirmed_type(cast(str, rec["check_in_date"]), cast(str, rec["check_out_date"]), today):
             old_status = cast(str, rec["status"])
-            conn.execute("UPDATE Reservations SET status = ? WHERE reservation_id = ?", (ReservationStatus.CHECKED_OUT.value, rid))
+            reservation = db.query(Reservation).filter(Reservation.reservation_id == rid).first()
+            if reservation:
+                reservation.status = ReservationStatus.CHECKED_OUT
+                db.commit()
             status_errors.append(ErrorRecord(
                 reservation_id=rid, error_type="status",
                 field="status", before=old_status, after=ReservationStatus.CHECKED_OUT.value,
@@ -213,12 +210,15 @@ def apply_errors(conn: sqlite3.Connection,
         for rid in candidates:
             if rid in used_ids:
                 continue
-            rec = fetch_reservation_details(conn, rid)
+            rec = fetch_reservation_details(db, rid)
             if not rec:
                 continue
             if rec["status"] == ReservationStatus.CHECKED_IN.value and is_checked_in_type(cast(str, rec["check_in_date"]), cast(str, rec["check_out_date"]), today):
                 old_status = cast(str, rec["status"])
-                conn.execute("UPDATE Reservations SET status = ? WHERE reservation_id = ?", (ReservationStatus.CHECKED_OUT.value, rid))
+                reservation = db.query(Reservation).filter(Reservation.reservation_id == rid).first()
+                if reservation:
+                    reservation.status = ReservationStatus.CHECKED_OUT
+                    db.commit()
                 status_errors.append(ErrorRecord(
                     reservation_id=rid, error_type="status",
                     field="status", before=old_status, after=ReservationStatus.CHECKED_OUT.value,
@@ -232,18 +232,19 @@ def apply_errors(conn: sqlite3.Connection,
     for rid in candidates:
         if rid in used_ids:
             continue
-        rec = fetch_reservation_details(conn, rid)
+        rec = fetch_reservation_details(db, rid)
         if not rec:
             continue
         if rec["status"] == ReservationStatus.CHECKED_IN.value and is_checked_in_type(cast(str, rec["check_in_date"]), cast(str, rec["check_out_date"]), today):
             old_checkout = cast(str, rec["check_out_date"])
             # Set check_out to 3 days after check_in (both in the past)
+            from datetime import timedelta
             ci = date.fromisoformat(cast(str, rec["check_in_date"]))
             new_checkout = (ci + timedelta(days=3)).isoformat()
-            conn.execute(
-                "UPDATE Reservations SET check_out_date = ? WHERE reservation_id = ?",
-                (new_checkout, rid),
-            )
+            reservation = db.query(Reservation).filter(Reservation.reservation_id == rid).first()
+            if reservation:
+                reservation.check_out_date = date.fromisoformat(new_checkout)
+                db.commit()
             date_errors.append(ErrorRecord(
                 reservation_id=rid, error_type="date",
                 field="check_out_date", before=old_checkout, after=new_checkout,
@@ -257,19 +258,21 @@ def apply_errors(conn: sqlite3.Connection,
     for rid in candidates:
         if rid in used_ids:
             continue
-        rec = fetch_reservation_details(conn, rid)
+        rec = fetch_reservation_details(db, rid)
         if not rec:
             continue
         if rec["status"] == ReservationStatus.CHECKED_OUT.value and is_checked_out_type(cast(str, rec["check_in_date"]), cast(str, rec["check_out_date"]), today):
             old_checkin = cast(str, rec["check_in_date"])
             # Set check_in to 5 days in the future
+            from datetime import timedelta
             new_checkin = (today + timedelta(days=5)).isoformat()
             # Also adjust check_out to be after the new check_in
             new_checkout = (today + timedelta(days=8)).isoformat()
-            conn.execute(
-                "UPDATE Reservations SET check_in_date = ?, check_out_date = ? WHERE reservation_id = ?",
-                (new_checkin, new_checkout, rid),
-            )
+            reservation = db.query(Reservation).filter(Reservation.reservation_id == rid).first()
+            if reservation:
+                reservation.check_in_date = date.fromisoformat(new_checkin)
+                reservation.check_out_date = date.fromisoformat(new_checkout)
+                db.commit()
             date_errors.append(ErrorRecord(
                 reservation_id=rid, error_type="date",
                 field="check_in_date", before=old_checkin, after=new_checkin,
@@ -333,10 +336,10 @@ def main() -> None:
         print("   Please run 'python create_hotel_db.py' first.")
         sys.exit(1)
 
-    conn = init_connection(DB_PATH)
+    db: Session = SessionLocal()
     try:
         # Step 1: Find collision reservations
-        collision_ids = fetch_collision_reservation_ids(conn)
+        collision_ids = fetch_collision_reservation_ids(db)
         print(f"🔍 Found {len(collision_ids)} reservation(s) with name collisions.")
 
         if EXCLUDED_RESERVATION_IDS:
@@ -345,14 +348,12 @@ def main() -> None:
                 print(f"🚫 Filtering out {len(filtered)} excluded ID(s): {sorted(filtered)}")
 
         # Step 2: Apply errors
-        status_errors, date_errors = apply_errors(conn, collision_ids, today)
+        status_errors, date_errors = apply_errors(db, collision_ids, today)
 
         if len(status_errors) + len(date_errors) < 4:
             print(f"\n❌ Only created {len(status_errors) + len(date_errors)} error(s) (expected 4).")
             print("   The database may not have enough collision reservations of the required types.")
             sys.exit(1)
-
-        conn.commit()
 
         # Step 3: Print & persist
         print_results(status_errors, date_errors, today)
@@ -361,11 +362,11 @@ def main() -> None:
         print("\n✅ Done.")
 
     except Exception as e:
-        conn.rollback()
+        db.rollback()
         print(f"\n❌ Error: {e}")
         raise
     finally:
-        conn.close()
+        db.close()
 
 
 if __name__ == "__main__":

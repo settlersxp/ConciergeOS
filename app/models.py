@@ -117,7 +117,7 @@ class PromptVersion(Base):
     the prompt in 4 structured fields that are combined at runtime.
     """
 
-    __tablename__ = "prompt_versions"
+    __tablename__ = "PromptVersions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     prompt_id: Mapped[str] = mapped_column(String(100), nullable=False)

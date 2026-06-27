@@ -9,40 +9,35 @@ based on wing:
   - North (N) -> ON_SITE_ONLY
   - East  (E) -> STAFF_ASSIGNMENT
 
+Uses SQLAlchemy ORM models from the app package.
+
 Usage:
     python Generator/populate_rooms.py
 """
 
 import json
 import os
-import sqlite3
-from typing import Any, Tuple
+import sys
 
-from utils import BASE_DIR, DB_PATH, init_connection
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from app.db import SessionLocal
+from app.enums import BookingChannel
+from app.models import Room
+from sqlalchemy.orm import Session
+from utils import (
+    BASE_DIR,
+    get_booking_channel,
+    get_checkin_checkout_times,
+)
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 ROOMS_JSON_PATH = os.path.join(BASE_DIR, "rooms.json")
 
-# Wing-to-channel mapping
-WING_CHANNEL_MAP = {
-    "W": "ANY",
-    "N": "ON_SITE_ONLY",
-    "E": "STAFF_ASSIGNMENT",
-}
 
-# Channel-to-times mapping: (checkin_time, checkout_time)
-# STAFF_ASSIGNMENT rooms use 00:00 for both times
-# Regular rooms: checkin at 15:00, checkout at 09:00
-CHANNEL_TIMES_MAP = {
-    "ANY": ("15:00", "09:00"),
-    "ON_SITE_ONLY": ("15:00", "09:00"),
-    "STAFF_ASSIGNMENT": ("00:00", "00:00"),
-}
-
-
-def load_rooms(json_path: str) -> list[dict[str, Any]]:
+def load_rooms(json_path: str) -> list:
     """Load room data from the generated JSON file."""
     if not os.path.exists(json_path):
         print(f"Error: rooms.json not found at {json_path}")
@@ -56,60 +51,40 @@ def load_rooms(json_path: str) -> list[dict[str, Any]]:
     return rooms
 
 
-def get_booking_channel(wing_code: str) -> str:
-    """Return the allowed_booking_channel for a given wing code."""
-    channel = WING_CHANNEL_MAP.get(wing_code)
-    if channel is None:
-        raise ValueError(f"Unknown wing code: {wing_code}")
-    return channel
-
-
-def get_checkin_checkout_times(channel: str) -> Tuple[str, str]:
-    """Return (checkin_time, checkout_time) for a given booking channel."""
-    times = CHANNEL_TIMES_MAP.get(channel)
-    if times is None:
-        raise ValueError(f"Unknown booking channel: {channel}")
-    return times
-
-
-def populate_rooms(conn: sqlite3.Connection, rooms: list[dict[str, Any]]) -> None:
-    """Insert all rooms into the Rooms table."""
-    cursor = conn.cursor()
-
-    # Prepare insert data: (room_name, allowed_booking_channel, checkin_time, checkout_time)
-    insert_data: list[Tuple[str, str, str, str]] = []
+def populate_rooms(db: Session, rooms: list) -> int:
+    """Insert all rooms into the Rooms table using SQLAlchemy ORM.
+    
+    Returns the number of rooms inserted.
+    """
+    count = 0
     for room in rooms:
         room_name = room["room_number"]
         wing_code = room["wing_code"]
         channel = get_booking_channel(wing_code)
         checkin_time, checkout_time = get_checkin_checkout_times(channel)
-        insert_data.append((room_name, channel, checkin_time, checkout_time))
-
-    # Batch insert using executemany
-    cursor.executemany(
-        "INSERT INTO Rooms (name, allowed_booking_channel, checkin_time, checkout_time) VALUES (?, ?, ?, ?)",
-        insert_data
-    )
-
-    conn.commit()
-    print(f"Inserted {len(insert_data)} rooms into the Rooms table.")
-
-
-def print_summary(conn: sqlite3.Connection) -> None:
-    """Print a summary of rooms per booking channel."""
-    cursor = conn.cursor()
-
-    print("\n--- Room Population Summary ---")
-    for channel in ["ANY", "ON_SITE_ONLY", "STAFF_ASSIGNMENT"]:
-        cursor.execute(
-            "SELECT COUNT(*) FROM Rooms WHERE allowed_booking_channel = ?",
-            (channel,)
+        
+        room_obj = Room(
+            name=room_name,
+            allowed_booking_channel=BookingChannel(channel),
+            checkin_time=checkin_time,
+            checkout_time=checkout_time,
         )
-        count = cursor.fetchone()[0]
-        print(f"  {channel}: {count} rooms")
+        db.add(room_obj)
+        count += 1
 
-    cursor.execute("SELECT COUNT(*) FROM Rooms")
-    total = cursor.fetchone()[0]
+    db.commit()
+    print(f"Inserted {count} rooms into the Rooms table.")
+    return count
+
+
+def print_summary(db: Session) -> None:
+    """Print a summary of rooms per booking channel using SQLAlchemy ORM."""
+    print("\n--- Room Population Summary ---")
+    for channel in [BookingChannel.ANY, BookingChannel.ON_SITE_ONLY, BookingChannel.STAFF_ASSIGNMENT]:
+        count = db.query(Room).filter(Room.allowed_booking_channel == channel).count()
+        print(f"  {channel.value}: {count} rooms")
+
+    total = db.query(Room).count()
     print(f"  Total: {total} rooms")
 
 
@@ -119,34 +94,30 @@ def main():
     if not rooms:
         return
 
-    # Connect to database
-    if not os.path.exists(DB_PATH):
-        print(f"Error: Database not found at {DB_PATH}")
-        print("Please run 'python create_hotel_db.py' first to create the database schema.")
-        return
-
-    conn = init_connection(DB_PATH)
+    # Get SQLAlchemy session
+    db = SessionLocal()
 
     try:
         # Clear existing rooms to allow re-running the script
-        cursor = conn.cursor()
-        deleted = cursor.execute("DELETE FROM Rooms").rowcount
+        deleted = db.query(Room).count()
         if deleted > 0:
-            conn.commit()
+            db.query(Room).delete()
+            db.commit()
             print(f"Cleared {deleted} existing room(s) from the Rooms table.")
 
         # Populate rooms
-        populate_rooms(conn, rooms)
+        populate_rooms(db, rooms)
 
         # Print summary
-        print_summary(conn)
+        print_summary(db)
 
         print("\nDone! Rooms table populated successfully.")
     except Exception as e:
         print(f"Error populating rooms: {e}")
-        conn.rollback()
+        db.rollback()
+        raise
     finally:
-        conn.close()
+        db.close()
 
 
 if __name__ == "__main__":

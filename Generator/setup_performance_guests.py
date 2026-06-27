@@ -16,7 +16,7 @@ import os
 import random
 import sys
 from datetime import date, timedelta
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -24,6 +24,12 @@ from app.db import SessionLocal
 from app.enums import BookingSource, ReservationStatus
 from app.models import Guest, Reservation, Room
 from sqlalchemy import func
+from sqlalchemy.orm import Session
+from utils import (
+    generate_random_dob,
+    get_bucket_dates,
+    split_name,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -34,12 +40,12 @@ RESERVATIONS_PER_GUEST = 4
 # Use Arabic names from the existing list
 ARABIC_NAMES_PATH = os.path.join(os.path.dirname(__file__), "arabic_names.txt")
 
-# Date buckets for creating varied but consistent reservations
-BUCKET_LABELS = {
-    "1": "CHECKED_IN (checking out today)",
-    "2": "CHECKED_IN (future checkout)",
-    "3": "CHECKED_OUT",
-    "4": "CONFIRMED",
+# Date bucket ranges specific to performance test guests (tighter ranges)
+PERF_BUCKET_RANGES = {
+    "1": {"check_in": (7, 20), "check_out": (0, 0)},
+    "2": {"check_in": (7, 20), "check_out": (1, 5)},
+    "3": {"check_in": (10, 30), "check_out": (2, 8)},
+    "4": {"check_in": (0, 0), "check_out": (1, 5)},
 }
 
 
@@ -63,47 +69,10 @@ def load_arabic_names(path: str) -> List[str]:
     return names
 
 
-def split_name(full_name: str) -> Tuple[str, str]:
-    """Split a full name string into (first_name, last_name)."""
-    parts = full_name.strip().split()
-    if len(parts) == 1:
-        return parts[0], ""
-    return parts[0], " ".join(parts[1:])
-
-
-# ---------------------------------------------------------------------------
-# Date helpers
-# ---------------------------------------------------------------------------
-def get_bucket_dates(bucket: str, today: date) -> Tuple[str, str, ReservationStatus]:
-    """Return (check_in_date, check_out_date, status) for a given bucket."""
-    if bucket == "1":
-        check_in = today - timedelta(days=random.randint(7, 20))
-        return check_in.isoformat(), today.isoformat(), ReservationStatus.CHECKED_IN
-
-    elif bucket == "2":
-        check_in = today - timedelta(days=random.randint(7, 20))
-        check_out = today + timedelta(days=random.randint(1, 5))
-        return check_in.isoformat(), check_out.isoformat(), ReservationStatus.CHECKED_IN
-
-    elif bucket == "3":
-        check_out = today - timedelta(days=random.randint(2, 8))
-        check_in = today - timedelta(days=random.randint(10, 30))
-        # Ensure check_in < check_out
-        if check_in >= check_out:
-            check_in = check_out - timedelta(days=random.randint(1, 5))
-        return check_in.isoformat(), check_out.isoformat(), ReservationStatus.CHECKED_OUT
-
-    elif bucket == "4":
-        check_out = today + timedelta(days=random.randint(1, 5))
-        return today.isoformat(), check_out.isoformat(), ReservationStatus.CONFIRMED
-
-    raise ValueError(f"Unknown bucket: {bucket}")
-
-
 # ---------------------------------------------------------------------------
 # Database operations (SQLAlchemy)
 # ---------------------------------------------------------------------------
-def delete_performance_test_guests(db: Any) -> int:
+def delete_performance_test_guests(db: Session) -> int:
     """
     Delete previously created performance test guests (marked with
     special_preferences = 'performance_test').
@@ -126,17 +95,12 @@ def delete_performance_test_guests(db: Any) -> int:
     return count
 
 
-def insert_test_guest(db: Any, first_name: str, last_name: str) -> Guest:
+def insert_test_guest(db: Session, first_name: str, last_name: str) -> Guest:
     """Insert a test guest into the Guests table and return the Guest object."""
-    min_dob = date.today() - timedelta(days=80 * 365)
-    max_dob = date.today() - timedelta(days=18 * 365)
-    delta = (max_dob - min_dob).days
-    dob = min_dob + timedelta(days=random.randint(0, delta))
-
     guest = Guest(
         first_name=first_name,
         last_name=last_name,
-        date_of_birth=dob.isoformat(),
+        date_of_birth=generate_random_dob(),
         is_special_guest=False,
         special_preferences="performance_test",
     )
@@ -147,7 +111,7 @@ def insert_test_guest(db: Any, first_name: str, last_name: str) -> Guest:
 
 
 def insert_reservation(
-    db: Any,
+    db: Session,
     room: Room,
     guest: Guest,
     check_in_date: str,
@@ -218,7 +182,9 @@ def setup_performance_test_guests() -> List[Dict[str, Any]]:
             # Create exactly 4 reservations with different buckets for variety
             reservation_count = 0
             for bucket_key in ["1", "2", "3", "4"]:
-                check_in, check_out, status = get_bucket_dates(bucket_key, today)
+                check_in, check_out, status = get_bucket_dates(
+                    bucket_key, today, PERF_BUCKET_RANGES
+                )
 
                 # Pick a random room (allow reuse across guests)
                 room = random.choice(available_rooms)

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { reservationsApi } from '../services/api';
 import type { ReservationsSummary } from '../types';
-import { PageHeader, RoomCard, Badge, Card } from '../components/ui';
+import { PageHeader, RoomCard, Badge, Card, Button } from '../components/ui';
 
 export default function Reservations() {
   const [summary, setSummary] = useState<ReservationsSummary | null>(null);
@@ -29,13 +29,16 @@ export default function Reservations() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
-      <PageHeader title="Reservations" />
+      <PageHeader title="Reservations" description="View current hotel room reservations and guest status." />
 
       {/* Errors section */}
       {summary.errors.length > 0 && (
         <Card className="mb-8 border-accent-200 bg-accent-50 dark:border-accent-700 dark:bg-accent-900/20">
-          <div className="mb-2 text-lg font-semibold text-accent-700 dark:text-accent-300">
-            Errors ({summary.errors.length})
+          <div className="mb-4 flex items-center justify-between">
+            <div className="text-lg font-semibold text-accent-700 dark:text-accent-300">
+              Errors ({summary.errors.length})
+            </div>
+            <Button variant="danger" size="sm">View Details</Button>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -57,7 +60,9 @@ export default function Reservations() {
                     <td className="py-2 pr-4 text-primary-800 dark:text-primary-200">{e.check_in_date}</td>
                     <td className="py-2 pr-4 text-primary-800 dark:text-primary-200">{e.check_out_date}</td>
                     <td className="py-2 pr-4">
-                      <Badge variant="danger">{e.error_type}</Badge>
+                      <Badge variant={e.error_type === 'conflict' ? 'danger' : 'warning'}>
+                        {e.error_type}
+                      </Badge>
                     </td>
                     <td className="py-2 text-primary-700 dark:text-primary-300">{e.description}</td>
                   </tr>

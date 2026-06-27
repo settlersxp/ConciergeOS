@@ -44,6 +44,7 @@ export const reservationsApi = {
 export interface GuestSearchOptions {
   prompt_id?: string;
   version?: number;
+  runtime_variables?: Record<string, string>;
 }
 
 export const guestSearchApi = {
@@ -54,6 +55,7 @@ export const guestSearchApi = {
         customer_name: customerName,
         prompt_id: options?.prompt_id ?? 'guest-search',
         version: options?.version,
+        runtime_variables: options?.runtime_variables ?? {},
       }),
     }),
 };

@@ -12,14 +12,12 @@ import type {
   SingleGuestValidation,
   ValidateGuestsResponse,
 } from "../types";
-import { PageHeader } from "../components/ui";
+import { PageHeader, Card, PerformancePromptSelector, StatusBanner, RuntimeVariablesEditor } from "../components/ui";
 
 import TestConfigCard from "./components/TestConfigCard";
 import GuestConfigCard from "./components/GuestConfigCard";
-import PromptSettingsCard from "./components/PromptSettingsCard";
 import DataFormatCard from "./components/DataFormatCard";
 import RunControlsCard from "./components/RunControlsCard";
-import StatusBanner from "./components/StatusBanner";
 import SummaryCards from "./components/SummaryCards";
 import ResultsList from "./components/ResultsList";
 import CompareModal from "./components/CompareModal";
@@ -58,7 +56,20 @@ export default function PerformanceTesting() {
   const [concurrentBatch, setConcurrentBatch] = useState(8);
   const [friendlyName, setFriendlyName] = useState("");
   const [batchUuid, setBatchUuid] = useState(generateUuid());
-  const [systemPrompt, setSystemPrompt] = useState("");
+
+  // Runtime variable key (pre-populated for easy editing)
+  const [runtimeVarKey, setRuntimeVarKey] = useState("customer_name");
+
+  // Build runtime variables from the current customer name
+  const runtimeVariables: Record<string, string> = customerName.trim()
+    ? { [runtimeVarKey]: customerName.trim() }
+    : {};
+
+  // Prompt selection state
+  const [promptSelection, setPromptSelection] = useState<{
+    prompt_id: string;
+    version?: number;
+  } | null>(null);
   const [userPrompt, setUserPrompt] = useState("");
 
   // Settings from API (model info, etc.)
@@ -151,11 +162,15 @@ export default function PerformanceTesting() {
       test_mode: testMode,
       friendly_name: friendlyName,
       thinking_enabled: thinkingEnabled,
-      system_prompt: systemPrompt,
       user_prompt: userPrompt,
       expected_response_format: "auto",
       data_format: dataFormat,
       batch_uuid: batchUuid,
+      // Send prompt_id and version for server-side resolution
+      prompt_id: promptSelection?.prompt_id || undefined,
+      prompt_version: promptSelection?.version || undefined,
+      // Runtime variables for {table.field} placeholders in user_prompt
+      runtime_variables: Object.keys(runtimeVariables).length > 0 ? runtimeVariables : undefined,
     };
 
     try {
@@ -487,13 +502,32 @@ export default function PerformanceTesting() {
         />
       </div>
 
+      {/* Runtime Variables - same card style as GuestSearch */}
+      <Card className="mb-6">
+        <RuntimeVariablesEditor
+          variableKey={runtimeVarKey}
+          variableValue={customerName}
+          onKeyChange={setRuntimeVarKey}
+          description={
+            <>
+              Sets the value for placeholders in your prompt template (e.g., {"{customer_name}"}, {"{customers.name}"}). This variable is merged with auto-built variables from the customer name.
+            </>
+          }
+        />
+      </Card>
+
       {/* Full-width cards */}
       <div className="grid gap-6 md:grid-cols-2 mb-6">
-        <PromptSettingsCard
-          systemPrompt={systemPrompt}
-          userPrompt={userPrompt}
-          onSystemPromptChange={setSystemPrompt}
-          onUserPromptChange={setUserPrompt}
+         <PerformancePromptSelector
+          value={promptSelection ?? undefined}
+          onChange={(
+            selection: { prompt_id: string; version?: number },
+            usrPrompt: string,
+          ) => {
+            setPromptSelection(selection);
+            setUserPrompt(usrPrompt);
+          }}
+          label="Performance Prompt"
         />
 
         <DataFormatCard

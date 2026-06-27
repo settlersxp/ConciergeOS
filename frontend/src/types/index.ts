@@ -34,6 +34,7 @@ export interface ReservationsSummary {
 
 export interface GuestSearchRequest {
   customer_name: string;
+  runtime_variables?: Record<string, string>;
 }
 
 export interface GuestSearchResponse {
@@ -84,11 +85,13 @@ export interface PerformanceTestRequest {
   model_name?: string;
   vllm_version?: string;
   thinking_enabled?: boolean;
-  system_prompt?: string;
   user_prompt?: string;
   expected_response_format?: string;
   data_format?: DataFormat;
   batch_uuid?: string;
+  prompt_id?: string;
+  prompt_version?: number;
+  runtime_variables?: Record<string, string>;
 }
 
 export interface TestResult {
@@ -266,4 +269,19 @@ export interface ValidateGuestsResponse {
     total_validated: number;
     accuracy: number;
   };
+}
+
+/** Field Schema (runtime variable discovery) */
+
+export interface FieldInfo {
+  field: string;
+  type: string;
+  constraints: string[];
+  nullable: boolean;
+  primary_key: boolean;
+  foreign_keys: string[];
+}
+
+export interface FieldSchema {
+  [tableName: string]: FieldInfo[];
 }

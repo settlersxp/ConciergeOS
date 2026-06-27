@@ -16,8 +16,6 @@ from app.routes import (
 from app.services.debug import debug_router
 from app.services.http_cache_middleware import HttpCacheMiddleware
 
-# Prompt versions table and seed data are managed by Alembic migrations.
-# No startup seeding is needed — the migration handles initial data.
 
 app = FastAPI(title="ConciergeOS")
 

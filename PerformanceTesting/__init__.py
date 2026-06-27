@@ -17,17 +17,9 @@ from .model_info import fetch_model_info
 # Tool executors
 from .tool_executors import TOOL_EXECUTORS
 
-# LLM client
-from .llm_client import query_guest_with_llm
-
-# Executors
-from .executors import run_single_request
-
-# Batch runners
+# Batch runners (multi-guest only - all calls use app.services.llm.query_guest_with_llm)
 from .batch_runners import (
-    run_concurrent_batch,
     run_concurrent_batch_multi_guest,
-    run_sequential_batch,
     run_sequential_batch_multi_guest,
 )
 
@@ -46,13 +38,7 @@ __all__ = [
     "fetch_model_info",
     # Tool executors
     "TOOL_EXECUTORS",
-    # LLM client
-    "query_guest_with_llm",
-    # Executors
-    "run_single_request",
-    # Batch runners
-    "run_sequential_batch",
-    "run_concurrent_batch",
+    # Batch runners (multi-guest only)
     "run_sequential_batch_multi_guest",
     "run_concurrent_batch_multi_guest",
     # Main orchestration

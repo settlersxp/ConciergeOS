@@ -3,6 +3,11 @@
 Business logic for querying reservations and detecting errors.
 
 Uses SQLAlchemy ORM for database access and Pydantic schemas for validation.
+
+Date-status classification functions (is_checked_in_type, is_confirmed_type,
+is_checked_out_type) are imported from ``app.services.generator_utils`` so
+that both the main application and the Generator scripts share a single
+source of truth.
 """
 
 import json
@@ -17,6 +22,11 @@ from app.db import SessionLocal
 from app.enums import ReservationStatus
 from app.models import Guest, Reservation, Room
 from app.schemas import ErrorResponse, ReservationResponse, ReservationsSummary
+from app.services.generator_utils import (
+    is_checked_in_type,
+    is_confirmed_type,
+    is_checked_out_type,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +116,7 @@ def detect_errors() -> List[ErrorResponse]:
     db = SessionLocal()
     try:
         today = date.today()
-        
+
         rows = (
             _base_reservation_query(db)
             .filter(Reservation.reservation_id.in_(all_error_ids))
@@ -125,19 +135,19 @@ def detect_errors() -> List[ErrorResponse]:
 
             descriptions = []
 
-            # Status error analysis
+            # Status error analysis — reuse shared classification helpers
             if rid in status_error_ids:
-                if status == ReservationStatus.CANCELLED and check_in < today and check_out >= today:
+                if status == ReservationStatus.CANCELLED and is_checked_in_type(check_in, check_out, today):
                     descriptions.append(
                         f"Status is CANCELLED but dates ({check_in.isoformat()} → {check_out.isoformat()}) "
                         f"indicate an active stay (likely should be CHECKED_IN)."
                     )
-                elif status == ReservationStatus.CHECKED_OUT and check_in == today and check_out > today:
+                elif status == ReservationStatus.CHECKED_OUT and is_confirmed_type(check_in, check_out, today):
                     descriptions.append(
                         f"Status is CHECKED_OUT but check-in is today ({check_in.isoformat()}) "
                         f"with future check-out ({check_out.isoformat()}) (likely should be CONFIRMED)."
                     )
-                elif status == ReservationStatus.CHECKED_OUT and check_in < today and check_out >= today:
+                elif status == ReservationStatus.CHECKED_OUT and is_checked_in_type(check_in, check_out, today):
                     descriptions.append(
                         f"Status is CHECKED_OUT but dates ({check_in.isoformat()} → {check_out.isoformat()}) "
                         f"indicate an active stay (likely should be CHECKED_IN)."
