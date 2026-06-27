@@ -126,6 +126,8 @@ class GuestSearchResponse(BaseModel):
 
     query: str
     llm_response: str
+    cached: bool = False
+    """Indicates whether the response was served from cache (True) or generated fresh (False)."""
 
 
 # ---------------------------------------------------------------------------

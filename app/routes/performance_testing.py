@@ -2,6 +2,7 @@
 """Performance testing routes."""
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,8 @@ from app.schemas import (
 )
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 _DATABASE_PATH = Path(__file__).resolve().parent.parent.parent / "performance_tests.db"
 
@@ -408,18 +411,30 @@ def _validate_single_pair(
     ground_truth_json: str,
     ground_truth_name: str,
     response_content: str | None,
-) -> tuple[bool | None, str | None]:
+    use_cache: bool = True,
+) -> tuple[bool | None, str | None, bool]:
     """Validate a single guest-response pair using the LLM.
 
     Compares the full ground-truth JSON against the LLM response field-by-field.
+    Uses response caching to avoid redundant LLM calls for repeated validations.
 
-    Returns (is_match, llm_reasoning).
+    Args:
+        ground_truth_json: JSON string of ground-truth guest data.
+        ground_truth_name: Guest full name used as validation identifier.
+        response_content: The LLM response to validate.
+        use_cache: If True, check/use response cache for this validation.
+
+    Returns:
+        A tuple of (is_match, llm_reasoning, was_cached).
+        is_match is True/False on success, None on error.
+        was_cached is True if the result was served from cache.
     """
-    from openai import OpenAI
+    import json
 
-    from app.services.llm import get_llm_config
-
-    client, model = get_llm_config()
+    from app.services.response_cache import (
+        _get_cache,
+        generate_cache_key,
+    )
 
     system_prompt = (
         "You are a strict validation engine. Your job is to compare ground-truth guest "
@@ -454,7 +469,43 @@ def _validate_single_pair(
         "'reasoning' (string)."
     )
 
+    # Generate cache key from the validation inputs (system prompt + user prompt)
+    cache_input = f"{system_prompt}\n\n{user_prompt}"
+    cache_key = generate_cache_key(cache_input)
+
+    logger.info(
+        f"[VALIDATE] Starting validation for guest '{ground_truth_name}' | "
+        f"cache_key={cache_key[:12]}... | use_cache={use_cache}"
+    )
+
+    # Check cache first if enabled
+    if use_cache:
+        cached_entry = _get_cache().get(cache_key)
+        if cached_entry is not None:
+            logger.info(
+                f"[VALIDATE] [CACHE] HIT for '{ground_truth_name}' | "
+                f"response_len={len(cached_entry.response)}"
+            )
+            try:
+                parsed = json.loads(cached_entry.response)
+                is_match = parsed.get("is_match")
+                reasoning = parsed.get("reasoning", "")
+                return is_match, reasoning, True
+            except (json.JSONDecodeError, AttributeError):
+                logger.warning(
+                    f"[VALIDATE] Cached response for '{ground_truth_name}' is malformed, "
+                    f"falling back to LLM call"
+                )
+
+    logger.info(f"[VALIDATE] [CACHE] MISS for '{ground_truth_name}' | calling LLM")
+
+    # Call LLM using the cached implementation
     try:
+        from openai import OpenAI
+        from app.services.llm import get_llm_config
+
+        client, model = get_llm_config()
+
         resp = client.chat.completions.create(
             model=model,
             messages=[
@@ -465,13 +516,25 @@ def _validate_single_pair(
         )
         answer = resp.choices[0].message.content or "{}"
 
-        import json
         parsed = json.loads(answer)
         is_match = parsed.get("is_match")
         reasoning = parsed.get("reasoning", "")
-        return is_match, reasoning
+
+        # Store in cache if enabled
+        if use_cache:
+            _get_cache().set(cache_key, answer)
+            logger.info(
+                f"[VALIDATE] [CACHE] STORED for '{ground_truth_name}' | "
+                f"is_match={is_match}"
+            )
+
+        return is_match, reasoning, False
     except Exception as e:
-        return None, f"Validation error: {e}"
+        logger.error(
+            f"[VALIDATE] Error validating '{ground_truth_name}': {e}",
+            exc_info=True,
+        )
+        return None, f"Validation error: {e}", False
 
 
 # ── Validate Guests Endpoint ─────────────────────────────────────────────────
@@ -554,11 +617,15 @@ async def api_validate_guests(
 
             ground_truth_json = json.dumps(ground_truth_obj, indent=2, default=str)
 
-            is_match, reasoning = _validate_single_pair(
+            is_match, reasoning, was_cached = _validate_single_pair(
                 ground_truth_json=ground_truth_json,
                 ground_truth_name=full_name,
                 response_content=matched_result.response_content if matched_result else None,
+                use_cache=True,
             )
+            
+            if was_cached:
+                logger.info(f"[VALIDATE] Cached result used for guest '{full_name}'")
 
             validation_results.append(
                 SingleGuestValidation(

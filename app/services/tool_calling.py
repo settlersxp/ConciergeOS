@@ -201,7 +201,19 @@ TOOL_EXECUTORS = {
 }
 
 # ---------------------------------------------------------------------------
-# Main Tool Calling Loop
+# Response Cache Integration
+# ---------------------------------------------------------------------------
+# The response_cache module provides diagnostic logging and future caching.
+# To enable response logging/caching, change the import below to use
+# the wrapper from response_cache instead.
+#
+# To ENABLE diagnostic logging, uncomment the following import and remove
+# the standard import above:
+#
+#   from app.services.response_cache import call_llm_with_db_tools  # WITH logging
+#
+# For now, this module provides the base implementation. The response_cache
+# module wraps this with diagnostics.
 # ---------------------------------------------------------------------------
 
 
@@ -246,7 +258,7 @@ def call_llm_with_db_tools(
             messages=messages,
             tools=TOOL_DEFINITIONS,
             temperature=0.1,
-            max_tokens=10240,
+            max_tokens=102400,
         )
 
         assistant_message = response.choices[0].message

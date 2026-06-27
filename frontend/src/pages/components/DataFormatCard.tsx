@@ -14,15 +14,16 @@ export default function DataFormatCard({
     <Card title="Data Format">
       <div className="mt-4">
         <FormField htmlFor="dataFormat" label="Guest Data Format">
-          <Select
-            id="dataFormat"
-            value={dataFormat}
-            onChange={(e) => onDataFormatChange(e.target.value as DataFormat)}
-          >
-            <option value="csv">CSV</option>
-            <option value="json">JSON</option>
-            <option value="xml">XML</option>
-          </Select>
+      <Select
+        id="dataFormat"
+        value={dataFormat}
+        onChange={(e) => onDataFormatChange(e.target.value as DataFormat)}
+      >
+        <option value="csv">CSV</option>
+        <option value="json">JSON</option>
+        <option value="xml">XML</option>
+        <option value="tool_calling">Tool Calls</option>
+      </Select>
         </FormField>
       </div>
     </Card>

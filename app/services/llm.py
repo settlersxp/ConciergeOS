@@ -112,19 +112,78 @@ def _generate_schema_from_database() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Guest Information Generator
+# ---------------------------------------------------------------------------
+
+def _generate_guest_information() -> str:
+    """Generate a list of all guests in the database for context.
+
+    Returns a formatted markdown section with guest_id, first_name, and last_name.
+    """
+    try:
+        db = SessionLocal()
+        guests = db.query(Guest).order_by(Guest.guest_id).all()
+        db.close()
+
+        if not guests:
+            return ""
+
+        lines = [
+            "## Guest Directory",
+            "",
+            "The following guests are currently in the database:",
+            "",
+            "| Guest ID | First Name | Last Name |",
+            "|----------|-----------|----------|",
+        ]
+
+        for guest in guests:
+            lines.append(f"| {guest.guest_id} | {guest.first_name} | {guest.last_name} |")
+
+        lines.append("")
+        lines.append(
+            "Use this directory to quickly identify guests by name when receiving queries."
+        )
+        lines.append("")
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.warning(f"Failed to generate guest information: {e}")
+        return ""
+
+
+# ---------------------------------------------------------------------------
 # Shared System Prompt (unified across the application)
 # ---------------------------------------------------------------------------
 
 _BASE_SYSTEM_INSTRUCTIONS = """\
-You are a helpful hotel concierge assistant with access to database query tools."""
+You are a helpful hotel concierge assistant with access to database query tools.
+
+When providing information about a guest, always use the following markdown structure:
+
+### Guest [Number] (ID: [ID])
+* **Full Name:** [First name] [Last name]
+* **Date of Birth:** [YYYY-MM-DD]
+* **Special Guest:** [Yes/No]
+* **Special Preferences:** [Preferences or 'None']
+* **Reservations:**
+  1. **Reservation ID:** [ID]
+     * **Room id:** [ID]
+     * **Room:** [Room Name]
+     * **Check-in:** [YYYY-MM-DD] | **Check-out:** [YYYY-MM-DD]
+     * **Status:** [STATUS] | **Source:** [SOURCE]
+  2. ... (continue for all reservations)
+"""
 
 _SCHEMA_DESCRIPTION = _generate_schema_from_database()
+_GUEST_INFORMATION = _generate_guest_information()
 
 _SYSTEM_PROMPT_WITH_SCHEMA = f"""\
 {_BASE_SYSTEM_INSTRUCTIONS}
 
 {_SCHEMA_DESCRIPTION}
 
+{_GUEST_INFORMATION}
 ## Available Tools
 You have access to the following database query tools:
 - `query_guests`: Search for guests by name, ID, or attributes
@@ -509,7 +568,7 @@ def fetch_all_as_xml() -> str:
     return _fetch_and_save("xml")
 
 
-def query_guest_with_llm(customer_name: str) -> str:
+def query_guest_with_llm(customer_name: str) -> tuple[str, bool]:
     """
     Query the LLM for all information about a given guest using tool calling.
     
@@ -517,23 +576,30 @@ def query_guest_with_llm(customer_name: str) -> str:
     directly via tools like query_guests, query_reservations, etc.
     
     Uses lazy import to avoid circular import with tool_calling module.
+    
+    Returns:
+        A tuple of (llm_response, was_cached) where was_cached is True if the
+        response was served from the cache.
     """
-    # Lazy import to break circular dependency
-    from app.services.tool_calling import call_llm_with_db_tools
+    # Use response_cache wrapper for diagnostic logging and caching support.
+    # This captures finish_reason, token usage, truncation warnings, and response checksums.
+    # To enable: ensure response_cache.py log_level is set appropriately (INFO or DEBUG)
+    from app.services.response_cache import call_llm_with_db_tools_with_cache_flag
     
     user_prompt = f"Please find all information about the guest named. The guest's name can have it's name translated into the following languages Arabic, Chinese, Devanagari, Japanese, Jorean, Latin or Nordic. It is unclear if is the user's first name or last name. Retry once with every translated language if needed. Also bring the information about its reservations. : {customer_name}"
     
     try:
-        result = call_llm_with_db_tools(user_prompt)
+        result, was_cached = call_llm_with_db_tools_with_cache_flag(user_prompt)
         
-        # Log the result for debugging
-        if result and result != "The LLM returned an empty response.":
+        if was_cached:
+            logger.info(f"Served cached response for guest: {customer_name}")
+        elif result and result != "The LLM returned an empty response.":
             logger.info(f"Successfully got response for guest: {customer_name}")
         else:
             logger.warning(f"Empty response received for guest: {customer_name}")
             
-        return result
+        return result, was_cached
         
     except Exception as e:
         logger.error(f"Error in query_guest_with_llm for {customer_name}: {str(e)}", exc_info=True)
-        return f"Error querying guest information: {str(e)}"
+        return f"Error querying guest information: {str(e)}", False

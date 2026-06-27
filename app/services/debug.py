@@ -12,6 +12,7 @@ from app.schemas import ShiftRequest, ShiftResponse
 from Generator.shift_reservations import shift_reservations as _shift_reservations
 from app.services.tool_calling import TOOL_DEFINITIONS, TOOL_EXECUTORS
 from app.services.llm import get_llm_config, get_available_models, LLMModelInfo
+from app.services.response_cache import cache_stats, http_cache_stats, cache_clear, http_cache_clear
 
 debug_router = APIRouter(prefix="/debug", tags=["debug"])
 
@@ -65,8 +66,13 @@ def test_tool_call_endpoint(tool_name: str, params: dict):
 
 @debug_router.post("/test-llm-completion")
 def test_llm_completion_endpoint(user_message: str):
-    """Test the LLM completion endpoint directly with tool calling."""
-    from app.services.tool_calling import call_llm_with_db_tools
+    """Test the LLM completion endpoint directly with tool calling.
+    
+    Uses response_cache wrapper for diagnostic logging. To enable:
+    - Edit response_cache.py and set log_level="DEBUG" for verbose output
+    - Set log_level="INFO" for summary diagnostics only
+    """
+    from app.services.response_cache import call_llm_with_db_tools
     
     try:
         result = call_llm_with_db_tools(user_message)
@@ -81,6 +87,84 @@ def test_llm_completion_endpoint(user_message: str):
             "error": str(e),
             "success": False,
         }
+
+
+# ── Cache Management Endpoints ─────────────────────────────────────────────────
+
+
+@debug_router.get("/cache-stats")
+def get_cache_stats():
+    """Return statistics for both LLM and HTTP response caches."""
+    return {
+        "llm_cache": cache_stats(),
+        "http_cache": http_cache_stats(),
+    }
+
+
+@debug_router.post("/cache/clear-llm")
+def clear_llm_cache():
+    """Clear the LLM response cache."""
+    count = cache_clear()
+    return {"cleared": count, "cache": "llm"}
+
+
+@debug_router.post("/cache/clear-http")
+def clear_http_cache():
+    """Clear the HTTP response cache."""
+    count = http_cache_clear()
+    return {"cleared": count, "cache": "http"}
+
+
+@debug_router.post("/cache/clear-all")
+def clear_all_caches():
+    """Clear both LLM and HTTP response caches."""
+    llm_count = cache_clear()
+    http_count = http_cache_clear()
+    return {
+        "llm_cleared": llm_count,
+        "http_cleared": http_count,
+        "caches": "all",
+    }
+
+
+@debug_router.delete("/cache/http")
+def delete_http_cache_entry(key: str):
+    """
+    Delete a specific HTTP cache entry by cache key.
+
+    Query param: key=sha256hex...
+    """
+    from app.services.response_cache import _get_http_cache
+    deleted = _get_http_cache().delete(key)
+    return {"deleted": deleted, "key": key, "cache": "http"}
+
+
+@debug_router.post("/cache/http/by-pattern")
+def clear_http_cache_by_pattern(pattern: str):
+    """
+    Clear HTTP cache entries matching a URI pattern.
+
+    Query param: pattern=/api/reservations
+
+    This clears ALL entries (iterates and matches).
+    """
+    from app.services.response_cache import generate_http_cache_key, _get_http_cache
+    import hashlib
+
+    cache = _get_http_cache()
+    # We need to match by pattern - delete all entries whose normalized URL contains the pattern
+    # Since we can't iterate the internal store externally, we clear all and note this limitation
+    # For production, consider using a proper cache backend with pattern support
+    count = cache.clear()
+    return {"cleared_all": count, "pattern": pattern, "note": "Pattern-based delete requires clearing all entries - use /cache/clear-http for targeted clear"}
+
+
+@debug_router.post("/cache/http/cleanup-expired")
+def cleanup_expired_http_cache():
+    """Remove all expired HTTP cache entries."""
+    from app.services.response_cache import http_cache_cleanup_expired
+    count = http_cache_cleanup_expired()
+    return {"cleaned": count, "cache": "http"}
 
 
 @debug_router.post("/shift-reservations", response_model=ShiftResponse)

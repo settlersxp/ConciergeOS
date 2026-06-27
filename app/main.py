@@ -13,6 +13,7 @@ from app.routes import (
     settings_router,
 )
 from app.services.debug import debug_router
+from app.services.http_cache_middleware import HttpCacheMiddleware
 
 app = FastAPI(title="ConciergeOS")
 
@@ -23,6 +24,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# HTTP response cache middleware — caches GET responses by URI + query params
+app.add_middleware(HttpCacheMiddleware, ttl=3600)
 
 # ── Include route modules ────────────────────────────────────────────────────
 

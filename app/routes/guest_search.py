@@ -12,8 +12,9 @@ router = APIRouter()
 @router.post("/api/guest-search")
 async def api_guest_search(body: GuestSearchRequest) -> GuestSearchResponse:
     """Query the LLM for all information about a given guest."""
-    llm_response = query_guest_with_llm(body.customer_name)
+    llm_response, was_cached = query_guest_with_llm(body.customer_name)
     return GuestSearchResponse(
         query=body.customer_name,
         llm_response=llm_response,
+        cached=was_cached,
     )
