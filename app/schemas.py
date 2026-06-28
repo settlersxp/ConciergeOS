@@ -432,6 +432,7 @@ class PromptGroupScheduleSchema(BaseModel):
     schedule_id: int
     group_id: int
     run_at: str
+    schedule_type: str = "daily"
     active: bool
     created_at: str
 
@@ -442,6 +443,7 @@ class PromptGroupScheduleCreate(BaseModel):
     """Request body to schedule a group execution."""
 
     run_at: str  # ISO 8601 datetime string
+    schedule_type: str = "daily"  # "daily", "weekly", or "none"
 
 
 class PromptGroupResultSchema(BaseModel):
@@ -464,6 +466,7 @@ class PromptGroupSchema(BaseModel):
     group_id: int
     name: str
     description: str | None = None
+    is_active: bool = True
     created_at: str
     updated_at: str
     items: List[PromptGroupItemSchema] = []
@@ -486,4 +489,5 @@ class UpdateGroupRequest(BaseModel):
 
     name: str | None = None
     description: str | None = None
+    is_active: bool | None = None
     items: List[PromptGroupItemCreate] | None = None

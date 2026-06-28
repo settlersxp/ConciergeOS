@@ -12,10 +12,33 @@ import type {
   PromptGroup,
   PromptGroupItemCreate,
   PromptGroupResult,
+  PromptGroupSchedule,
 } from '../types/prompt';
 
 const FONT_FAMILY =
   '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif';
+
+// ---------------------------------------------------------------------------
+// Toggle Switch Component
+// ---------------------------------------------------------------------------
+function ToggleSwitch({ checked, onChange, disabled }: { checked: boolean; onChange: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onChange}
+      disabled={disabled}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+        checked ? 'bg-secondary-500' : 'bg-primary-300 dark:bg-primary-600'
+      } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+          checked ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </button>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Group Card (list view)
@@ -24,53 +47,239 @@ function GroupCard({
   group,
   onView,
   onExecute,
-  onSchedule,
+  onToggle,
   onDelete,
   executing,
 }: {
   group: PromptGroup;
   onView: () => void;
   onExecute: () => void;
-  onSchedule: () => void;
+  onToggle: () => void;
   onDelete: () => void;
   executing: boolean;
 }) {
+  const activeSchedules = group.schedules?.filter((s) => s.active) ?? [];
+
   return (
     <div style={{ fontFamily: FONT_FAMILY }}>
-    <Card className="flex flex-col gap-3">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="font-semibold text-primary-900 dark:text-white">{group.name}</h3>
-          {group.description && (
-            <p className="text-sm text-primary-500 dark:text-primary-400 mt-1">{group.description}</p>
-          )}
+      <Card className={`flex flex-col gap-3 transition-opacity ${!group.is_active ? 'opacity-50' : ''}`}>
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-primary-900 dark:text-white">{group.name}</h3>
+              {!group.is_active && <Badge variant="danger">Disabled</Badge>}
+            </div>
+            {group.description && (
+              <p className="text-sm text-primary-500 dark:text-primary-400 mt-1">{group.description}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <ToggleSwitch checked={group.is_active} onChange={onToggle} />
+            <Badge variant="info">{group.items.length}</Badge>
+          </div>
         </div>
-        <Badge variant="info">{group.items.length} prompts</Badge>
-      </div>
 
-      <div className="flex flex-wrap gap-1">
-        {group.items.map((item) => (
-          <Badge key={item.item_id} variant="neutral">
-            #{item.position} {item.prompt_id}:v{item.prompt_version}
-          </Badge>
-        ))}
-      </div>
+        <div className="flex flex-wrap gap-1">
+          {group.items.map((item) => (
+            <Badge key={item.item_id} variant="neutral">
+              #{item.position} {item.prompt_id}:v{item.prompt_version}
+            </Badge>
+          ))}
+        </div>
 
-      <div className="flex gap-2 mt-auto">
-        <Button size="sm" onClick={onView}>
-          View
-        </Button>
-        <Button size="sm" variant="primary" onClick={onExecute} disabled={executing}>
-          {executing ? 'Running…' : 'Recalculate Now'}
-        </Button>
-        <Button size="sm" variant="secondary" onClick={onSchedule}>
-          Schedule
-        </Button>
-        <Button size="sm" variant="danger" onClick={onDelete}>
-          Delete
-        </Button>
+        {activeSchedules.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {activeSchedules.map((s) => (
+              <Badge key={s.schedule_id} variant="warning">
+                ⏰ {new Date(s.run_at).toLocaleString()}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-2 mt-auto">
+          <Button size="sm" onClick={onView}>
+            View
+          </Button>
+          <Button size="sm" variant="primary" onClick={onExecute} disabled={executing || !group.is_active}>
+            {executing ? 'Running…' : 'Recalculate Now'}
+          </Button>
+          <Button size="sm" variant="danger" onClick={onDelete}>
+            Delete
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Schedule Management Modal
+// ---------------------------------------------------------------------------
+function ScheduleModal({
+  group,
+  onClose,
+}: {
+  group: PromptGroup;
+  onClose: () => void;
+}) {
+  const [scheduleType, setScheduleType] = useState<'daily' | 'weekly' | 'none'>('daily');
+  const [runAt, setRunAt] = useState('');
+  const [timeOnly, setTimeOnly] = useState('15:00');
+  const [schedules, setSchedules] = useState<PromptGroupSchedule[]>(group.schedules ?? []);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const g = await promptGroupsApi.get(group.group_id);
+      setSchedules(g.schedules ?? []);
+    } catch {
+      /* ignore */
+    }
+  }, [group.group_id]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const handleSchedule = async () => {
+    // For "none", require full datetime; for daily/weekly, build datetime from today + time
+    let runAtIso: string;
+    if (scheduleType === 'none') {
+      if (!runAt) return;
+      runAtIso = runAt;
+    } else {
+      if (!timeOnly) return;
+      const [hours, minutes] = timeOnly.split(':');
+      const now = new Date();
+      now.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+      runAtIso = now.toISOString();
+    }
+    try {
+      await promptGroupsApi.schedule(group.group_id, { run_at: runAtIso, schedule_type: scheduleType });
+      setToast({ message: 'Scheduled!', type: 'success' });
+      if (scheduleType === 'none') {
+        setRunAt('');
+      }
+      refresh();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Scheduling failed';
+      setToast({ message: msg, type: 'error' });
+    }
+  };
+
+  const handleCancel = async (scheduleId: number) => {
+    try {
+      await promptGroupsApi.cancelSchedule(group.group_id, scheduleId);
+      setToast({ message: 'Schedule cancelled', type: 'success' });
+      refresh();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Cancel failed';
+      setToast({ message: msg, type: 'error' });
+    }
+  };
+
+  const activeSchedules = schedules.filter((s) => s.active);
+  const inactiveSchedules = schedules.filter((s) => !s.active);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      {toast && <Toast message={toast.message} type={toast.type} onHidden={() => setToast(null)} />}
+      <div style={{ fontFamily: FONT_FAMILY }}>
+        <Card className="w-full max-w-lg max-h-[80vh] overflow-y-auto p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-primary-900 dark:text-white">
+              Schedules for {group.name}
+            </h2>
+            <Button size="sm" variant="secondary" onClick={onClose}>
+              Close
+            </Button>
+          </div>
+
+          {/* Add new schedule */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-primary-700 dark:text-primary-300 mb-1">
+              Schedule New Execution
+            </label>
+            <div className="flex flex-col gap-2">
+              {/* Schedule type dropdown */}
+              <select
+                className="rounded-md border border-surface-300 bg-white px-3 py-2 text-sm text-primary-800 focus:border-secondary-400 focus:outline-none focus:ring-2 focus:ring-secondary-400/20 dark:border-primary-600 dark:bg-primary-700 dark:text-white"
+                value={scheduleType}
+                onChange={(e) => setScheduleType(e.target.value as 'daily' | 'weekly' | 'none')}
+              >
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="none">None (one-time)</option>
+              </select>
+              {/* Time input for recurring, datetime for one-time */}
+              {scheduleType === 'none' ? (
+                <input
+                  type="datetime-local"
+                  className="rounded-md border border-surface-300 bg-white px-3 py-2 text-sm text-primary-800 focus:border-secondary-400 focus:outline-none focus:ring-2 focus:ring-secondary-400/20 dark:border-primary-600 dark:bg-primary-700 dark:text-white"
+                  value={runAt}
+                  onChange={(e) => setRunAt(e.target.value)}
+                />
+              ) : (
+                <input
+                  type="time"
+                  className="rounded-md border border-surface-300 bg-white px-3 py-2 text-sm text-primary-800 focus:border-secondary-400 focus:outline-none focus:ring-2 focus:ring-secondary-400/20 dark:border-primary-600 dark:bg-primary-700 dark:text-white"
+                  value={timeOnly}
+                  onChange={(e) => setTimeOnly(e.target.value)}
+                />
+              )}
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={handleSchedule}
+                  disabled={scheduleType === 'none' ? !runAt : !timeOnly}
+                >
+                  + Schedule
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Active schedules */}
+          <div className="mb-4">
+            <h3 className="text-sm font-medium text-primary-700 dark:text-primary-300 mb-2">
+              Active ({activeSchedules.length})
+            </h3>
+            {activeSchedules.length === 0 && (
+              <p className="text-sm text-primary-500 dark:text-primary-400">No active schedules.</p>
+            )}
+            {activeSchedules.map((s) => (
+              <div key={s.schedule_id} className="flex items-center justify-between gap-2 text-sm border rounded p-2 mb-2">
+                <div className="flex-1">
+                  <span className="text-primary-800 dark:text-primary-200">
+                    {new Date(s.run_at).toLocaleString()}
+                  </span>
+                  <Badge variant="warning" className="ml-2">pending</Badge>
+                </div>
+                <Button size="sm" variant="danger" onClick={() => handleCancel(s.schedule_id)}>
+                  Cancel
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          {/* Past/Cancelled schedules */}
+          {inactiveSchedules.length > 0 && (
+            <div>
+              <h3 className="text-sm font-medium text-primary-700 dark:text-primary-300 mb-2">
+                Past / Cancelled ({inactiveSchedules.length})
+              </h3>
+              {inactiveSchedules.map((s) => (
+                <div key={s.schedule_id} className="flex items-center gap-2 text-sm text-primary-500 dark:text-primary-400 border rounded p-2 mb-2">
+                  <span>{new Date(s.run_at).toLocaleString()}</span>
+                  <Badge variant="neutral">cancelled</Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
       </div>
-    </Card>
     </div>
   );
 }
@@ -97,7 +306,6 @@ function GroupFormModal({
     })) ?? [],
   );
 
-  // PromptSelector value
   const [selectorValue, setSelectorValue] = useState<{ prompt_id: string; version?: number }>({
     prompt_id: '',
     version: undefined,
@@ -237,15 +445,15 @@ function GroupFormModal({
 function GroupDetailModal({
   group,
   onClose,
-  onExecute,
   onEdit,
-  onDelete,
+  onToggle,
+  onOpenSchedules,
 }: {
   group: PromptGroup;
   onClose: () => void;
-  onExecute: () => void;
   onEdit: () => void;
-  onDelete: () => void;
+  onToggle: () => void;
+  onOpenSchedules: () => void;
 }) {
   const [results, setResults] = useState<PromptGroupResult[]>(group.results ?? []);
   const [executing, setExecuting] = useState(false);
@@ -282,19 +490,6 @@ function GroupDetailModal({
     }
   };
 
-  const handleSchedule = async () => {
-    const input = prompt('Enter execution time (ISO 8601, e.g. 2026-07-01T10:00:00):');
-    if (!input) return;
-    try {
-      await promptGroupsApi.schedule(group.group_id, { run_at: input });
-      setToast({ message: 'Scheduled!', type: 'success' });
-      onClose();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Scheduling failed';
-      setToast({ message: msg, type: 'error' });
-    }
-  };
-
   const handleDelete = async () => {
     if (!confirm(`Delete "${group.name}"? This cannot be undone.`)) return;
     try {
@@ -307,6 +502,8 @@ function GroupDetailModal({
     }
   };
 
+  const activeSchedules = group.schedules?.filter((s) => s.active) ?? [];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       {toast && (
@@ -315,10 +512,19 @@ function GroupDetailModal({
       <div style={{ fontFamily: FONT_FAMILY }}>
       <Card className="w-full max-w-3xl max-h-[85vh] overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-primary-900 dark:text-white">{group.name}</h2>
-          <Button size="sm" variant="secondary" onClick={onClose}>
-            Close
-          </Button>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-primary-900 dark:text-white">{group.name}</h2>
+            {!group.is_active && <Badge variant="danger">Disabled</Badge>}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-primary-500 dark:text-primary-400">
+              {group.is_active ? 'Active' : 'Disabled'}
+            </span>
+            <ToggleSwitch checked={group.is_active} onChange={onToggle} />
+            <Button size="sm" variant="secondary" onClick={onClose}>
+              Close
+            </Button>
+          </div>
         </div>
 
         {group.description && <p className="text-sm text-primary-500 dark:text-primary-400 mb-4">{group.description}</p>}
@@ -343,13 +549,30 @@ function GroupDetailModal({
           ))}
         </div>
 
+        {/* Active Schedules */}
+        {activeSchedules.length > 0 && (
+          <div className="mb-4">
+            <h3 className="font-medium mb-2 text-primary-900 dark:text-white">
+              Active Schedules ({activeSchedules.length})
+            </h3>
+            {activeSchedules.map((s) => (
+              <div key={s.schedule_id} className="flex items-center gap-2 text-sm border rounded p-2 mb-2">
+                <Badge variant="warning">⏰</Badge>
+                <span className="text-primary-800 dark:text-primary-200">
+                  {new Date(s.run_at).toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex gap-2 mb-4">
-          <Button variant="primary" onClick={handleExecute} disabled={executing}>
+          <Button variant="primary" onClick={handleExecute} disabled={executing || !group.is_active}>
             {executing ? 'Running…' : 'Recalculate Now'}
           </Button>
-          <Button variant="secondary" onClick={handleSchedule}>
-            Schedule
+          <Button variant="secondary" onClick={onOpenSchedules}>
+            Manage Schedules
           </Button>
           <Button variant="secondary" onClick={onEdit}>
             Edit
@@ -377,6 +600,31 @@ function GroupDetailModal({
                     {r.error_message}
                   </span>
                 )}
+                {r.status === 'success' && r.result_file && (
+                  <div className="flex gap-1 ml-auto">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => window.open(`/api/prompt-groups/results/${r.result_id}/download`, '_blank')}
+                    >
+                      View
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = `/api/prompt-groups/results/${r.result_id}/download`;
+                        link.download = '';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }}
+                    >
+                      Download
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -396,6 +644,7 @@ export default function PromptGroups() {
   const [showForm, setShowForm] = useState(false);
   const [editingGroup, setEditingGroup] = useState<PromptGroup | null>(null);
   const [viewingGroup, setViewingGroup] = useState<PromptGroup | null>(null);
+  const [scheduleGroup, setScheduleGroup] = useState<PromptGroup | null>(null);
   const [executingId, setExecutingId] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -436,6 +685,16 @@ export default function PromptGroups() {
       loadGroups();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Update failed';
+      setToast({ message: msg, type: 'error' });
+    }
+  };
+
+  const handleToggle = async (groupId: number) => {
+    try {
+      await promptGroupsApi.toggle(groupId);
+      loadGroups();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Toggle failed';
       setToast({ message: msg, type: 'error' });
     }
   };
@@ -505,7 +764,7 @@ export default function PromptGroups() {
               group={g}
               onView={() => setViewingGroup(g)}
               onExecute={() => handleExecute(g.group_id)}
-              onSchedule={() => setViewingGroup(g)}
+              onToggle={() => handleToggle(g.group_id)}
               onDelete={() => handleDelete(g.group_id)}
               executing={executingId === g.group_id}
             />
@@ -533,16 +792,23 @@ export default function PromptGroups() {
         <GroupDetailModal
           group={viewingGroup}
           onClose={() => setViewingGroup(null)}
-          onExecute={() => {
-            handleExecute(viewingGroup.group_id);
-          }}
           onEdit={() => {
             setViewingGroup(null);
             setEditingGroup(viewingGroup);
           }}
-          onDelete={() => {
-            handleDelete(viewingGroup.group_id);
-            setViewingGroup(null);
+          onToggle={() => handleToggle(viewingGroup.group_id)}
+          onOpenSchedules={() => {
+            setScheduleGroup(viewingGroup);
+          }}
+        />
+      )}
+
+      {scheduleGroup && (
+        <ScheduleModal
+          group={scheduleGroup}
+          onClose={() => {
+            setScheduleGroup(null);
+            loadGroups();
           }}
         />
       )}

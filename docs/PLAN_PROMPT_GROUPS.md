@@ -53,6 +53,21 @@ A new route `/prompt-groups` with its own nav link in the header. The page reuse
 - Group list view shows all groups with their prompt chain summary
 - Group detail view shows the full chain, execution buttons, and results
 
+### R5 — Enable/Disable/Delete Prompt Groups
+
+Users can toggle groups on/off. When disabled, scheduled executions are skipped and the group is visually distinguished. Users can also delete groups.
+
+**Acceptance Criteria:**
+- User can enable/disable a group via a toggle switch in both list and detail views
+- Disabled groups show a visual indicator (reduced opacity, "Disabled" badge)
+- When a group is disabled:
+  - All active APScheduler jobs for that group's schedules are immediately cancelled
+  - The scheduler skips recovering schedules for disabled groups on startup
+  - The scheduler checks `is_active` before executing (skips if group was disabled between schedule creation and execution time)
+- When a group is re-enabled, existing schedules remain in the database but are not automatically re-scheduled (user must re-schedule manually)
+- User can delete a group (with confirmation dialog)
+- Delete cascades to items, schedules, and results
+
 ---
 
 ## Data Model
@@ -65,6 +80,7 @@ A new route `/prompt-groups` with its own nav link in the header. The page reuse
 | group_id     | INTEGER      | PRIMARY KEY            |
 | name         | TEXT         | NOT NULL               |
 | description  | TEXT         | NULLABLE               |
+| is_active    | BOOLEAN      | DEFAULT TRUE           |
 | created_at   | DATETIME     | DEFAULT NOW            |
 | updated_at   | DATETIME     | DEFAULT NOW            |
 
@@ -103,68 +119,94 @@ A new route `/prompt-groups` with its own nav link in the header. The page reuse
 
 All routes prefixed with `/api/prompt-groups`
 
-| Method   | Path                                    | Description                        |
-|----------|-----------------------------------------|-------------------------------------|
-| GET      | `/prompt-groups`                        | List all groups                     |
-| POST     | `/prompt-groups`                        | Create a new group                  |
-| GET      | `/prompt-groups/{group_id}`             | Get group detail + items            |
-| PUT      | `/prompt-groups/{group_id}`             | Update group (name, items, order)   |
-| DELETE   | `/prompt-groups/{group_id}`             | Delete group                        |
-| POST     | `/prompt-groups/{group_id}/execute`     | Execute chain now                   |
-| POST     | `/prompt-groups/{group_id}/schedule`    | Schedule execution at a time        |
-| GET      | `/prompt-groups/{group_id}/results`     | Get execution history               |
-| DELETE   | `/prompt-groups/{group_id}/schedules`   | Clear all schedules for a group     |
+| Method   | Path                                                   | Description                              |
+|----------|--------------------------------------------------------|-------------------------------------------|
+| GET      | `/prompt-groups`                                       | List all groups                           |
+| POST     | `/prompt-groups`                                       | Create a new group                        |
+| GET      | `/prompt-groups/{group_id}`                            | Get group detail + items                  |
+| PUT      | `/prompt-groups/{group_id}`                            | Update group (name, items, order)         |
+| DELETE   | `/prompt-groups/{group_id}`                            | Delete group                              |
+| PATCH    | `/prompt-groups/{group_id}/toggle`                     | Toggle group active state                 |
+| POST     | `/prompt-groups/{group_id}/execute`                    | Execute chain now                         |
+| POST     | `/prompt-groups/{group_id}/schedule`                   | Schedule execution at a time              |
+| DELETE   | `/prompt-groups/{group_id}/schedules/{schedule_id}`    | Cancel a specific schedule                |
+| DELETE   | `/prompt-groups/{group_id}/schedules`                  | Clear all schedules for a group           |
+| GET      | `/prompt-groups/{group_id}/results`                    | Get execution history                     |
+
+---
+
+## Scheduler Behavior (with is_active)
+
+The `PromptScheduler` service checks the `is_active` field on `PromptGroup`:
+
+1. **`_recover_schedules()`** — On startup, joins `PromptGroupSchedule` with `PromptGroup` and only recovers schedules for groups where `is_active == True`
+2. **`_execute_group()`** — Before executing, checks if the group is still active; if disabled, logs and skips without recording a result
+3. **Toggle endpoint** — When a group is toggled off, cancels all active APScheduler jobs for that group's schedules
 
 ---
 
 ## Implementation Plan
 
 ### Phase 1 — Database Layer
-- [ ] Add SQLAlchemy models (`PromptGroup`, `PromptGroupItem`, `PromptGroupSchedule`, `PromptGroupResult`) to `app/models.py`
-- [ ] Add Pydantic schemas to `app/schemas.py`
-- [ ] Generate Alembic migration for new tables
+- [x] Add SQLAlchemy models (`PromptGroup`, `PromptGroupItem`, `PromptGroupSchedule`, `PromptGroupResult`) to `app/models.py`
+- [x] Add Pydantic schemas to `app/schemas.py`
+- [x] Generate Alembic migration for new tables
+- [ ] Add `is_active` column to `PromptGroup` model
+- [ ] Generate Alembic migration for `is_active` column
+- [ ] Update Pydantic schemas (`PromptGroupSchema`, `UpdateGroupRequest`)
 
 ### Phase 2 — Backend Services
-- [ ] `app/services/prompt_chain.py` — Sequential prompt chain execution logic
+- [x] `app/services/prompt_chain.py` — Sequential prompt chain execution logic
   - Resolves prompts via existing `PromptStore`
   - Chains output: Prompt N output → Prompt N+1 input context
   - Saves results to `data/prompt_group_results/`
-- [ ] `app/services/prompt_scheduler.py` — Background scheduler
+- [x] `app/services/prompt_scheduler.py` — Background scheduler
   - Uses APScheduler for timing
   - Persists schedules to JSON for recovery
   - Triggers `prompt_chain.execute()` on schedule fire
+- [ ] Update scheduler to check `is_active` on `PromptGroup`
+  - `_recover_schedules()` filters out disabled groups
+  - `_execute_group()` skips execution if group disabled
 
 ### Phase 3 — Backend Routes
-- [ ] `app/routes/prompt_groups.py` — CRUD + execute + schedule endpoints
-- [ ] Register router in `app/main.py`
+- [x] `app/routes/prompt_groups.py` — CRUD + execute + schedule endpoints
+- [x] Register router in `app/main.py`
+- [ ] Add `PATCH /prompt-groups/{group_id}/toggle` endpoint
+- [ ] Add `DELETE /prompt-groups/{group_id}/schedules/{schedule_id}` endpoint
 
 ### Phase 4 — Frontend
-- [ ] `frontend/src/services/promptGroupsApi.ts` — API client
-- [ ] `frontend/src/pages/PromptGroups.tsx` — Main page
+- [x] `frontend/src/services/promptGroupsApi.ts` — API client
+- [x] `frontend/src/pages/PromptGroups.tsx` — Main page
   - Group list view (cards)
   - Group create/edit form (reuse `PromptSelector`, `Card`, `Button`, `Input`, `Textarea`)
   - Group detail view with chain visualization
   - "Recalculate Now" + "Schedule Reschedule" buttons
   - Results display area
   - Status/notifications via `StatusBanner`, `Toast`, `Badge`
-- [ ] Add route in `frontend/src/App.tsx`
-- [ ] Add nav link in `frontend/src/components/Header.tsx`
+- [x] Add route in `frontend/src/App.tsx`
+- [x] Add nav link in `frontend/src/components/Header.tsx`
+- [ ] Update API client with `toggle()` and `cancelSchedule()` functions
+- [ ] Update TypeScript types (`is_active` on `PromptGroup`)
+- [ ] Add enable/disable toggle switch to GroupCard (with visual indicator for disabled)
+- [ ] Add enable/disable toggle to GroupDetailModal
+- [ ] Build Schedule Management Modal (one-time + cron, list/delete schedules)
+- [ ] Display active schedules on GroupCard and GroupDetailModal with cancel buttons
 
 ---
 
 ## Component Reuse Map
 
-| Existing Component     | Usage in PromptGroups                         |
-|------------------------|-----------------------------------------------|
-| `PageHeader`           | Page title                                    |
-| `Card`                 | Group cards, forms, result panels             |
-| `Button`               | All action buttons                            |
-| `PromptSelector`       | Select prompt+version for each chain item     |
-| `Toast`                | Success/error notifications                   |
-| `Badge`                | Execution status indicators                   |
-| `StatusBanner`         | Running/success/error banners                 |
-| `Input`                | Group name, description fields                |
-| `Textarea`             | Initial input text for chain execution        |
+| Existing Component     | Usage in PromptGroups                                |
+|------------------------|-------------------------------------------------------|
+| `PageHeader`           | Page title                                            |
+| `Card`                 | Group cards, forms, result panels                     |
+| `Button`               | All action buttons                                    |
+| `PromptSelector`       | Select prompt+version for each chain item             |
+| `Toast`                | Success/error notifications                           |
+| `Badge`                | Execution status indicators, disabled badge           |
+| `StatusBanner`         | Running/success/error banners                         |
+| `Input`                | Group name, description fields                        |
+| `Textarea`             | Initial input text for chain execution                |
 
 ---
 
@@ -186,9 +228,14 @@ data/prompt_group_results/    (created at runtime)
 ## Files Modified
 
 ```
-app/models.py                          (new SQLAlchemy models)
+app/models.py                          (new SQLAlchemy models + is_active column)
 app/schemas.py                         (new Pydantic schemas)
+app/routes/prompt_groups.py            (toggle, cancel schedule endpoints)
+app/services/prompt_scheduler.py       (is_active check in scheduler)
 app/main.py                            (register router)
 frontend/src/App.tsx                   (new route)
 frontend/src/components/Header.tsx     (nav link)
-alembic/versions/xxx_*.py              (migration)
+frontend/src/services/promptGroupsApi.ts  (toggle, cancelSchedule)
+frontend/src/types/prompt.ts           (is_active on PromptGroup)
+frontend/src/pages/PromptGroups.tsx    (toggle UI, schedule management)
+alembic/versions/xxx_*.py              (migration for is_active column)

@@ -37,10 +37,17 @@ export function createGroup(data: { name: string; description?: string | null; i
 }
 
 /** Update a prompt group */
-export function updateGroup(groupId: number, data: { name?: string | null; description?: string | null; items?: PromptGroupItemCreate[] | null }): Promise<PromptGroup> {
+export function updateGroup(groupId: number, data: { name?: string | null; description?: string | null; is_active?: boolean | null; items?: PromptGroupItemCreate[] | null }): Promise<PromptGroup> {
   return request<PromptGroup>(`/api/prompt-groups/${groupId}`, {
     method: 'PUT',
     body: JSON.stringify(data),
+  });
+}
+
+/** Toggle a group's active state */
+export function toggleGroup(groupId: number): Promise<PromptGroup> {
+  return request<PromptGroup>(`/api/prompt-groups/${groupId}/toggle`, {
+    method: 'PATCH',
   });
 }
 
@@ -70,6 +77,13 @@ export function scheduleGroup(groupId: number, data: PromptGroupScheduleCreate):
   );
 }
 
+/** Cancel a specific schedule */
+export function cancelSchedule(groupId: number, scheduleId: number): Promise<{ ok: boolean; schedule_id: number }> {
+  return request<{ ok: boolean; schedule_id: number }>(`/api/prompt-groups/${groupId}/schedules/${scheduleId}`, {
+    method: 'DELETE',
+  });
+}
+
 /** Get execution history for a group */
 export function getResults(groupId: number): Promise<PromptGroupResult[]> {
   return request<PromptGroupResult[]>(`/api/prompt-groups/${groupId}/results`);
@@ -88,9 +102,11 @@ export const promptGroupsApi = {
   get: getGroup,
   create: createGroup,
   update: updateGroup,
+  toggle: toggleGroup,
   remove: deleteGroup,
   execute: executeGroup,
   schedule: scheduleGroup,
+  cancelSchedule,
   results: getResults,
   clearSchedules,
 };

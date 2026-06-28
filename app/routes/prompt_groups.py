@@ -5,9 +5,11 @@ API routes for Prompt Group CRUD, execution, and scheduling.
 
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select, and_
+from fastapi.responses import FileResponse
+from sqlalchemy import and_
 from sqlalchemy.orm import Session, joinedload
 
 from app.db import SessionLocal
@@ -49,6 +51,7 @@ def _group_to_schema(group: PromptGroup) -> PromptGroupSchema:
         group_id=group.group_id,
         name=group.name,
         description=group.description,
+        is_active=group.is_active,
         created_at=group.created_at.isoformat() if group.created_at else "",
         updated_at=group.updated_at.isoformat() if group.updated_at else "",
         items=[
@@ -66,6 +69,7 @@ def _group_to_schema(group: PromptGroup) -> PromptGroupSchema:
                 schedule_id=s.schedule_id,
                 group_id=s.group_id,
                 run_at=s.run_at.isoformat() if s.run_at else "",
+                schedule_type=getattr(s, 'schedule_type', None) or "daily",
                 active=s.active,
                 created_at=s.created_at.isoformat() if s.created_at else "",
             )
@@ -95,7 +99,11 @@ def list_groups():
     """List all prompt groups."""
     db = _get_db()
     try:
-        groups = db.query(PromptGroup).order_by(PromptGroup.group_id.desc()).all()
+        groups = db.query(PromptGroup).options(
+            joinedload(PromptGroup.items),
+            joinedload(PromptGroup.schedules),
+            joinedload(PromptGroup.results),
+        ).order_by(PromptGroup.group_id.desc()).all()
         return [_group_to_schema(g) for g in groups]
     finally:
         db.close()
@@ -175,6 +183,8 @@ def update_group(group_id: int, req: UpdateGroupRequest):
             group.name = req.name
         if req.description is not None:
             group.description = req.description
+        if req.is_active is not None:
+            group.is_active = req.is_active
 
         if req.items is not None:
             # Replace all items
@@ -217,9 +227,77 @@ def delete_group(group_id: int):
         if not group:
             raise HTTPException(status_code=404, detail=f"PromptGroup {group_id} not found")
 
+        # Cancel all active scheduler jobs for this group before deleting
+        scheduler = PromptScheduler.get()
+        schedules = (
+            db.query(PromptGroupSchedule)
+            .filter(
+                and_(
+                    PromptGroupSchedule.group_id == group_id,
+                    PromptGroupSchedule.active == True,  # noqa: E712
+                )
+            )
+            .all()
+        )
+        for sched in schedules:
+            scheduler.cancel_schedule(sched.schedule_id)
+
         db.delete(group)
         db.commit()
         return {"ok": True, "group_id": group_id}
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Toggle active state
+# ---------------------------------------------------------------------------
+
+@router.patch("/{group_id}/toggle")
+def toggle_group(group_id: int):
+    """Toggle the active state of a prompt group."""
+    db = _get_db()
+    try:
+        group = db.query(PromptGroup).filter(PromptGroup.group_id == group_id).first()
+
+        if not group:
+            raise HTTPException(status_code=404, detail=f"PromptGroup {group_id} not found")
+
+        group.is_active = not group.is_active
+        db.commit()
+        db.refresh(group)
+
+        # If disabling, cancel all active APScheduler jobs for this group
+        if not group.is_active:
+            scheduler = PromptScheduler.get()
+            schedules = (
+                db.query(PromptGroupSchedule)
+                .filter(
+                    and_(
+                        PromptGroupSchedule.group_id == group_id,
+                        PromptGroupSchedule.active == True,  # noqa: E712
+                    )
+                )
+                .all()
+            )
+            for sched in schedules:
+                scheduler.cancel_schedule(sched.schedule_id)
+                sched.active = False
+            db.commit()
+
+        group = db.query(PromptGroup).options(
+            joinedload(PromptGroup.items),
+            joinedload(PromptGroup.schedules),
+            joinedload(PromptGroup.results),
+        ).filter(PromptGroup.group_id == group_id).first()
+        if not group:
+            raise HTTPException(status_code=404, detail=f"PromptGroup {group_id} not found")
+        return _group_to_schema(group)
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -254,6 +332,9 @@ def schedule_group(group_id: int, req: PromptGroupScheduleCreate):
         if not group:
             raise HTTPException(status_code=404, detail=f"PromptGroup {group_id} not found")
 
+        if not group.is_active:
+            raise HTTPException(status_code=400, detail="Cannot schedule a disabled group. Enable the group first.")
+
         # Parse the ISO 8601 datetime
         try:
             run_at = datetime.fromisoformat(req.run_at)
@@ -262,9 +343,12 @@ def schedule_group(group_id: int, req: PromptGroupScheduleCreate):
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid datetime format. Use ISO 8601.")
 
+        schedule_type = req.schedule_type if req.schedule_type else "daily"
+
         schedule = PromptGroupSchedule(
             group_id=group_id,
             run_at=run_at,
+            schedule_type=schedule_type,
             active=True,
         )
         db.add(schedule)
@@ -273,7 +357,7 @@ def schedule_group(group_id: int, req: PromptGroupScheduleCreate):
 
         # Add to APScheduler
         scheduler = PromptScheduler.get()
-        job_id = scheduler.schedule_execution(schedule.schedule_id, group_id, run_at)
+        job_id = scheduler.schedule_execution(schedule.schedule_id, group_id, run_at, schedule_type)
 
         return {
             "ok": True,
@@ -282,6 +366,41 @@ def schedule_group(group_id: int, req: PromptGroupScheduleCreate):
             "run_at": run_at.isoformat(),
             "job_id": job_id,
         }
+    finally:
+        db.close()
+
+
+@router.delete("/{group_id}/schedules/{schedule_id}")
+def cancel_schedule(group_id: int, schedule_id: int):
+    """Cancel a specific schedule for a group."""
+    db = _get_db()
+    try:
+        group = db.query(PromptGroup).filter(PromptGroup.group_id == group_id).first()
+        if not group:
+            raise HTTPException(status_code=404, detail=f"PromptGroup {group_id} not found")
+
+        schedule = (
+            db.query(PromptGroupSchedule)
+            .filter(
+                and_(
+                    PromptGroupSchedule.schedule_id == schedule_id,
+                    PromptGroupSchedule.group_id == group_id,
+                )
+            )
+            .first()
+        )
+        if not schedule:
+            raise HTTPException(status_code=404, detail=f"Schedule {schedule_id} not found for group {group_id}")
+
+        # Cancel in APScheduler
+        scheduler = PromptScheduler.get()
+        scheduler.cancel_schedule(schedule_id)
+
+        # Mark as inactive in database
+        schedule.active = False
+        db.commit()
+
+        return {"ok": True, "schedule_id": schedule_id}
     finally:
         db.close()
 
@@ -348,5 +467,42 @@ def clear_schedules(group_id: int):
 
         db.commit()
         return {"ok": True, "deleted": deleted}
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Result file download
+# ---------------------------------------------------------------------------
+
+@router.get("/results/{result_id}/download")
+def download_result(result_id: int):
+    """Download a result file for a specific execution result."""
+    db = _get_db()
+    try:
+        result = db.query(PromptGroupResult).filter(
+            PromptGroupResult.result_id == result_id
+        ).first()
+
+        if not result:
+            raise HTTPException(status_code=404, detail=f"Result {result_id} not found")
+
+        if not result.result_file:
+            raise HTTPException(status_code=404, detail="No result file available for this execution")
+
+        # Resolve the file path relative to project root
+        project_root = Path(__file__).resolve().parent.parent.parent
+        file_path = project_root / result.result_file
+
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Result file not found on disk")
+
+        return FileResponse(
+            str(file_path),
+            media_type="application/json",
+            filename=file_path.name,
+        )
+    except HTTPException:
+        raise
     finally:
         db.close()

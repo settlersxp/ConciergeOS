@@ -14,10 +14,11 @@ from typing import Any
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import select
 
 from app.db import SessionLocal
-from app.models import PromptGroupSchedule
+from app.models import PromptGroup, PromptGroupSchedule
 from app.services.prompt_chain import execute_chain
 
 logger = logging.getLogger(__name__)
@@ -68,12 +69,25 @@ class PromptScheduler:
     # Scheduling
     # ------------------------------------------------------------------
 
-    def schedule_execution(self, schedule_id: int, group_id: int, run_at: datetime) -> str:
-        """Add a one-shot job for a prompt group chain execution.
+    def schedule_execution(self, schedule_id: int, group_id: int, run_at: datetime, schedule_type: str = "daily") -> str:
+        """Add a job for a prompt group chain execution.
+
+        Args:
+            schedule_id: Database schedule record ID.
+            group_id: Prompt group to execute.
+            run_at: First execution time.
+            schedule_type: "none" (one-shot), "daily", or "weekly".
 
         Returns the job_id assigned by APScheduler.
         """
-        trigger = DateTrigger(run_date=run_at)
+        if schedule_type == "none":
+            trigger = DateTrigger(run_date=run_at)
+        elif schedule_type == "weekly":
+            trigger = IntervalTrigger(weeks=1, start_date=run_at)
+        else:
+            # default to daily
+            trigger = IntervalTrigger(days=1, start_date=run_at)
+
         job = self.scheduler.add_job(
             self._execute_group,
             trigger=trigger,
@@ -82,7 +96,7 @@ class PromptScheduler:
             replace_existing=True,
         )
         self._persist_state()
-        logger.info("Scheduled group %d (schedule %d) at %s → job %s", group_id, schedule_id, run_at, job.id)
+        logger.info("Scheduled group %d (schedule %d) type=%s at %s → job %s", group_id, schedule_id, schedule_type, run_at, job.id)
         return job.id
 
     def cancel_schedule(self, schedule_id: int) -> bool:
@@ -102,8 +116,22 @@ class PromptScheduler:
 
     @staticmethod
     def _execute_group(group_id: int, schedule_id: int) -> None:
-        """Callback invoked by APScheduler to run a prompt chain."""
+        """Callback invoked by APScheduler to run a prompt chain.
+        
+        Checks if the group is still active before executing. Skips if disabled.
+        """
         logger.info("Scheduled execution: group %d (schedule %d)", group_id, schedule_id)
+        
+        # Check if group is still active
+        with SessionLocal() as db:
+            group = db.query(PromptGroup).filter(PromptGroup.group_id == group_id).first()
+            if not group or not group.is_active:
+                logger.warning(
+                    "Skipping scheduled execution: group %d is disabled or not found",
+                    group_id,
+                )
+                return
+
         try:
             result = execute_chain(group_id, scheduled=True)
             logger.info(
@@ -130,13 +158,17 @@ class PromptScheduler:
         """On startup: reload pending schedules from the database.
 
         Re-schedules any active PromptGroupSchedule records whose run_at
-        is in the future and that have not yet been executed.
+        is in the future, but only for groups where is_active == True.
         """
         with SessionLocal() as db:
+            # Join with PromptGroup to filter out disabled groups
             schedules = db.execute(
-                select(PromptGroupSchedule).where(
+                select(PromptGroupSchedule)
+                .join(PromptGroup, PromptGroupSchedule.group_id == PromptGroup.group_id)
+                .where(
                     PromptGroupSchedule.active == True,  # noqa: E712
                     PromptGroupSchedule.run_at > datetime.now(timezone.utc),
+                    PromptGroup.is_active == True,  # noqa: E712
                 )
             ).scalars().all()
 
@@ -149,7 +181,8 @@ class PromptScheduler:
                 if run_at.tzinfo is None:
                     run_at = run_at.replace(tzinfo=timezone.utc)
 
-                self.schedule_execution(sched.schedule_id, sched.group_id, run_at)
+                schedule_type = getattr(sched, 'schedule_type', None) or "daily"
+                self.schedule_execution(sched.schedule_id, sched.group_id, run_at, schedule_type)
             except Exception:
                 logger.error(
                     "Failed to recover schedule %d for group %d",

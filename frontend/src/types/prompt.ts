@@ -66,12 +66,14 @@ export interface PromptGroupSchedule {
   schedule_id: number;
   group_id: number;
   run_at: string;
+  schedule_type: string;
   active: boolean;
   created_at: string;
 }
 
 export interface PromptGroupScheduleCreate {
   run_at: string;
+  schedule_type?: string;
 }
 
 export interface PromptGroupResult {
@@ -88,6 +90,7 @@ export interface PromptGroup {
   group_id: number;
   name: string;
   description: string | null;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
   items: PromptGroupItem[];
