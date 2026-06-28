@@ -8,6 +8,7 @@ for database interactions.
 
 import csv
 import io
+import inspect
 import json
 import logging
 import xml.etree.ElementTree as ET
@@ -15,6 +16,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from openai import OpenAI
+
+from app.services import tool_logic
 from pydantic import BaseModel
 
 from app.db import SessionLocal, engine
@@ -202,107 +205,24 @@ SHARED_SYSTEM_PROMPT = _SYSTEM_PROMPT_WITH_SCHEMA
 # Tool Definitions (OpenAI function calling format)
 # ---------------------------------------------------------------------------
 
+# Mapping of tool names to their executor functions and Pydantic schemas
+_TOOL_REGISTRY = {
+    "query_guests": (tool_logic.execute_query_guests, tool_logic.GuestQuerySchema),
+    "query_rooms": (tool_logic.execute_query_rooms, tool_logic.RoomQuerySchema),
+    "query_reservations": (tool_logic.execute_query_reservations, tool_logic.ReservationQuerySchema),
+    "get_hotel_summary": (tool_logic.execute_get_hotel_summary, tool_logic.HotelSummarySchema),
+}
+
 TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "query_guests",
-            "description": "Search for guests in the hotel database. All parameters are optional filters.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "guest_id": {
-                        "type": "integer",
-                        "description": "Filter by specific guest ID",
-                    },
-                    "first_name": {
-                        "type": "string",
-                        "description": "Filter by first name (case-insensitive partial match)",
-                    },
-                    "last_name": {
-                        "type": "string",
-                        "description": "Filter by last name (case-insensitive partial match)",
-                    },
-                    "is_special_guest": {
-                        "type": "boolean",
-                        "description": "Filter by special guest status. true for special guests only, false for regular guests.",
-                    },
-                },
-                "required": [],
-            },
+            "name": name,
+            "description": inspect.getdoc(func) or "",
+            "parameters": schema.model_json_schema(),
         },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "query_rooms",
-            "description": "Search for rooms in the hotel. All parameters are optional filters.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "room_id": {
-                        "type": "integer",
-                        "description": "Filter by specific room ID",
-                    },
-                    "name": {
-                        "type": "string",
-                        "description": "Filter by room name (case-insensitive partial match)",
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "query_reservations",
-            "description": "Search for reservations in the hotel database. All parameters are optional filters.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "reservation_id": {
-                        "type": "integer",
-                        "description": "Filter by specific reservation ID",
-                    },
-                    "guest_id": {
-                        "type": "integer",
-                        "description": "Filter by guest ID",
-                    },
-                    "room_id": {
-                        "type": "integer",
-                        "description": "Filter by room ID",
-                    },
-                    "status": {
-                        "type": "string",
-                        "enum": ["PENDING", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELLED"],
-                        "description": "Filter by reservation status",
-                    },
-                    "check_in": {
-                        "type": "string",
-                        "description": "Filter by check-in date (ISO format YYYY-MM-DD)",
-                    },
-                    "check_out": {
-                        "type": "string",
-                        "description": "Filter by check-out date (ISO format YYYY-MM-DD)",
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_hotel_summary",
-            "description": "Get an overview of the hotel including total counts of guests, rooms, and reservations broken down by status.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": [],
-            },
-        },
-    },
+    }
+    for name, (func, schema) in _TOOL_REGISTRY.items()
 ]
 
 

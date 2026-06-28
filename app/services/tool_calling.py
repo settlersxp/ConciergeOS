@@ -92,7 +92,7 @@ def call_llm_with_db_tools(
             messages=messages,
             tools=TOOL_DEFINITIONS,
             temperature=0.1,
-            max_tokens=102400,
+            max_tokens=10240,
         )
 
         assistant_message = response.choices[0].message

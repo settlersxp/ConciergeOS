@@ -9,7 +9,9 @@ orchestration or caching overhead.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Union
+
+from pydantic import BaseModel, Field, TypeAdapter
 
 from app.db import SessionLocal
 from app.models import Guest, Reservation, Room
@@ -55,26 +57,66 @@ def _format_reservation(reservation: Reservation) -> dict[str, Any]:
     }
 
 
+# ── Schema Definitions ───────────────────────────────────────────────────────
+
+
+class GuestQuerySchema(BaseModel):
+    """Schema for querying guests."""
+
+    guest_id: int | None = Field(None, description="Filter by specific guest ID")
+    first_name: str | None = Field(None, description="Filter by first name (case-insensitive partial match)")
+    last_name: str | None = Field(None, description="Filter by last name (case-insensitive partial match)")
+    is_special_guest: bool | None = Field(
+        None, description="Filter by special guest status. true for special guests only, false for regular guests."
+    )
+
+
+class RoomQuerySchema(BaseModel):
+    """Schema for querying rooms."""
+
+    room_id: int | None = Field(None, description="Filter by specific room ID")
+    name: str | None = Field(None, description="Filter by room name (case-insensitive partial match)")
+
+
+class ReservationQuerySchema(BaseModel):
+    """Schema for querying reservations."""
+
+    reservation_id: int | None = Field(None, description="Filter by specific reservation ID")
+    guest_id: int | None = Field(None, description="Filter by guest ID")
+    room_id: int | None = Field(None, description="Filter by room ID")
+    status: str | None = Field(
+        None,
+        description="Filter by reservation status",
+    )
+    check_in: str | None = Field(None, description="Filter by check-in date (ISO format YYYY-MM-DD)")
+    check_out: str | None = Field(None, description="Filter by check-out date (ISO format YYYY-MM-DD)")
+
+
+class HotelSummarySchema(BaseModel):
+    """Schema for getting hotel summary."""
+
+    pass
+
+
 # ── Executor implementations ────────────────────────────────────────────────
 
 
-def execute_query_guests(params: dict[str, Any]) -> str:
+def execute_query_guests(params: Union[GuestQuerySchema, dict[str, Any]]) -> str:
     """Query guests from the database based on filter params."""
+    if isinstance(params, dict):
+        params = TypeAdapter(GuestQuerySchema).validate_python(params)
+
     db = SessionLocal()
     try:
         query = db.query(Guest)
-        guest_id = params.get("guest_id")
-        if guest_id is not None:
-            query = query.filter(Guest.guest_id == guest_id)
-        first_name = params.get("first_name")
-        if first_name:
-            query = query.filter(Guest.first_name.ilike(f"%{first_name}%"))
-        last_name = params.get("last_name")
-        if last_name:
-            query = query.filter(Guest.last_name.ilike(f"%{last_name}%"))
-        is_special = params.get("is_special_guest")
-        if is_special is not None:
-            query = query.filter(Guest.is_special_guest == bool(is_special))
+        if params.guest_id is not None:
+            query = query.filter(Guest.guest_id == params.guest_id)
+        if params.first_name:
+            query = query.filter(Guest.first_name.ilike(f"%{params.first_name}%"))
+        if params.last_name:
+            query = query.filter(Guest.last_name.ilike(f"%{params.last_name}%"))
+        if params.is_special_guest is not None:
+            query = query.filter(Guest.is_special_guest == params.is_special_guest)
 
         guests = query.all()
         if not guests:
@@ -88,17 +130,18 @@ def execute_query_guests(params: dict[str, Any]) -> str:
         db.close()
 
 
-def execute_query_rooms(params: dict[str, Any]) -> str:
+def execute_query_rooms(params: Union[RoomQuerySchema, dict[str, Any]]) -> str:
     """Query rooms from the database based on filter params."""
+    if isinstance(params, dict):
+        params = TypeAdapter(RoomQuerySchema).validate_python(params)
+
     db = SessionLocal()
     try:
         query = db.query(Room)
-        room_id = params.get("room_id")
-        if room_id is not None:
-            query = query.filter(Room.room_id == room_id)
-        name = params.get("name")
-        if name:
-            query = query.filter(Room.name.ilike(f"%{name}%"))
+        if params.room_id is not None:
+            query = query.filter(Room.room_id == params.room_id)
+        if params.name:
+            query = query.filter(Room.name.ilike(f"%{params.name}%"))
 
         rooms = query.all()
         if not rooms:
@@ -119,35 +162,34 @@ def execute_query_rooms(params: dict[str, Any]) -> str:
         db.close()
 
 
-def execute_query_reservations(params: dict[str, Any]) -> str:
+def execute_query_reservations(
+    params: Union[ReservationQuerySchema, dict[str, Any]]
+) -> str:
     """Query reservations from the database based on filter params."""
+    if isinstance(params, dict):
+        params = TypeAdapter(ReservationQuerySchema).validate_python(params)
+
     db = SessionLocal()
     try:
         query = db.query(Reservation)
-        reservation_id = params.get("reservation_id")
-        if reservation_id is not None:
-            query = query.filter(Reservation.reservation_id == reservation_id)
-        guest_id = params.get("guest_id")
-        if guest_id is not None:
-            query = query.filter(Reservation.guest_id == guest_id)
-        room_id = params.get("room_id")
-        if room_id is not None:
-            query = query.filter(Reservation.room_id == room_id)
-        status_str = params.get("status")
-        if status_str:
+        if params.reservation_id is not None:
+            query = query.filter(Reservation.reservation_id == params.reservation_id)
+        if params.guest_id is not None:
+            query = query.filter(Reservation.guest_id == params.guest_id)
+        if params.room_id is not None:
+            query = query.filter(Reservation.room_id == params.room_id)
+        if params.status:
             try:
-                query = query.filter(Reservation.status == ReservationStatus(status_str))
+                query = query.filter(Reservation.status == ReservationStatus(params.status))
             except ValueError:
                 return (
-                    f"Invalid status: {status_str}. "
+                    f"Invalid status: {params.status}. "
                     f"Valid options: {', '.join(s.value for s in ReservationStatus)}"
                 )
-        check_in = params.get("check_in")
-        if check_in:
-            query = query.filter(Reservation.check_in_date == check_in)
-        check_out = params.get("check_out")
-        if check_out:
-            query = query.filter(Reservation.check_out_date == check_out)
+        if params.check_in:
+            query = query.filter(Reservation.check_in_date == params.check_in)
+        if params.check_out:
+            query = query.filter(Reservation.check_out_date == params.check_out)
 
         reservations = query.all()
         if not reservations:
@@ -164,8 +206,11 @@ def execute_query_reservations(params: dict[str, Any]) -> str:
         db.close()
 
 
-def execute_get_hotel_summary(params: dict[str, Any]) -> str:
+def execute_get_hotel_summary(params: Union[HotelSummarySchema, dict[str, Any]]) -> str:
     """Return a summary of the entire hotel database."""
+    if isinstance(params, dict):
+        params = TypeAdapter(HotelSummarySchema).validate_python(params)
+
     db = SessionLocal()
     try:
         status_counts: dict[str, int] = {
