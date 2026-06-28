@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   PageHeader, Card, Button, Toast,
   PlaceholderPalette, PreviewPanel, PromptEditorSection,
@@ -30,6 +30,7 @@ export default function PromptManagement() {
   const [resolvedPreview, setResolvedPreview] = useState<{ system: string; user: string } | null>(null);
   const [runtimeVariables, setRuntimeVariables] = useState<Record<string, string>>({});
   const [_loading, setLoading] = useState(false);
+  const selectorRefetchRef = useRef<(() => void) | undefined>();
 
   // Load all prompts on mount
   useEffect(() => {
@@ -248,6 +249,8 @@ export default function PromptManagement() {
       if (def) {
         setSelectedVersion(def.version);
       }
+      // Refetch versions in the selector so the "(default)" label updates
+      selectorRefetchRef.current?.();
     } catch (err) {
       showNotification(`Failed to set default: ${(err as Error).message}`, "error");
     }
@@ -315,6 +318,7 @@ export default function PromptManagement() {
           <PromptSelector
             value={editingVersion !== null ? { prompt_id: selectedPromptId, version: editingVersion } : undefined}
             onChange={handlePromptSelectorChange}
+            refetchRef={selectorRefetchRef}
           />
           <Card>
             <div className="space-y-4">

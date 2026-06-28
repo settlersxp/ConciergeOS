@@ -5,18 +5,21 @@ import GuestSearch from './pages/GuestSearch';
 import PerformanceTesting from './pages/PerformanceTesting';
 import Settings from './pages/Settings';
 import PromptManagement from './pages/PromptManagement';
+import { SettingsProvider } from './context/SettingsContext';
 
 function App() {
   return (
     <BrowserRouter>
-      <Header />
-      <Routes>
-        <Route path="/" element={<Reservations />} />
-        <Route path="/guest-search" element={<GuestSearch />} />
-        <Route path="/performance-testing" element={<PerformanceTesting />} />
-        <Route path="/prompts" element={<PromptManagement />} />
-        <Route path="/settings" element={<Settings />} />
-      </Routes>
+      <SettingsProvider>
+        <Header />
+        <Routes>
+          <Route path="/" element={<Reservations />} />
+          <Route path="/guest-search" element={<GuestSearch />} />
+          <Route path="/performance-testing" element={<PerformanceTesting />} />
+          <Route path="/prompts" element={<PromptManagement />} />
+          <Route path="/settings" element={<Settings />} />
+        </Routes>
+      </SettingsProvider>
     </BrowserRouter>
   );
 }

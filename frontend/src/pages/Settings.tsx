@@ -1,15 +1,33 @@
 import { useEffect, useRef, useState } from 'react';
-import { settingsApi } from '../services/api';
+import { useSettings } from '../context/SettingsContext';
 import type { AppSettings, TestSettings } from '../types';
 import { PageHeader, Card, FormField, Input, Select, Button, Toast } from '../components/ui';
 
 export default function Settings() {
-  // Form state
-  const [modelsEndpoint, setModelsEndpoint] = useState('');
-  const [modelName, setModelName] = useState('');
-  const [vllmVersion, setVllmVersion] = useState('');
-  const [thinkingEnabled, setThinkingEnabled] = useState(false);
-  const [expectedFormat, setExpectedFormat] = useState('auto');
+  const {
+    modelsEndpoint,
+    modelName,
+    vllmVersion,
+    thinkingEnabled,
+    expectedFormat,
+    saveSettings,
+  } = useSettings();
+
+  // Local edit state (may differ from saved until user clicks Save)
+  const [editEndpoint, setEditEndpoint] = useState(modelsEndpoint);
+  const [editModelName, setEditModelName] = useState(modelName);
+  const [editVllmVersion, setEditVllmVersion] = useState(vllmVersion);
+  const [editThinkingEnabled, setEditThinkingEnabled] = useState(thinkingEnabled);
+  const [editExpectedFormat, setEditExpectedFormat] = useState(expectedFormat);
+
+  // Sync local edit state when context changes (e.g., after save from another page)
+  useEffect(() => {
+    setEditEndpoint(modelsEndpoint);
+    setEditModelName(modelName);
+    setEditVllmVersion(vllmVersion);
+    setEditThinkingEnabled(thinkingEnabled);
+    setEditExpectedFormat(expectedFormat);
+  }, [modelsEndpoint, modelName, vllmVersion, thinkingEnabled, expectedFormat]);
 
   // UI state
   const [saving, setSaving] = useState(false);
@@ -17,34 +35,20 @@ export default function Settings() {
   const [fetchStatus, setFetchStatus] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  // Load settings on mount
-  useEffect(() => {
-    settingsApi.get().then((data) => {
-      const ts = data.test_settings;
-      if (ts) {
-        setModelsEndpoint(ts.models_endpoint ?? '');
-        setModelName(ts.model_name ?? '');
-        setVllmVersion(ts.vllm_version ?? '');
-        setThinkingEnabled(ts.thinking_enabled ?? false);
-        setExpectedFormat(ts.expected_format ?? 'auto');
-      }
-    });
-  }, []);
-
   const handleSave = async () => {
     setSaving(true);
     const payload: AppSettings = {
       test_settings: {
-        models_endpoint: modelsEndpoint,
-        model_name: modelName,
-        vllm_version: vllmVersion,
-        thinking_enabled: thinkingEnabled,
-        expected_format: expectedFormat,
+        models_endpoint: editEndpoint,
+        model_name: editModelName,
+        vllm_version: editVllmVersion,
+        thinking_enabled: editThinkingEnabled,
+        expected_format: editExpectedFormat,
       } satisfies TestSettings,
     };
 
     try {
-      await settingsApi.update(payload);
+      await saveSettings(payload);
       setToast({ message: 'Settings saved successfully', type: 'success' });
     } catch (err: unknown) {
       setToast({ message: err instanceof Error ? err.message : 'Failed to save settings', type: 'error' });
@@ -69,13 +73,13 @@ export default function Settings() {
       if (!models.length) throw new Error('No models found');
 
       const m = models[0];
-      setModelName(m.id ?? m.model ?? 'unknown');
+      setEditModelName(m.id ?? m.model ?? 'unknown');
 
       let version = m.vllm_version ?? '';
       if (!version && m.extra && typeof m.extra === 'object') {
         version = m.extra.vllm_version ?? 'unknown';
       }
-      setVllmVersion(version || 'unknown');
+      setEditVllmVersion(version || 'unknown');
 
       let thinking = false;
       if (m.capabilities && typeof m.capabilities === 'object') {
@@ -83,7 +87,7 @@ export default function Settings() {
       }
       const mtype = String(m.type ?? '');
       if (mtype.toLowerCase().includes('thinking')) thinking = true;
-      setThinkingEnabled(thinking);
+      setEditThinkingEnabled(thinking);
 
       setFetchStatus('✓ Model info fetched successfully');
       setTimeout(() => setFetchStatus(''), 3000);
@@ -116,8 +120,8 @@ export default function Settings() {
                 ref={modelsEndpointRef}
                 id="models_endpoint"
                 type="text"
-                value={modelsEndpoint}
-                onChange={(e) => setModelsEndpoint(e.target.value)}
+                value={editEndpoint}
+                onChange={(e) => setEditEndpoint(e.target.value)}
               />
             </FormField>
           </div>
@@ -127,8 +131,8 @@ export default function Settings() {
               <Input
                 id="model_name"
                 type="text"
-                value={modelName}
-                onChange={(e) => setModelName(e.target.value)}
+                value={editModelName}
+                onChange={(e) => setEditModelName(e.target.value)}
               />
             </FormField>
           </div>
@@ -152,8 +156,8 @@ export default function Settings() {
               <Input
                 id="vllm_version"
                 type="text"
-                value={vllmVersion}
-                onChange={(e) => setVllmVersion(e.target.value)}
+                value={editVllmVersion}
+                onChange={(e) => setEditVllmVersion(e.target.value)}
                 placeholder="e.g. 0.6.0"
               />
             </FormField>
@@ -163,8 +167,8 @@ export default function Settings() {
             <input
               id="thinking_enabled"
               type="checkbox"
-              checked={thinkingEnabled}
-              onChange={(e) => setThinkingEnabled(e.target.checked)}
+              checked={editThinkingEnabled}
+              onChange={(e) => setEditThinkingEnabled(e.target.checked)}
               className="h-4 w-4 rounded border-surface-300 text-secondary-400 focus:ring-secondary-400 dark:border-primary-600"
             />
             <label htmlFor="thinking_enabled" className="text-sm text-primary-700 dark:text-primary-300">
@@ -176,8 +180,8 @@ export default function Settings() {
             <FormField htmlFor="expected_format" label="Expected Response Format">
               <Select
                 id="expected_format"
-                value={expectedFormat}
-                onChange={(e) => setExpectedFormat(e.target.value)}
+                value={editExpectedFormat}
+                onChange={(e) => setEditExpectedFormat(e.target.value)}
               >
                 <option value="auto">Auto-Detect</option>
                 <option value="json">JSON</option>

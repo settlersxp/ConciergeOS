@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { performanceApi, settingsApi } from "../services/api";
+import { performanceApi } from "../services/api";
+import { useSettings } from "../context/SettingsContext";
 import type {
   TestResult,
   Batch,
@@ -72,11 +73,15 @@ export default function PerformanceTesting() {
   } | null>(null);
   const [userPrompt, setUserPrompt] = useState("");
 
-  // Settings from API (model info, etc.)
-  const [modelName, setModelName] = useState("");
-  const [vllmUrl, setVllmUrl] = useState("");
-  const [modelsEndpoint, setModelsEndpoint] = useState("");
-  const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  // Settings from shared context (reactive across pages)
+  const { modelName, modelsEndpoint, thinkingEnabled } = useSettings();
+  // Derive vllm_url from models_endpoint
+  const vllmUrl = modelsEndpoint
+    ? modelsEndpoint.replace("/models", "").replace("/v1/models", "")
+    : "";
+  // Track the model name last used to auto-sync friendlyName
+  const syncedModelRef = useState("");
+  const [, setSyncedModel] = syncedModelRef;
 
   // Results & misc
   const [running, setRunning] = useState(false);
@@ -95,12 +100,19 @@ export default function PerformanceTesting() {
   const [validationResults, setValidationResults] = useState<SingleGuestValidation[]>([]);
   const [validationSummary, setValidationSummary] = useState<ValidateGuestsResponse['summary'] | undefined>(undefined);
 
-  // Load batches on mount
+  // Load batches and guests on mount
   useEffect(() => {
     loadBatches();
     loadGuests();
-    loadAppSettings();
   }, []);
+
+  // Sync friendlyName with context modelName when it changes (if user hasn't customized it)
+  useEffect(() => {
+    if (modelName && (friendlyName === "" || friendlyName === syncedModelRef[0])) {
+      setFriendlyName(modelName);
+      setSyncedModel(modelName);
+    }
+  }, [modelName]);
 
   const loadBatches = async () => {
     try {
@@ -124,31 +136,12 @@ export default function PerformanceTesting() {
     }
   };
 
-  const loadAppSettings = async () => {
-    try {
-      const data = await settingsApi.get();
-      const ts = data.test_settings;
-      if (ts) {
-        setModelName(ts.model_name || "");
-        setThinkingEnabled(ts.thinking_enabled || false);
-        setModelsEndpoint(ts.models_endpoint || "");
-        // Derive vllm_url from models_endpoint
-        if (ts.models_endpoint) {
-          setVllmUrl(
-            ts.models_endpoint.replace("/models", "").replace("/v1/models", "")
-          );
-        }
-        // Set friendly name if empty
-        if (ts.model_name && !friendlyName) {
-          setFriendlyName(ts.model_name);
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-  };
 
   const handleRun = async () => {
+    // Generate a new batch UUID for each run
+    const newBatchUuid = generateUuid();
+    setBatchUuid(newBatchUuid);
+
     setRunning(true);
     setStatus({ message: "Running performance tests... This may take a while.", type: "running" });
 
@@ -165,7 +158,7 @@ export default function PerformanceTesting() {
       user_prompt: userPrompt,
       expected_response_format: "auto",
       data_format: dataFormat,
-      batch_uuid: batchUuid,
+      batch_uuid: newBatchUuid,
       // Send prompt_id and version for server-side resolution
       prompt_id: promptSelection?.prompt_id || undefined,
       prompt_version: promptSelection?.version || undefined,
@@ -192,10 +185,8 @@ export default function PerformanceTesting() {
         setResults(resultsData);
       }
 
-      await loadBatches();
-      // Generate new UUID for next run
-      setBatchUuid(generateUuid());
-    } catch (e: unknown) {
+       await loadBatches();
+     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setStatus({ message: `Error running tests: ${msg}`, type: "error" });
     } finally {
@@ -478,13 +469,11 @@ export default function PerformanceTesting() {
       <div className="grid gap-6 md:grid-cols-2 mb-6">
         <TestConfigCard
           testMode={testMode}
-          batchUuid={batchUuid}
           friendlyName={friendlyName}
           customerName={customerName}
           sequentialBatch={sequentialBatch}
           concurrentBatch={concurrentBatch}
           onTestModeChange={setTestMode}
-          onBatchUuidChange={setBatchUuid}
           onFriendlyNameChange={setFriendlyName}
           onCustomerNameChange={setCustomerName}
           onSequentialBatchChange={setSequentialBatch}
