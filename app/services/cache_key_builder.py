@@ -34,12 +34,78 @@ Usage:
 
 import hashlib
 import logging
+import time
 from typing import Optional
 
 from app.db import SessionLocal
 from app.models import Guest, Reservation, Room
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Name-to-ID resolution cache
+# ---------------------------------------------------------------------------
+# TTL for cached name-to-ID lookups (in seconds).
+# When guest data changes, call resolve_cache_clear() to invalidate.
+_NAME_CACHE_TTL = 300  # 5 minutes
+
+# In-memory cache: "table:column:value" -> {"ids": [...], "timestamp": float}
+_name_cache: dict[str, dict] = {}
+
+
+def _get_name_cache_key(table: str, column: str, value: str) -> str:
+    """Generate a cache key for a name lookup."""
+    return f"{table}:{column}:{value}"
+
+
+def resolve_cache_get(cache_key: str) -> list[int] | None:
+    """
+    Get a cached name-to-ID resolution result.
+    
+    Returns None if not cached or expired.
+    """
+    entry = _name_cache.get(cache_key)
+    if entry is None:
+        return None
+    if time.time() - entry["timestamp"] > _NAME_CACHE_TTL:
+        del _name_cache[cache_key]
+        return None
+    return entry["ids"]
+
+
+def resolve_cache_set(cache_key: str, ids: list[int]) -> None:
+    """Cache a name-to-ID resolution result."""
+    _name_cache[cache_key] = {
+        "ids": ids,
+        "timestamp": time.time(),
+    }
+
+
+def resolve_cache_clear() -> int:
+    """Clear the name-to-ID resolution cache. Returns the count of entries cleared."""
+    count = len(_name_cache)
+    _name_cache.clear()
+    return count
+
+
+def resolve_cache_cleanup() -> int:
+    """Remove expired entries. Returns the count removed."""
+    now = time.time()
+    expired_keys = [
+        k for k, v in _name_cache.items()
+        if now - v["timestamp"] > _NAME_CACHE_TTL
+    ]
+    for key in expired_keys:
+        del _name_cache[key]
+    return len(expired_keys)
+
+
+def resolve_cache_stats() -> dict:
+    """Return cache statistics."""
+    return {
+        "size": len(_name_cache),
+        "ttl": _NAME_CACHE_TTL,
+    }
 
 # Map tool names to database table/entity names
 TOOL_TO_TABLE_MAP: dict[str, str] = {
@@ -88,6 +154,8 @@ def _resolve_guest_params(params: dict) -> dict:
     
     Handles both singular (guest_id) and plural (guest_ids) parameter names
     to support single and array-based queries.
+    
+    Uses an in-memory cache for name-based lookups to avoid redundant DB queries.
     """
     # Priority 1: Direct guest_ids (plural) or guest_id (singular)
     guest_ids = params.get("guest_ids") or params.get("guest_id")
@@ -98,7 +166,27 @@ def _resolve_guest_params(params: dict) -> dict:
             guest_ids = [guest_ids]
         return {"guest_ids": list(map(int, guest_ids))}
 
-    # Priority 2: Name-based lookup
+    # Priority 2: Name-based lookup (with caching)
+    cache_key_parts = []
+    if params.get("first_name"):
+        cache_key_parts.append(f"first:{params['first_name']}")
+    if params.get("last_name"):
+        cache_key_parts.append(f"last:{params['last_name']}")
+    if params.get("is_special_guest") is not None:
+        cache_key_parts.append(f"special:{params['is_special_guest']}")
+    
+    name_cache_key = _get_name_cache_key("guests", ":".join(cache_key_parts), "") if cache_key_parts else None
+    
+    if name_cache_key:
+        cached = resolve_cache_get(name_cache_key)
+        if cached is not None:
+            logger.debug(f"[NAME-CACHE] HIT for guests lookup: {cache_key_parts}")
+            if len(cached) == 1:
+                return {"guest_ids": cached}
+            elif len(cached) > 1:
+                return {"guest_ids": cached}
+            # Multiple matches or none - fall through to DB query for accuracy
+    
     db = SessionLocal()
     try:
         query = db.query(Guest)
@@ -115,9 +203,19 @@ def _resolve_guest_params(params: dict) -> dict:
             is_special = bool(params["is_special_guest"])
             query = query.filter(Guest.is_special_guest == is_special)
 
-        guest = query.first()
-        if guest:
-            return {"guest_ids": [guest.guest_id]}
+        guests = query.all()
+        guest_ids = [g.guest_id for g in guests]
+        
+        # Cache name-based results
+        if name_cache_key and guest_ids:
+            resolve_cache_set(name_cache_key, guest_ids)
+            if len(guest_ids) == 1:
+                logger.debug(f"[NAME-CACHE] SET for guests lookup: {cache_key_parts} -> {guest_ids}")
+            else:
+                logger.debug(f"[NAME-CACHE] SET for guests lookup: {cache_key_parts} -> {len(guest_ids)} results")
+
+        if guests:
+            return {"guest_ids": guest_ids}
     finally:
         db.close()
 
