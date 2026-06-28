@@ -101,130 +101,211 @@ class HotelSummarySchema(BaseModel):
 # ── Executor implementations ────────────────────────────────────────────────
 
 
-def execute_query_guests(params: Union[GuestQuerySchema, dict[str, Any]]) -> str:
+def execute_query_guests(args: dict[str, Any]) -> str:
     """Query guests from the database based on filter params."""
+    params = args.get("params", args)
+    
     if isinstance(params, dict):
-        params = TypeAdapter(GuestQuerySchema).validate_python(params)
+        param_list = [params]
+        is_list_input = False
+    elif isinstance(params, list):
+        param_list = params
+        is_list_input = True
+    else:
+        param_list = [params]
+        is_list_input = False
 
-    db = SessionLocal()
-    try:
-        query = db.query(Guest)
-        if params.guest_id is not None:
-            query = query.filter(Guest.guest_id == params.guest_id)
-        if params.first_name:
-            query = query.filter(Guest.first_name.ilike(f"%{params.first_name}%"))
-        if params.last_name:
-            query = query.filter(Guest.last_name.ilike(f"%{params.last_name}%"))
-        if params.is_special_guest is not None:
-            query = query.filter(Guest.is_special_guest == params.is_special_guest)
+    results = {}
 
-        guests = query.all()
-        if not guests:
-            return "No guests found matching the criteria."
+    for i, p in enumerate(param_list):
+        if isinstance(p, dict):
+            p = TypeAdapter(GuestQuerySchema).validate_python(p)
+        
+        db = SessionLocal()
+        try:
+            query = db.query(Guest)
+            if p.guest_id is not None:
+                query = query.filter(Guest.guest_id == p.guest_id)
+            if p.first_name:
+                query = query.filter(Guest.first_name.ilike(f"%{p.first_name}%"))
+            if p.last_name:
+                query = query.filter(Guest.last_name.ilike(f"%{p.last_name}%"))
+            if p.is_special_guest is not None:
+                query = query.filter(Guest.is_special_guest == p.is_special_guest)
 
-        return json.dumps(
-            {"count": len(guests), "guests": [_format_guest(g) for g in guests]},
-            indent=2,
-        )
-    finally:
-        db.close()
+            guests = query.all()
+            if not guests:
+                results[str(i)] = "No guests found matching the criteria."
+            else:
+                results[str(i)] = json.dumps(
+                    {"count": len(guests), "guests": [_format_guest(g) for g in guests]},
+                    indent=2,
+                )
+        finally:
+            db.close()
+    
+    if not is_list_input:
+        return json.dumps({"result": results["0"]}, indent=2)
+    
+    return json.dumps(results, indent=2)
 
 
-def execute_query_rooms(params: Union[RoomQuerySchema, dict[str, Any]]) -> str:
+def execute_query_rooms(args: dict[str, Any]) -> str:
     """Query rooms from the database based on filter params."""
+    params = args.get("params", args)
+    
     if isinstance(params, dict):
-        params = TypeAdapter(RoomQuerySchema).validate_python(params)
+        param_list = [params]
+        is_list_input = False
+    elif isinstance(params, list):
+        param_list = params
+        is_list_input = True
+    else:
+        param_list = [params]
+        is_list_input = False
 
-    db = SessionLocal()
-    try:
-        query = db.query(Room)
-        if params.room_id is not None:
-            query = query.filter(Room.room_id == params.room_id)
-        if params.name:
-            query = query.filter(Room.name.ilike(f"%{params.name}%"))
+    results = {}
 
-        rooms = query.all()
-        if not rooms:
-            return "No rooms found matching the criteria."
+    for i, p in enumerate(param_list):
+        if isinstance(p, dict):
+            p = TypeAdapter(RoomQuerySchema).validate_python(p)
 
-        results = [
-            {
-                "room_id": r.room_id,
-                "name": r.name,
-                "allowed_booking_channel": r.allowed_booking_channel.value,
-                "checkin_time": r.checkin_time,
-                "checkout_time": r.checkout_time,
-            }
-            for r in rooms
-        ]
-        return json.dumps({"count": len(results), "rooms": results}, indent=2)
-    finally:
-        db.close()
+        db = SessionLocal()
+        try:
+            query = db.query(Room)
+            if p.room_id is not None:
+                query = query.filter(Room.room_id == p.room_id)
+            if p.name:
+                query = query.filter(Room.name.ilike(f"%{p.name}%"))
+
+            rooms = query.all()
+            if not rooms:
+                results[str(i)] = "No rooms found matching the criteria."
+            else:
+                room_results = [
+                    {
+                        "room_id": r.room_id,
+                        "name": r.name,
+                        "allowed_booking_channel": r.allowed_booking_channel.value,
+                        "checkin_time": r.checkin_time,
+                        "checkout_time": r.checkout_time,
+                    }
+                    for r in rooms
+                ]
+                results[str(i)] = json.dumps({"count": len(room_results), "rooms": room_results}, indent=2)
+        finally:
+            db.close()
+
+    if not is_list_input:
+        return json.dumps({"result": results["0"]}, indent=2)
+
+    return json.dumps(results, indent=2)
 
 
 def execute_query_reservations(
-    params: Union[ReservationQuerySchema, dict[str, Any]]
+    args: dict[str, Any]
 ) -> str:
     """Query reservations from the database based on filter params."""
+    params = args.get("params", args)
+    
     if isinstance(params, dict):
-        params = TypeAdapter(ReservationQuerySchema).validate_python(params)
+        param_list = [params]
+        is_list_input = False
+    elif isinstance(params, list):
+        param_list = params
+        is_list_input = True
+    else:
+        param_list = [params]
+        is_list_input = False
 
-    db = SessionLocal()
-    try:
-        query = db.query(Reservation)
-        if params.reservation_id is not None:
-            query = query.filter(Reservation.reservation_id == params.reservation_id)
-        if params.guest_id is not None:
-            query = query.filter(Reservation.guest_id == params.guest_id)
-        if params.room_id is not None:
-            query = query.filter(Reservation.room_id == params.room_id)
-        if params.status:
-            try:
-                query = query.filter(Reservation.status == ReservationStatus(params.status))
-            except ValueError:
-                return (
-                    f"Invalid status: {params.status}. "
-                    f"Valid options: {', '.join(s.value for s in ReservationStatus)}"
+    results = {}
+
+    for i, p in enumerate(param_list):
+        if isinstance(p, dict):
+            p = TypeAdapter(ReservationQuerySchema).validate_python(p)
+
+        db = SessionLocal()
+        try:
+            query = db.query(Reservation)
+            if p.reservation_id is not None:
+                query = query.filter(Reservation.reservation_id == p.reservation_id)
+            if p.guest_id is not None:
+                query = query.filter(Reservation.guest_id == p.guest_id)
+            if p.room_id is not None:
+                query = query.filter(Reservation.room_id == p.room_id)
+            if p.status:
+                try:
+                    query = query.filter(Reservation.status == ReservationStatus(p.status))
+                except ValueError:
+                    results[str(i)] = (
+                        f"Invalid status: {p.status}. "
+                        f"Valid options: {', '.join(s.value for s in ReservationStatus)}"
+                    )
+                    continue
+            if p.check_in:
+                query = query.filter(Reservation.check_in_date == p.check_in)
+            if p.check_out:
+                query = query.filter(Reservation.check_out_date == p.check_out)
+
+            reservations = query.all()
+            if not reservations:
+                results[str(i)] = "No reservations found matching the criteria."
+            else:
+                results[str(i)] = json.dumps(
+                    {
+                        "count": len(reservations),
+                        "reservations": [_format_reservation(r) for r in reservations],
+                    },
+                    indent=2,
                 )
-        if params.check_in:
-            query = query.filter(Reservation.check_in_date == params.check_in)
-        if params.check_out:
-            query = query.filter(Reservation.check_out_date == params.check_out)
+        finally:
+            db.close()
 
-        reservations = query.all()
-        if not reservations:
-            return "No reservations found matching the criteria."
+    if not is_list_input:
+        return json.dumps({"result": results["0"]}, indent=2)
 
-        return json.dumps(
-            {
-                "count": len(reservations),
-                "reservations": [_format_reservation(r) for r in reservations],
-            },
-            indent=2,
-        )
-    finally:
-        db.close()
+    return json.dumps(results, indent=2)
 
 
-def execute_get_hotel_summary(params: Union[HotelSummarySchema, dict[str, Any]]) -> str:
+def execute_get_hotel_summary(args: dict[str, Any]) -> str:
     """Return a summary of the entire hotel database."""
+    params = args.get("params", args)
+    
     if isinstance(params, dict):
-        params = TypeAdapter(HotelSummarySchema).validate_python(params)
+        param_list = [params]
+        is_list_input = False
+    elif isinstance(params, list):
+        param_list = params
+        is_list_input = True
+    else:
+        param_list = [params]
+        is_list_input = False
 
-    db = SessionLocal()
-    try:
-        status_counts: dict[str, int] = {
-            status.value: db.query(Reservation).filter(Reservation.status == status).count()
-            for status in ReservationStatus
-        }
+    results = {}
 
-        summary = {
-            "total_guests": db.query(Guest).count(),
-            "total_rooms": db.query(Room).count(),
-            "total_reservations": db.query(Reservation).count(),
-            "special_guests": db.query(Guest).filter(Guest.is_special_guest.is_(True)).count(),
-            "reservations_by_status": status_counts,
-        }
-        return json.dumps(summary, indent=2)
-    finally:
-        db.close()
+    for i, p in enumerate(param_list):
+        if isinstance(p, dict):
+            p = TypeAdapter(HotelSummarySchema).validate_python(p)
+
+        db = SessionLocal()
+        try:
+            status_counts: dict[str, int] = {
+                status.value: db.query(Reservation).filter(Reservation.status == status).count()
+                for status in ReservationStatus
+            }
+
+            summary = {
+                "total_guests": db.query(Guest).count(),
+                "total_rooms": db.query(Room).count(),
+                "total_reservations": db.query(Reservation).count(),
+                "special_guests": db.query(Guest).filter(Guest.is_special_guest.is_(True)).count(),
+                "reservations_by_status": status_counts,
+            }
+            results[str(i)] = json.dumps(summary, indent=2)
+        finally:
+            db.close()
+
+    if not is_list_input:
+        return json.dumps({"result": results["0"]}, indent=2)
+
+    return json.dumps(results, indent=2)

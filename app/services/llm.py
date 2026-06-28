@@ -18,7 +18,7 @@ from typing import Any, Callable
 from openai import OpenAI
 
 from app.services import tool_logic
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, create_model
 
 from app.db import SessionLocal, engine
 from app.models import Guest, Reservation, Room
@@ -213,13 +213,24 @@ _TOOL_REGISTRY = {
     "get_hotel_summary": (tool_logic.execute_get_hotel_summary, tool_logic.HotelSummarySchema),
 }
 
+# Create batch schemas dynamically to support lists of parameters
+class BatchParams(BaseModel):
+    params: list[Any]
+
+def _get_batch_schema(base_schema: type[BaseModel]) -> type[BaseModel]:
+    """Creates a new Pydantic model that accepts a list of base_schema objects under the 'params' key."""
+    return create_model(
+        f"Batch{base_schema.__name__}",
+        params=(list[base_schema], Field(..., description="A list of parameter objects. Use this to perform multiple queries in a single call for better efficiency.")),
+    )
+
 TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
             "name": name,
-            "description": inspect.getdoc(func) or "",
-            "parameters": schema.model_json_schema(),
+            "description": (inspect.getdoc(func) or "") + " (Supports batch execution: you can pass a list of multiple parameter objects in the 'params' field to perform multiple queries at once)",
+            "parameters": _get_batch_schema(schema).model_json_schema(),
         },
     }
     for name, (func, schema) in _TOOL_REGISTRY.items()
