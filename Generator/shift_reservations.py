@@ -10,12 +10,12 @@ Usage:
 import argparse
 import sys
 
-from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from app.schemas import ShiftResponse, ShiftSampleEntry
+from app.schemas import ShiftResponse
 from app.db import DB_PATH
 from Generator.utils import get_session
+from app.services.reservations import shift_reservations_service
 
 
 def parse_args() -> int:
@@ -40,82 +40,12 @@ def _build_modifier(days: int) -> str:
 
 def shift_reservations(days: int = 1) -> ShiftResponse:
     """
-    Shift all reservation check_in and check_out dates by a given number
-    of days and return a result summary.
-
-    Returns a ShiftResponse with ok, shifted, days, before, after,
-    and optionally error or message.
+    Wrapper for the service-level shift_reservations_service to maintain 
+    compatibility with the CLI script.
     """
-    modifier = _build_modifier(days)
-
     db: Session = get_session()
     try:
-        from app.models import Reservation
-
-        # Count total reservations
-        total = db.query(Reservation).count()
-        if total == 0:
-            return ShiftResponse(
-                ok=True,
-                shifted=0,
-                days=days,
-                message="No reservations found. Nothing to shift.",
-            )
-
-        # Sample before (convert date objects to ISO strings for JSON serialization)
-        sample_before = (
-            db.query(Reservation.check_in_date, Reservation.check_out_date)
-            .order_by(Reservation.reservation_id)
-            .limit(5)
-            .all()
-        )
-        before_list = [
-            ShiftSampleEntry(
-                check_in=row.check_in_date.isoformat(),
-                check_out=row.check_out_date.isoformat(),
-            )
-            for row in sample_before
-        ]
-
-        # Perform the shift using SQLAlchemy Core UPDATE
-        result = (
-            db.execute(
-                update(Reservation)
-                .values(
-                    check_in_date=f"date(check_in_date, '{modifier}')",
-                    check_out_date=f"date(check_out_date, '{modifier}')",
-                )
-            )
-        )
-        db.commit()
-        shifted = result.rowcount
-
-        # Sample after (convert date objects to ISO strings for JSON serialization)
-        sample_after = (
-            db.query(Reservation.check_in_date, Reservation.check_out_date)
-            .order_by(Reservation.reservation_id)
-            .limit(5)
-            .all()
-        )
-        after_list = [
-            ShiftSampleEntry(
-                check_in=row.check_in_date.isoformat(),
-                check_out=row.check_out_date.isoformat(),
-            )
-            for row in sample_after
-        ]
-
-        return ShiftResponse(
-            ok=True,
-            shifted=shifted,
-            days=days,
-            before=before_list,
-            after=after_list,
-        )
-
-    except Exception as e:
-        db.rollback()
-        return ShiftResponse(ok=False, error=str(e))
+        return shift_reservations_service(db, days)
     finally:
         db.close()
 
