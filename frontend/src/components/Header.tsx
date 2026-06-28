@@ -8,6 +8,7 @@ export default function Header() {
     { path: '/guest-search', label: 'Guest Search' },
     { path: '/performance-testing', label: 'Performance' },
     { path: '/prompts', label: 'Prompt Management' },
+    { path: '/prompt-groups', label: 'Prompt Groups' },
     { path: '/settings', label: 'Settings' },
   ];
 

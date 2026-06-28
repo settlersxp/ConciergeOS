@@ -124,6 +124,21 @@ export function setDefault(promptId: string, version: number): Promise<PromptVer
   );
 }
 
+/**
+ * AI-improve a prompt section via chat conversation.
+ */
+export function aiImprove(
+  section: string,
+  currentText: string,
+  conversation: Array<{ role: string; content: string }>,
+  model?: string,
+): Promise<{ improved_text: string }> {
+  return request<{ improved_text: string }>('/api/prompts/ai-improve', {
+    method: 'POST',
+    body: JSON.stringify({ section, current_text: currentText, conversation, model }),
+  });
+}
+
 /** Re-exported as promptsApi object for consistency with existing api.ts pattern */
 export const promptsApi = {
   listAll: listAllPrompts,
@@ -135,6 +150,7 @@ export const promptsApi = {
   remove,
   duplicate,
   setDefault,
+  aiImprove,
 };
 /**
  * Fetch all available placeholders.

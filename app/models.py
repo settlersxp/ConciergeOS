@@ -135,3 +135,69 @@ class PromptVersion(Base):
     __table_args__ = (
         UniqueConstraint("prompt_id", "version", name="uq_prompt_version"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Prompt Groups models (stored in hotel.db)
+# ---------------------------------------------------------------------------
+
+class PromptGroup(Base):
+    """A named, ordered collection of prompt+version pairs forming a chain."""
+
+    __tablename__ = "PromptGroup"
+
+    group_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    items: Mapped[list["PromptGroupItem"]] = relationship(back_populates="group", cascade="all, delete-orphan", order_by="PromptGroupItem.position")
+    schedules: Mapped[list["PromptGroupSchedule"]] = relationship(back_populates="group", cascade="all, delete-orphan")
+    results: Mapped[list["PromptGroupResult"]] = relationship(back_populates="group", cascade="all, delete-orphan")
+
+
+class PromptGroupItem(Base):
+    """Single prompt+version entry within a PromptGroup, with ordering."""
+
+    __tablename__ = "PromptGroupItem"
+
+    item_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    group_id: Mapped[int] = mapped_column(Integer, ForeignKey("PromptGroup.group_id", ondelete="CASCADE"), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    prompt_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    prompt_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    group: Mapped["PromptGroup"] = relationship(back_populates="items")
+
+
+class PromptGroupSchedule(Base):
+    """Scheduled execution time for a PromptGroup chain."""
+
+    __tablename__ = "PromptGroupSchedule"
+
+    schedule_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    group_id: Mapped[int] = mapped_column(Integer, ForeignKey("PromptGroup.group_id", ondelete="CASCADE"), nullable=False)
+    run_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    schedule_type: Mapped[str] = mapped_column(String(20), default="daily", server_default="daily")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    group: Mapped["PromptGroup"] = relationship(back_populates="schedules")
+
+
+class PromptGroupResult(Base):
+    """Execution result record for a PromptGroup chain run."""
+
+    __tablename__ = "PromptGroupResult"
+
+    result_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    group_id: Mapped[int] = mapped_column(Integer, ForeignKey("PromptGroup.group_id", ondelete="CASCADE"), nullable=False)
+    executed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    scheduled: Mapped[bool] = mapped_column(Boolean, default=False)
+    result_file: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="running")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    group: Mapped["PromptGroup"] = relationship(back_populates="results")

@@ -400,3 +400,94 @@ class GuestDetailSchema(BaseModel):
     is_special_guest: bool | None = None
     special_preferences: str | None = None
     reservations: List[ReservationDetailSchema] = []
+
+
+# ---------------------------------------------------------------------------
+# Prompt Group schemas
+# ---------------------------------------------------------------------------
+
+class PromptGroupItemSchema(BaseModel):
+    """Single prompt+version entry within a group."""
+
+    item_id: int
+    group_id: int
+    position: int
+    prompt_id: str
+    prompt_version: int
+
+    model_config = {"from_attributes": True}
+
+
+class PromptGroupItemCreate(BaseModel):
+    """Request body for adding a prompt+version to a group."""
+
+    position: int
+    prompt_id: str
+    prompt_version: int
+
+
+class PromptGroupScheduleSchema(BaseModel):
+    """Schedule record for a group."""
+
+    schedule_id: int
+    group_id: int
+    run_at: str
+    schedule_type: str = "daily"
+    active: bool
+    created_at: str
+
+    model_config = {"from_attributes": True}
+
+
+class PromptGroupScheduleCreate(BaseModel):
+    """Request body to schedule a group execution."""
+
+    run_at: str  # ISO 8601 datetime string
+    schedule_type: str = "daily"  # "daily", "weekly", or "none"
+
+
+class PromptGroupResultSchema(BaseModel):
+    """Execution result record."""
+
+    result_id: int
+    group_id: int
+    executed_at: str
+    scheduled: bool
+    result_file: str | None = None
+    status: str
+    error_message: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class PromptGroupSchema(BaseModel):
+    """Output schema for a prompt group (includes items, schedules, results)."""
+
+    group_id: int
+    name: str
+    description: str | None = None
+    is_active: bool = True
+    created_at: str
+    updated_at: str
+    items: List[PromptGroupItemSchema] = []
+    schedules: List[PromptGroupScheduleSchema] = []
+    results: List[PromptGroupResultSchema] = []
+
+    model_config = {"from_attributes": True}
+
+
+class CreateGroupRequest(BaseModel):
+    """Request body for creating a new prompt group."""
+
+    name: str
+    description: str | None = None
+    items: List[PromptGroupItemCreate] = []
+
+
+class UpdateGroupRequest(BaseModel):
+    """Request body for updating a group (name, description, items order)."""
+
+    name: str | None = None
+    description: str | None = None
+    is_active: bool | None = None
+    items: List[PromptGroupItemCreate] | None = None

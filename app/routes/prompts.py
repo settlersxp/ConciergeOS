@@ -53,6 +53,22 @@ class DuplicatePromptRequest(BaseModel):
     name: str | None = None
 
 
+class ChatMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
+class AiImproveRequest(BaseModel):
+    section: str  # "intention" | "restrictions" | "output_structure" | "user_prompt_template"
+    current_text: str
+    conversation: list[ChatMessage] = []
+    model: str | None = None
+
+
+class AiImproveResponse(BaseModel):
+    improved_text: str
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -83,10 +99,83 @@ def _prompt_to_schema(pv: Any) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Section context for AI improvement system prompt
+# ---------------------------------------------------------------------------
+
+_SECTION_CONTEXT = {
+    "intention": """This section defines the AI assistant's core purpose and role. It should clearly state what the assistant is designed to do and its primary objectives.""",
+    "restrictions": """This section defines boundaries, rules, and constraints the AI must follow. It should specify what the assistant should NOT do and any limitations on its behavior.""",
+    "output_structure": """This section defines how the AI should format and structure its responses. It should specify the expected output format, including markdown structures, sections, and styling.""",
+    "user_prompt_template": """This section is the template for the user's query. It contains placeholders like {customer_name} that will be replaced at runtime. It should clearly express the user's request.""",
+}
+
+
+_AI_IMPROVE_SYSTEM_PROMPT = """\
+You are an expert prompt engineer helping improve a hotel concierge AI prompt.
+The prompt is divided into 4 sections, and you are asked to help improve one section at a time.
+
+You are currently working on the {section} section.
+
+Context about this section:
+{section_context}
+
+Your goal is to help the user iteratively improve this section through conversation.
+- Be concise and direct in your suggestions
+- Always return the FULL improved section text (not just diffs)
+- Maintain the existing style and structure unless the user asks to change it
+- Focus on clarity, specificity, and effectiveness
+"""
+
+
+# ---------------------------------------------------------------------------
 # Endpoints
 # NOTE: Static routes (e.g., /placeholders) MUST come before parameterized
 # routes (e.g., /{prompt_id}) so FastAPI matches them correctly.
 # ---------------------------------------------------------------------------
+
+@router.post("/ai-improve")
+async def ai_improve_prompt(body: AiImproveRequest):
+    """Use LLM to iteratively improve a prompt section via chat conversation."""
+    from app.services.llm import get_llm_config
+
+    section_context = _SECTION_CONTEXT.get(body.section, "")
+    system_prompt = _AI_IMPROVE_SYSTEM_PROMPT.format(
+        section=body.section, section_context=section_context
+    )
+
+    # Build message list: system + conversation history + current request
+    messages: list[Any] = [
+        {"role": "system", "content": system_prompt},
+    ]
+
+    for msg in body.conversation:
+        messages.append({"role": msg.role, "content": msg.content})
+
+    # Add the current improvement request
+    messages.append({
+        "role": "user",
+        "content": (
+            f"Current {body.section} section text:\n\n```\n{body.current_text}\n```\n\n"
+            f"Please help improve this section."
+        ),
+    })
+
+    client, model_name = get_llm_config()
+    model = body.model or model_name
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.3,
+            max_tokens=2000,
+        )
+        improved_text = response.choices[0].message.content or body.current_text
+        return AiImproveResponse(improved_text=improved_text)
+    except Exception as e:
+        logger.error(f"Error in AI improve: {e}")
+        raise HTTPException(status_code=500, detail=f"LLM request failed: {str(e)}")
+
 
 @router.get("")
 async def list_all_prompts():
