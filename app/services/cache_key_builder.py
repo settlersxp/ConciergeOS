@@ -83,11 +83,20 @@ def resolve_params(table: str, params: dict) -> dict[str, int]:
         return {}
 
 
-def _resolve_guest_params(params: dict) -> dict[str, int]:
-    """Resolve guest query parameters to guest_id."""
-    # Priority 1: Direct guest_id
-    if "guest_id" in params:
-        return {"guest_id": int(params["guest_id"])}
+def _resolve_guest_params(params: dict) -> dict:
+    """Resolve guest query parameters to guest_id or guest_ids.
+    
+    Handles both singular (guest_id) and plural (guest_ids) parameter names
+    to support single and array-based queries.
+    """
+    # Priority 1: Direct guest_ids (plural) or guest_id (singular)
+    guest_ids = params.get("guest_ids") or params.get("guest_id")
+    if guest_ids is not None:
+        if isinstance(guest_ids, int):
+            guest_ids = [guest_ids]
+        elif not isinstance(guest_ids, list):
+            guest_ids = [guest_ids]
+        return {"guest_ids": list(map(int, guest_ids))}
 
     # Priority 2: Name-based lookup
     db = SessionLocal()
@@ -108,7 +117,7 @@ def _resolve_guest_params(params: dict) -> dict[str, int]:
 
         guest = query.first()
         if guest:
-            return {"guest_id": guest.guest_id}
+            return {"guest_ids": [guest.guest_id]}
     finally:
         db.close()
 
@@ -119,11 +128,22 @@ def _resolve_guest_params(params: dict) -> dict[str, int]:
     return result
 
 
-def _resolve_room_params(params: dict) -> dict[str, int]:
-    """Resolve room query parameters to room_id."""
-    if "room_id" in params:
-        return {"room_id": int(params["room_id"])}
+def _resolve_room_params(params: dict) -> dict:
+    """Resolve room query parameters to room_id or room_ids.
+    
+    Handles both singular (room_id) and plural (room_ids) parameter names
+    to support single and array-based queries.
+    """
+    # Priority 1: Direct room_ids (plural) or room_id (singular)
+    room_ids = params.get("room_ids") or params.get("room_id")
+    if room_ids is not None:
+        if isinstance(room_ids, int):
+            room_ids = [room_ids]
+        elif not isinstance(room_ids, list):
+            room_ids = [room_ids]
+        return {"room_ids": list(map(int, room_ids))}
 
+    # Priority 2: Name-based lookup
     db = SessionLocal()
     try:
         query = db.query(Room)
@@ -132,7 +152,7 @@ def _resolve_room_params(params: dict) -> dict[str, int]:
 
         room = query.first()
         if room:
-            return {"room_id": room.room_id}
+            return {"room_ids": [room.room_id]}
     finally:
         db.close()
 

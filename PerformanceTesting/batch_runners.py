@@ -88,6 +88,7 @@ def _call_guest_llm(customer_name: str, settings: TestSettings) -> tuple[str, bo
         prompt_id=settings.prompt_id or "guest-search",
         version=settings.prompt_version,
         runtime_variables=guest_vars or None,
+        use_cache=settings.response_cache_enabled,
     )
 
     logger.info(

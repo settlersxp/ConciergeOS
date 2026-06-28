@@ -187,7 +187,7 @@ _SYSTEM_PROMPT_WITH_SCHEMA = f"""\
 ## Available Tools
 You have access to the following database query tools:
 - `query_guests`: Search for guests by their guest IDs (accepts 1 or more IDs)
-- `query_rooms`: Search for rooms by ID or name
+- `query_rooms`: Search for rooms by their room IDs (accepts 1 or more IDs) or by name patterns
 - `query_reservations`: Search for reservations by their reservation IDs (accepts 1 or more IDs), with optional filters for guest_ids, room_ids, statuses, and dates
 - `get_hotel_summary`: Get overall hotel statistics
 
@@ -231,13 +231,19 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "room_id": {
-                        "type": "integer",
-                        "description": "Filter by specific room ID",
+                    "room_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "Array of room IDs to retrieve. Accepts 1 or more IDs. Example: [101, 102, 103]",
                     },
-                    "name": {
-                        "type": "string",
-                        "description": "Filter by room name (case-insensitive partial match)",
+                    "names": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Array of room name patterns to search for. Each pattern is a case-insensitive partial match. Example: [\"Suite\", \"Deluxe\"]",
                     },
                 },
                 "required": [],
@@ -566,6 +572,7 @@ def query_guest_with_llm(
     prompt_id: str = "guest-search",
     version: int | None = None,
     runtime_variables: dict[str, str] | None = None,
+    use_cache: bool = True,
 ) -> tuple[str, bool]:
     """
     Query the LLM for all information about a given guest using tool calling.
@@ -580,6 +587,13 @@ def query_guest_with_llm(
     The user message is composed from: user_prompt_template with {customer_name} replaced.
 
     Uses lazy import to avoid circular import with tool_calling module.
+
+    Args:
+        customer_name: The customer's name to search for.
+        prompt_id: Prompt template identifier.
+        version: Prompt version number (optional).
+        runtime_variables: Runtime variables for prompt templating.
+        use_cache: If True, check/use response cache. If False, bypass cache entirely.
 
     Returns:
         A tuple of (llm_response, was_cached) where was_cached is True if the
@@ -652,6 +666,7 @@ def query_guest_with_llm(
             system_prompt=final_system,
             prompt_id=prompt_id,
             prompt_version=resolved_version,
+            use_cache=use_cache,
         )
 
         if was_cached:

@@ -63,6 +63,8 @@ class TestSettings:
     # Prompt versioning support (used to call query_guest_with_llm with prompt resolution)
     prompt_id: str = ""  # e.g., "guest-search"
     prompt_version: int | None = None  # e.g., 1, None for latest
+    # Response cache toggle
+    response_cache_enabled: bool = True
 
     def resolve_vllm_url(self) -> str:
         """Return the configured vLLM URL, falling back to models_endpoint base."""

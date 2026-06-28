@@ -97,16 +97,40 @@ def execute_query_guests(params: dict[str, Any]) -> str:
 
 
 def execute_query_rooms(params: dict[str, Any]) -> str:
-    """Query rooms from the database based on filter params."""
+    """Query rooms from the database based on filter params.
+    
+    Accepts:
+        room_ids: A single room ID integer or an array of room ID integers.
+        names: A single room name pattern string or an array of name patterns.
+    
+    Returns:
+        JSON string with room count and array of room objects.
+    """
     db = SessionLocal()
     try:
         query = db.query(Room)
-        room_id = params.get("room_id")
-        if room_id is not None:
-            query = query.filter(Room.room_id == room_id)
-        name = params.get("name")
-        if name:
-            query = query.filter(Room.name.ilike(f"%{name}%"))
+
+        # Filter: room_ids (accepts a single ID or an array of IDs)
+        room_ids = params.get("room_ids")
+        if room_ids is not None:
+            if isinstance(room_ids, int):
+                room_ids = [room_ids]
+            elif not isinstance(room_ids, list):
+                room_ids = [room_ids]
+            if room_ids:
+                query = query.filter(Room.room_id.in_(room_ids))
+
+        # Filter: names (accepts a single pattern or an array of patterns)
+        names = params.get("names")
+        if names is not None:
+            if isinstance(names, str):
+                names = [names]
+            elif not isinstance(names, list):
+                names = [names]
+            if names:
+                # Use OR logic: match any of the name patterns
+                name_conditions = [Room.name.ilike(f"%{name}%") for name in names]
+                query = query.filter(*name_conditions)
 
         rooms = query.all()
         if not rooms:

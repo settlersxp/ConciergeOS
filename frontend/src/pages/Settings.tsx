@@ -10,6 +10,7 @@ export default function Settings() {
   const [vllmVersion, setVllmVersion] = useState('');
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [expectedFormat, setExpectedFormat] = useState('auto');
+  const [responseCacheEnabled, setResponseCacheEnabled] = useState(true);
 
   // UI state
   const [saving, setSaving] = useState(false);
@@ -27,6 +28,7 @@ export default function Settings() {
         setVllmVersion(ts.vllm_version ?? '');
         setThinkingEnabled(ts.thinking_enabled ?? false);
         setExpectedFormat(ts.expected_format ?? 'auto');
+        setResponseCacheEnabled(ts.response_cache_enabled ?? true);
       }
     });
   }, []);
@@ -40,6 +42,7 @@ export default function Settings() {
         vllm_version: vllmVersion,
         thinking_enabled: thinkingEnabled,
         expected_format: expectedFormat,
+        response_cache_enabled: responseCacheEnabled,
       } satisfies TestSettings,
     };
 
@@ -185,6 +188,26 @@ export default function Settings() {
               </Select>
             </FormField>
           </div>
+        </Card>
+
+        {/* Response Cache */}
+        <Card title="Response Cache" className="mb-6">
+          <div className="mt-4 flex items-center gap-2">
+            <input
+              id="response_cache_enabled"
+              type="checkbox"
+              checked={responseCacheEnabled}
+              onChange={(e) => setResponseCacheEnabled(e.target.checked)}
+              className="h-4 w-4 rounded border-surface-300 text-secondary-400 focus:ring-secondary-400 dark:border-primary-600"
+            />
+            <label htmlFor="response_cache_enabled" className="text-sm text-primary-700 dark:text-primary-300">
+              Enable Response Cache
+            </label>
+          </div>
+          <p className="mt-2 text-xs text-primary-600 dark:text-primary-400">
+            When enabled, LLM responses are cached by customer name to avoid redundant API calls. 
+            Disabling this allows real-time testing of all queries without cache interference.
+          </p>
         </Card>
 
         {/* Save button */}

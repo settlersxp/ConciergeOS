@@ -32,10 +32,131 @@ import hashlib
 import json
 import logging
 import time
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode, urlparse, parse_qs
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Cache debug logging configuration
+# ---------------------------------------------------------------------------
+# Path to the cache debug log file. Contains timestamped entries of all cache
+# SET/HIT/DELETE operations with full key and value information.
+_CACHE_DEBUG_DIR = Path("/tmp")
+_CACHE_DEBUG_FILE = _CACHE_DEBUG_DIR / "cof_cache_debug.log"
+# Maximum number of lines to keep in the debug log before rotating
+_CACHE_DEBUG_MAX_LINES = 10000
+
+# ---------------------------------------------------------------------------
+# Full cache value logging — no truncation
+# ---------------------------------------------------------------------------
+# Path to the full-value cache log file. Every SET operation is written here
+# with the COMPLETE key and COMPLETE value.  No truncation, no escaping
+# beyond standard JSON encoding.  Purpose: validate that the cache layer
+# stores data exactly as intended.
+_CACHE_FULL_VALUE_FILE = _CACHE_DEBUG_DIR / "cof_cache_full_value.log"
+
+
+def _log_cache_entry_full(
+    operation: str,
+    key: str,
+    value: str,
+) -> None:
+    """
+    Write a cache entry to the full-value log file with NO truncation.
+
+    Each entry is a single JSON line containing:
+      - op: SET / HIT / DELETE / CLEAR
+      - key: the full cache key
+      - value: the FULL cached value (no truncation)
+      - timestamp: epoch float
+      - value_len: len(value) for quick scanning
+
+    Appends directly to disk — no logging framework, no truncation.
+    """
+    try:
+        entry = {
+            "op": operation,
+            "key": key,
+            "value": value,
+            "value_len": len(value),
+            "timestamp": time.time(),
+        }
+        line = json.dumps(entry, ensure_ascii=False) + "\n"
+        with open(_CACHE_FULL_VALUE_FILE, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception as e:
+        # Best-effort — don't break the application if logging fails
+        pass
+
+# ---------------------------------------------------------------------------
+# Tool-call loop detection configuration
+# ---------------------------------------------------------------------------
+# Maximum number of consecutive identical tool calls (same function name + same
+# arguments) before we consider the LLM to be stuck in a loop.
+_MAX_IDENTICAL_TOOL_CALLS = 3
+# ---------------------------------------------------------------------------
+
+
+def _rotate_debug_log() -> None:
+    """Rotate the debug log if it exceeds the maximum line count."""
+    try:
+        if _CACHE_DEBUG_FILE.exists():
+            lines = _CACHE_DEBUG_FILE.read_text(encoding="utf-8").splitlines()
+            if len(lines) > _CACHE_DEBUG_MAX_LINES:
+                # Keep the last N lines
+                _CACHE_DEBUG_FILE.write_text(
+                    "\n".join(lines[-_CACHE_DEBUG_MAX_LINES:]),
+                    encoding="utf-8",
+                )
+    except Exception:
+        pass  # Silently ignore rotation errors
+
+
+def _log_cache_debug(
+    operation: str,
+    key: str,
+    key_preview: str,
+    value_preview: str,
+    value_path: str | None = None,
+) -> None:
+    """
+    Log a cache operation to the debug file for later inspection.
+
+    Args:
+        operation: One of "SET", "HIT", "MISS", "DELETE", "CLEAR"
+        key: The full cache key
+        key_preview: Short preview of the key (for quick scanning)
+        value_preview: Short preview of the cached value
+        value_path: Optional path to a file containing the full cached value
+    """
+    try:
+        _CACHE_DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+        timestamp = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+        line = (
+            f"[{timestamp}] OP={operation:5s} | "
+            f"KEY={key_preview}... | "
+            f"VALUE={value_preview[:200]} | "
+            f"FULL_KEY={key[:12]}..."
+        )
+        if value_path:
+            line += f" | VALUE_FILE={value_path}"
+
+        with open(_CACHE_DEBUG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+        # Also log to the logger at DEBUG level
+        logger.debug(
+            f"[CACHE-DEBUG] {operation} | key={key_preview[:80]}... | "
+            f"value_preview={value_preview[:100]}..."
+        )
+
+        # Rotate if needed
+        _rotate_debug_log()
+    except Exception as e:
+        logger.warning(f"Failed to write cache debug log: {e}")
+
 
 # ---------------------------------------------------------------------------
 # Tool call cache data structures
@@ -103,6 +224,8 @@ class ToolCallCacheStore:
             timestamp=time.time(),
             ttl=effective_ttl,
         )
+        # Write full key + full value to debug file — no truncation
+        _log_cache_entry_full("SET", key, result)
 
     def delete(self, key: str) -> bool:
         if key in self._store:
@@ -227,6 +350,8 @@ class CacheStore:
             timestamp=time.time(),
             ttl=effective_ttl,
         )
+        # Write full key + full value to debug file — no truncation
+        _log_cache_entry_full("SET", key, response)
 
     def delete(self, key: str) -> bool:
         """Remove a specific key. Returns True if the key existed."""
@@ -509,6 +634,21 @@ def tool_call_cache_stats() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# TOOL_CALL file logging configuration
+# ---------------------------------------------------------------------------
+# Path to the TOOL_CALL dedicated log file. Contains all [TOOL_CALL] messages
+# without any truncation.
+_TOOL_CALL_LOG_FILE = Path("/tmp/cof_tool_call.log")
+
+
+class _ToolCallFilter(logging.Filter):
+    """Filter that only allows log records containing '[TOOL_CALL]' in the message."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "[TOOL_CALL]" in record.getMessage()
+
+
+# ---------------------------------------------------------------------------
 # ResponseLogger - diagnostic logging for LLM calls
 # ---------------------------------------------------------------------------
 
@@ -519,6 +659,9 @@ class ResponseLogger:
 
     Logs all relevant diagnostics using Python's standard logging module.
     Caching is handled separately by CacheStore.
+
+    All [TOOL_CALL] messages are also written to /tmp/cof_tool_call.log
+    with no truncation.
     """
 
     def __init__(self, log_level: str = "INFO"):
@@ -532,13 +675,31 @@ class ResponseLogger:
         logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
 
         if not logger.handlers:
-            handler = logging.StreamHandler()
-            handler.setLevel(getattr(logging, log_level.upper(), logging.INFO))
-            formatter = logging.Formatter(
+            # Console handler for general logging
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(getattr(logging, log_level.upper(), logging.INFO))
+            console_formatter = logging.Formatter(
                 "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
             )
-            handler.setFormatter(formatter)
-            logger.addHandler(handler)
+            console_handler.setFormatter(console_formatter)
+            logger.addHandler(console_handler)
+
+            # ------------------------------------------------------------------
+            # Dedicated file handler for [TOOL_CALL] messages (no truncation)
+            # ------------------------------------------------------------------
+            _TOOL_CALL_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            tool_call_handler = logging.FileHandler(
+                _TOOL_CALL_LOG_FILE,
+                mode="a",
+                encoding="utf-8",
+            )
+            tool_call_handler.setLevel(logging.DEBUG)  # capture all levels
+            tool_call_formatter = logging.Formatter(
+                "%(message)s"  # only the message, clean output
+            )
+            tool_call_handler.setFormatter(tool_call_formatter)
+            tool_call_handler.addFilter(_ToolCallFilter())
+            logger.addHandler(tool_call_handler)
 
     def generate_conversation_hash(
         self, messages: list[dict], tools: list[dict] | None = None
@@ -896,6 +1057,68 @@ def _call_llm_impl(
     # Generate conversation hash for diagnostic logging
     conversation_hash = response_logger.generate_conversation_hash(messages, effective_tool_definitions)
 
+    # -----------------------------------------------------------------------
+    # Tool-call loop detection
+    # -----------------------------------------------------------------------
+    # Track recent tool calls per turn to detect when the LLM keeps calling
+    # the same tools with the same arguments without making progress.
+    # Key: (tool_name, frozen_args_tuple) -> count of consecutive identical calls
+    recent_calls: dict[tuple[str, tuple], int] = {}
+    # Track which tool calls happened in the previous turn to reset counters
+    # when a DIFFERENT tool is called.
+    prev_turn_calls: set[tuple[str, tuple]] = set()
+
+    def _freeze_args(args: dict) -> tuple:
+        """Convert a dict of arguments to a hashable frozen tuple."""
+        result = []
+        for k in sorted(args):
+            v = args[k]
+            if isinstance(v, list):
+                result.append((k, tuple(v)))
+            else:
+                result.append((k, v))
+        return tuple(result)
+
+    def _check_loop(tool_calls_list: list) -> bool:
+        """Return True if a tool-call loop is detected."""
+        for tc in tool_calls_list:
+            fname = tc.function.name  # type: ignore[attr-defined]
+            fargs = json.loads(tc.function.arguments)  # type: ignore[attr-defined]
+            key = (fname, _freeze_args(fargs))
+            count = recent_calls.get(key, 0) + 1
+            recent_calls[key] = count
+            logger.debug(
+                f"[LOOP-DET] tool={fname} args_preview={str(fargs)[:80]}... "
+                f"consecutive_count={count} threshold={_MAX_IDENTICAL_TOOL_CALLS}"
+            )
+            if count >= _MAX_IDENTICAL_TOOL_CALLS:
+                logger.warning(
+                    f"[LOOP-DET] TOOL-CALL LOOP DETECTED | "
+                    f"conv_hash={conversation_hash[:12]}... | "
+                    f"tool={fname} called {count} times consecutively with same args | "
+                    f"forcing termination"
+                )
+                return True
+        return False
+
+    def _reset_loop_detector() -> None:
+        """Reset counters at the end of each turn.
+        
+        The loop detector counts identical tool calls (same tool name + same args)
+        within a SINGLE turn. When a new turn begins, we reset the counter so the
+        LLM can call the same tool with the same args in a different turn without
+        being flagged as a loop.
+        
+        This is important because:
+        1. Cached results return the same data every time
+        2. The LLM may legitimately need multiple turns to process data
+        3. The structured response cache (PRE-FINAL HIT) will eventually skip
+           remaining turns if the data hasn't changed
+        """
+        nonlocal prev_turn_calls
+        recent_calls.clear()
+        prev_turn_calls = set()
+
     for turn in range(1, max_turns + 1):
         # Log request
         response_logger.log_request(
@@ -941,6 +1164,16 @@ def _call_llm_impl(
 
         if tool_calls:
             response_logger.log_tool_calls(conversation_hash, turn, tool_calls)
+
+            # Check for tool-call loops before proceeding
+            if _check_loop(tool_calls):
+                # Force termination: break out and return a loop warning
+                logger.warning(
+                    f"[LOOP-DET] Breaking out of tool-call loop at turn {turn} | "
+                    f"conv_hash={conversation_hash[:12]}..."
+                )
+                # Break to the final response section below
+                break
 
         if not tool_calls:
             # No more tool calls - this is the final response
@@ -994,13 +1227,21 @@ def _call_llm_impl(
             cached_tool_result = None
             if use_cache and tool_cache_key:
                 cached_tool_result = tool_cache.get(tool_cache_key)
-                if cached_tool_result is not None:
-                    logger.info(
-                        f"[TOOL-CACHE] HIT for key={tool_cache_key_preview}... | "
-                        f"tool={func_name} | args_preview={str(func_args)[:50]} | "
-                        f"result_len={len(cached_tool_result.result)}"
+            if cached_tool_result is not None:
+                logger.info(
+                    f"[TOOL-CACHE] HIT for key={tool_cache_key_preview}... | "
+                    f"tool={func_name} | args_preview={str(func_args)[:50]} | "
+                    f"result_len={len(cached_tool_result.result)}"
+                )
+                # Log cache hit to debug file with full value
+                if tool_cache_key is not None:
+                    _log_cache_debug(
+                        operation="HIT",
+                        key=tool_cache_key,
+                        key_preview=tool_cache_key,
+                        value_preview=cached_tool_result.result[:200],
                     )
-                    any_tool_cached = True
+                any_tool_cached = True
                 # ALWAYS track tool cache keys (both hits and misses) for structured response cache.
                 # This ensures the response cache key accurately represents the data accessed,
                 # enabling cache hits for different user messages that access the same data
@@ -1028,11 +1269,18 @@ def _call_llm_impl(
                     result = f"Unknown tool: {func_name}"
 
                 # Store in structured cache
-                if use_cache and tool_cache_key:
+                if use_cache and tool_cache_key is not None:
                     tool_cache.set(tool_cache_key, result)
                     logger.info(
                         f"[TOOL-CACHE] STORED for key={tool_cache_key_preview}... | "
                         f"tool={func_name} | result_len={len(result)}"
+                    )
+                    # Log cache set to debug file with full value
+                    _log_cache_debug(
+                        operation="SET",
+                        key=tool_cache_key,
+                        key_preview=tool_cache_key,
+                        value_preview=result[:200],
                     )
 
             # Log tool result
@@ -1048,6 +1296,15 @@ def _call_llm_impl(
                     "content": result,
                 }
             )
+
+        # Reset the loop detector at the end of each turn.
+        # This allows the LLM to call the same tool with the same args in
+        # a DIFFERENT turn without being flagged as a loop. The counter only
+        # tracks consecutive identical calls WITHIN a single turn.
+        # This is critical when tool results are cached (same data returned
+        # every time) — the LLM may legitimately need multiple turns to
+        # process the data before formatting a final response.
+        _reset_loop_detector()
 
         # After all tool calls in this turn complete, check if we can skip
         # remaining LLM turns by looking up a cached response.
@@ -1082,11 +1339,42 @@ def _call_llm_impl(
 
                 return final_result, True
 
-    # If we exhausted max_turns
-    final_result = (
-        f"The request exceeded the maximum of {max_turns} turns. "
-        f"Please simplify your request."
-    )
+    # If we exhausted max_turns or broke due to loop detection
+    # Check if we broke due to loop detection
+    if recent_calls:
+        max_count = max(recent_calls.values()) if recent_calls else 0
+        if max_count >= _MAX_IDENTICAL_TOOL_CALLS:
+            final_result = (
+                f"I apologize, but I keep requesting the same data without being able to process it. "
+                f"This appears to be a technical limitation. Please try rephrasing your question "
+                f"or providing more specific details about what information you need."
+            )
+            logger.warning(
+                f"[TOOL-LOOP] TOOL-CALL LOOP DETECTED AND BROKE | "
+                f"conv_hash={conversation_hash[:12]}... | "
+                f"max_consecutive_calls={max_count}. "
+                f"Returning user-friendly error message."
+            )
+        else:
+            final_result = (
+                f"The request exceeded the maximum of {max_turns} turns. "
+                f"Please simplify your request."
+            )
+            logger.warning(
+                f"[TOOL_CALL] MAX TURNS EXCEEDED | "
+                f"conv_hash={conversation_hash[:12]}... | "
+                f"max_turns={max_turns}. The conversation may be stuck in a tool-call loop."
+            )
+    else:
+        final_result = (
+            f"The request exceeded the maximum of {max_turns} turns. "
+            f"Please simplify your request."
+        )
+        logger.warning(
+            f"[TOOL_CALL] MAX TURNS EXCEEDED | "
+            f"conv_hash={conversation_hash[:12]}... | "
+            f"max_turns={max_turns}. The conversation may be stuck in a tool-call loop."
+        )
 
     # Build structured response cache key from tool cache keys
     _store_structured_response(
@@ -1094,12 +1382,7 @@ def _call_llm_impl(
     )
 
     response_logger.log_final_response(
-        conversation_hash, user_message, final_result, max_turns
-    )
-    logger.warning(
-        f"[TOOL_CALL] MAX TURNS EXCEEDED | "
-        f"conv_hash={conversation_hash[:12]}... | "
-        f"max_turns={max_turns}. The conversation may be stuck in a tool-call loop."
+        conversation_hash, user_message, final_result, turn if 'turn' in dir() else max_turns
     )
 
     return final_result, any_tool_cached

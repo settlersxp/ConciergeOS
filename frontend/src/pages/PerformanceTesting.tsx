@@ -77,6 +77,7 @@ export default function PerformanceTesting() {
   const [vllmUrl, setVllmUrl] = useState("");
   const [modelsEndpoint, setModelsEndpoint] = useState("");
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  const [responseCacheEnabled, setResponseCacheEnabled] = useState(true);
 
   // Results & misc
   const [running, setRunning] = useState(false);
@@ -132,6 +133,7 @@ export default function PerformanceTesting() {
         setModelName(ts.model_name || "");
         setThinkingEnabled(ts.thinking_enabled || false);
         setModelsEndpoint(ts.models_endpoint || "");
+        setResponseCacheEnabled(ts.response_cache_enabled ?? true);
         // Derive vllm_url from models_endpoint
         if (ts.models_endpoint) {
           setVllmUrl(
@@ -162,6 +164,7 @@ export default function PerformanceTesting() {
       test_mode: testMode,
       friendly_name: friendlyName,
       thinking_enabled: thinkingEnabled,
+      response_cache_enabled: responseCacheEnabled,
       user_prompt: userPrompt,
       expected_response_format: "auto",
       data_format: dataFormat,
@@ -535,6 +538,26 @@ export default function PerformanceTesting() {
           onDataFormatChange={setDataFormat}
         />
       </div>
+
+      {/* Response Cache Toggle */}
+      <Card className="mb-6">
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            id="perf_response_cache_enabled"
+            type="checkbox"
+            checked={responseCacheEnabled}
+            onChange={(e) => setResponseCacheEnabled(e.target.checked)}
+            className="h-4 w-4 rounded border-surface-300 text-secondary-400 focus:ring-secondary-400 dark:border-primary-600"
+          />
+          <label htmlFor="perf_response_cache_enabled" className="text-sm text-primary-700 dark:text-primary-300">
+            Enable Response Cache
+          </label>
+        </div>
+        <p className="mt-2 text-xs text-primary-600 dark:text-primary-400">
+          When enabled, LLM responses are cached to avoid redundant API calls for repeated queries. 
+          Disable this to test real-time responses without cache interference.
+        </p>
+      </Card>
 
       {/* Run Controls */}
       <div className="mb-6">

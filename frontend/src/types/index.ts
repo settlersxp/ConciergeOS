@@ -50,6 +50,7 @@ export interface TestSettings {
   vllm_version: string;
   thinking_enabled: boolean;
   expected_format: string;
+  response_cache_enabled?: boolean;
 }
 
 export interface AppSettings {
@@ -85,6 +86,7 @@ export interface PerformanceTestRequest {
   model_name?: string;
   vllm_version?: string;
   thinking_enabled?: boolean;
+  response_cache_enabled?: boolean;
   user_prompt?: string;
   expected_response_format?: string;
   data_format?: DataFormat;

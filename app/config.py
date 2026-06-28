@@ -11,6 +11,7 @@ class TestSettings:
     vllm_version: str = ""
     thinking_enabled: bool = False
     expected_format: str = "auto"
+    response_cache_enabled: bool = True
 
 @dataclass
 class AppConfig:
