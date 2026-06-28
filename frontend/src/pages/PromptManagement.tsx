@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   PageHeader, Card, Button, Toast,
   PlaceholderPalette, PreviewPanel, PromptEditorSection,
-  PromptSelector,
+  PromptSelector, CreatePromptModal, PromptImprovementChat, CloneSectionModal,
 } from "../components/ui";
 import {
   listVersions, create as createPrompt,
@@ -15,7 +15,7 @@ import type { PromptVersion, PromptSummary } from "../types/prompt";
 import type { PlaceholderDefinition } from "../types/placeholder";
 
 export default function PromptManagement() {
-  const [allPrompts, setAllPrompts] = useState<PromptSummary[]>([]);
+  const [, setAllPrompts] = useState<PromptSummary[]>([]);
   const [selectedPromptId, setSelectedPromptId] = useState("");
   const [versions, setVersions] = useState<PromptVersion[]>([]);
   const [editingVersion, setEditingVersion] = useState<number | null>(null);
@@ -30,7 +30,18 @@ export default function PromptManagement() {
   const [resolvedPreview, setResolvedPreview] = useState<{ system: string; user: string } | null>(null);
   const [runtimeVariables, setRuntimeVariables] = useState<Record<string, string>>({});
   const [_loading, setLoading] = useState(false);
-  const selectorRefetchRef = useRef<(() => void) | undefined>();
+  const selectorRefetchRef = useRef<(() => void) | undefined>(undefined);
+
+  // Create Prompt Modal state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // AI Improvement Chat state
+  const [showImprovementChat, setShowImprovementChat] = useState(false);
+  const [improvingSection, setImprovingSection] = useState<string>("");
+
+  // Clone Section Modal state
+  const [showCloneModal, setShowCloneModal] = useState(false);
+  const [cloningSection, setCloningSection] = useState<string>("");
 
   // Load all prompts on mount
   useEffect(() => {
@@ -322,10 +333,34 @@ export default function PromptManagement() {
           />
           <Card>
             <div className="space-y-4">
-              <PromptEditorSection label="Intention" value={editForm.intention} onChange={(v) => setEditForm({ ...editForm, intention: v })} />
-              <PromptEditorSection label="Restrictions" value={editForm.restrictions} onChange={(v) => setEditForm({ ...editForm, restrictions: v })} />
-              <PromptEditorSection label="Output Structure" value={editForm.output_structure} onChange={(v) => setEditForm({ ...editForm, output_structure: v })} />
-              <PromptEditorSection label="User Prompt Template" value={editForm.user_prompt_template} onChange={(v) => setEditForm({ ...editForm, user_prompt_template: v })} />
+               <PromptEditorSection
+                  label="Intention"
+                  value={editForm.intention}
+                  onChange={(v) => setEditForm({ ...editForm, intention: v })}
+                  onImprove={() => { setImprovingSection("intention"); setShowImprovementChat(true); }}
+                  onClone={() => { setCloningSection("intention"); setShowCloneModal(true); }}
+                />
+               <PromptEditorSection
+                  label="Restrictions"
+                  value={editForm.restrictions}
+                  onChange={(v) => setEditForm({ ...editForm, restrictions: v })}
+                  onImprove={() => { setImprovingSection("restrictions"); setShowImprovementChat(true); }}
+                  onClone={() => { setCloningSection("restrictions"); setShowCloneModal(true); }}
+                />
+               <PromptEditorSection
+                  label="Output Structure"
+                  value={editForm.output_structure}
+                  onChange={(v) => setEditForm({ ...editForm, output_structure: v })}
+                  onImprove={() => { setImprovingSection("output_structure"); setShowImprovementChat(true); }}
+                  onClone={() => { setCloningSection("output_structure"); setShowCloneModal(true); }}
+                />
+               <PromptEditorSection
+                  label="User Prompt Template"
+                  value={editForm.user_prompt_template}
+                  onChange={(v) => setEditForm({ ...editForm, user_prompt_template: v })}
+                  onImprove={() => { setImprovingSection("user_prompt_template"); setShowImprovementChat(true); }}
+                  onClone={() => { setCloningSection("user_prompt_template"); setShowCloneModal(true); }}
+                />
               <div className="flex gap-2">
                 <Button variant="primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
                 <Button variant="ghost" onClick={() => { const v = versions.find((p) => p.version === editingVersion); if (v) setSelectedVersion(v.version); else setEditingVersion(null); }}>Cancel</Button>
@@ -333,6 +368,7 @@ export default function PromptManagement() {
                 <Button variant="danger" onClick={handleDelete}>Delete</Button>
                 <Button variant="accent" onClick={handlePreview}>Preview Rendered</Button>
                 <Button variant="primary" onClick={handleCreateNew}>+ New Version</Button>
+                <Button variant="accent" onClick={() => setShowCreateModal(true)}>+ New Prompt</Button>
               </div>
               {showPreview && resolvedPreview && <PreviewPanel before={combined} after={resolvedPreview.system} />}
             </div>
@@ -347,6 +383,79 @@ export default function PromptManagement() {
             />
           </div>
       </div>
+
+      {/* Create Prompt Modal */}
+      <CreatePromptModal
+        open={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreate={async (promptId: string) => {
+          showNotification(`Prompt "${promptId}" created successfully`, "success");
+          // Reload all prompts and select the new one
+          const updated = await listAllPrompts();
+          setAllPrompts(updated);
+          setSelectedPromptId(promptId);
+          // Load versions of the new prompt
+          const newVersions = await listVersions(promptId);
+          setVersions(newVersions);
+          if (newVersions.length > 0) {
+            const v = newVersions[0];
+            setEditingVersion(v.version);
+            setEditForm({
+              prompt_id: v.prompt_id,
+              version: v.version,
+              name: v.name || "",
+              intention: v.intention || "",
+              restrictions: v.restrictions || "",
+              output_structure: v.output_structure || "",
+              user_prompt_template: v.user_prompt_template || "",
+              is_default: v.is_default || false,
+              metadata: v.metadata || undefined,
+            });
+          }
+        }}
+      />
+
+      {/* AI Improvement Chat */}
+      <PromptImprovementChat
+        section={improvingSection}
+        currentText={
+          improvingSection === "intention" ? editForm.intention :
+          improvingSection === "restrictions" ? editForm.restrictions :
+          improvingSection === "output_structure" ? editForm.output_structure :
+          editForm.user_prompt_template
+        }
+        open={showImprovementChat}
+        onClose={() => setShowImprovementChat(false)}
+        onApply={(improvedText: string) => {
+          setEditForm({
+            ...editForm,
+            [improvingSection]: improvedText,
+          });
+          showNotification(`${improvingSection.replace('_', ' ')} improved successfully`, "success");
+        }}
+      />
+
+      {/* Clone Section Modal */}
+      <CloneSectionModal
+        open={showCloneModal}
+        section={cloningSection}
+        sectionLabel={
+          cloningSection === "intention" ? "Intention" :
+          cloningSection === "restrictions" ? "Restrictions" :
+          cloningSection === "output_structure" ? "Output Structure" :
+          "User Prompt Template"
+        }
+        currentPromptId={selectedPromptId}
+        currentVersion={editingVersion ?? 1}
+        onClose={() => setShowCloneModal(false)}
+        onClone={(text: string) => {
+          setEditForm({
+            ...editForm,
+            [cloningSection]: text,
+          });
+          showNotification(`${cloningSection.replace('_', ' ')} cloned successfully`, "success");
+        }}
+      />
     </div>
   );
 }

@@ -19,3 +19,6 @@ export { default as PromptTextarea } from "./PromptTextarea";
 export { default as StatusBanner } from "./StatusBanner";
 export { default as FieldBrowser } from "./FieldBrowser";
 export { default as RuntimeVariablesEditor } from "./RuntimeVariablesEditor";
+export { default as CreatePromptModal } from "./CreatePromptModal";
+export { default as PromptImprovementChat } from "./PromptImprovementChat";
+export { default as CloneSectionModal } from "./CloneSectionModal";
