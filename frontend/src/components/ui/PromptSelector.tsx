@@ -9,6 +9,7 @@ interface PromptSelectorProps {
   onUserPromptChange?: (userPrompt: string) => void;
   label?: string;
   showPreview?: boolean;
+  refetchRef?: { current?: () => void };
 }
 
 export default function PromptSelector({
@@ -17,6 +18,7 @@ export default function PromptSelector({
   onUserPromptChange,
   label = "Prompt",
   showPreview = false,
+  refetchRef,
 }: PromptSelectorProps) {
   const [allPrompts, setAllPrompts] = useState<PromptSummary[]>([]);
   const [selectedPromptId, setSelectedPromptId] = useState(value?.prompt_id ?? "");
@@ -49,19 +51,6 @@ export default function PromptSelector({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPromptId]);
-
-  // Sync with external value prop changes (e.g., after creating a new version)
-  useEffect(() => {
-    if (value?.prompt_id && value.prompt_id !== selectedPromptId) {
-      // Prompt changed externally
-      setSelectedPromptId(value.prompt_id);
-      fetchVersions(value.prompt_id, value.version);
-    } else if (value?.version !== undefined && value.version !== selectedVersion) {
-      // Version changed externally (e.g., after creating a new version)
-      fetchVersions(selectedPromptId, value.version);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value?.prompt_id, value?.version]);
 
   const fetchVersions = useCallback(async (promptId: string, version?: number) => {
     setLoading(true);
@@ -111,6 +100,30 @@ export default function PromptSelector({
       setLoading(false);
     }
   }, [onChange, showPreview]);
+
+  // Expose refetch callback to parent for manual triggers (e.g., after set default)
+  useEffect(() => {
+    if (refetchRef) {
+      refetchRef.current = () => {
+        if (selectedPromptId) {
+          fetchVersions(selectedPromptId, selectedVersion);
+        }
+      };
+    }
+  }, [refetchRef, selectedPromptId, selectedVersion, fetchVersions]);
+
+  // Sync with external value prop changes (e.g., after creating a new version)
+  useEffect(() => {
+    if (value?.prompt_id && value.prompt_id !== selectedPromptId) {
+      // Prompt changed externally
+      setSelectedPromptId(value.prompt_id);
+      fetchVersions(value.prompt_id, value.version);
+    } else if (value?.version !== undefined && value.version !== selectedVersion) {
+      // Version changed externally (e.g., after creating a new version)
+      fetchVersions(selectedPromptId, value.version);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value?.prompt_id, value?.version]);
 
   const handlePromptIdChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const newPromptId = e.target.value;
