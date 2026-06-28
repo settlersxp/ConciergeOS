@@ -3,6 +3,8 @@
 FastAPI application for ConciergeOS reservation dashboard.
 """
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,11 +15,22 @@ from app.routes import (
     reservations_router,
     settings_router,
 )
+from app.routes.prompt_groups import router as prompt_groups_router
 from app.services.debug import debug_router
 from app.services.http_cache_middleware import HttpCacheMiddleware
+from app.services.prompt_scheduler import PromptScheduler
 
 
-app = FastAPI(title="ConciergeOS")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start up and shut down the prompt group scheduler."""
+    scheduler = PromptScheduler.get()
+    scheduler.start()
+    yield
+    scheduler.shutdown()
+
+
+app = FastAPI(title="ConciergeOS", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -37,4 +50,5 @@ app.include_router(guest_search_router)
 app.include_router(settings_router)
 app.include_router(performance_testing_router)
 app.include_router(prompts_router)
+app.include_router(prompt_groups_router)
 app.include_router(debug_router, prefix="/api")
