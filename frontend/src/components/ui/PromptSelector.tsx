@@ -50,6 +50,19 @@ export default function PromptSelector({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPromptId]);
 
+  // Sync with external value prop changes (e.g., after creating a new version)
+  useEffect(() => {
+    if (value?.prompt_id && value.prompt_id !== selectedPromptId) {
+      // Prompt changed externally
+      setSelectedPromptId(value.prompt_id);
+      fetchVersions(value.prompt_id, value.version);
+    } else if (value?.version !== undefined && value.version !== selectedVersion) {
+      // Version changed externally (e.g., after creating a new version)
+      fetchVersions(selectedPromptId, value.version);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value?.prompt_id, value?.version]);
+
   const fetchVersions = useCallback(async (promptId: string, version?: number) => {
     setLoading(true);
     setError(null);
