@@ -221,7 +221,7 @@ def _get_batch_schema(base_schema: type[BaseModel]) -> type[BaseModel]:
     """Creates a new Pydantic model that accepts a list of base_schema objects under the 'params' key."""
     return create_model(
         f"Batch{base_schema.__name__}",
-        params=(list[base_schema], Field(..., description="A list of parameter objects for batch execution")),
+        params=(list[base_schema], Field(..., description="A list of parameter objects. Use this to perform multiple queries in a single call for better efficiency.")),
     )
 
 TOOL_DEFINITIONS = [
@@ -229,7 +229,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": name,
-            "description": inspect.getdoc(func) or "",
+            "description": (inspect.getdoc(func) or "") + " (Supports batch execution: you can pass a list of multiple parameter objects in the 'params' field to perform multiple queries at once)",
             "parameters": _get_batch_schema(schema).model_json_schema(),
         },
     }
