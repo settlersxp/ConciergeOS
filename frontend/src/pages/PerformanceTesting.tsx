@@ -138,6 +138,10 @@ export default function PerformanceTesting() {
 
 
   const handleRun = async () => {
+    // Generate a new batch UUID for each run
+    const newBatchUuid = generateUuid();
+    setBatchUuid(newBatchUuid);
+
     setRunning(true);
     setStatus({ message: "Running performance tests... This may take a while.", type: "running" });
 
@@ -154,7 +158,7 @@ export default function PerformanceTesting() {
       user_prompt: userPrompt,
       expected_response_format: "auto",
       data_format: dataFormat,
-      batch_uuid: batchUuid,
+      batch_uuid: newBatchUuid,
       // Send prompt_id and version for server-side resolution
       prompt_id: promptSelection?.prompt_id || undefined,
       prompt_version: promptSelection?.version || undefined,
@@ -181,10 +185,8 @@ export default function PerformanceTesting() {
         setResults(resultsData);
       }
 
-      await loadBatches();
-      // Generate new UUID for next run
-      setBatchUuid(generateUuid());
-    } catch (e: unknown) {
+       await loadBatches();
+     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setStatus({ message: `Error running tests: ${msg}`, type: "error" });
     } finally {
@@ -467,13 +469,11 @@ export default function PerformanceTesting() {
       <div className="grid gap-6 md:grid-cols-2 mb-6">
         <TestConfigCard
           testMode={testMode}
-          batchUuid={batchUuid}
           friendlyName={friendlyName}
           customerName={customerName}
           sequentialBatch={sequentialBatch}
           concurrentBatch={concurrentBatch}
           onTestModeChange={setTestMode}
-          onBatchUuidChange={setBatchUuid}
           onFriendlyNameChange={setFriendlyName}
           onCustomerNameChange={setCustomerName}
           onSequentialBatchChange={setSequentialBatch}

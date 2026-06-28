@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { guestSearchApi } from "../services/api";
 import type { GuestSearchResponse } from "../types";
-import { PageHeader, Card, FormField, Input, Button, Toast, RuntimeVariablesEditor } from "../components/ui";
+import { PageHeader, Card, FormField, Input, Button, Toast } from "../components/ui";
 import PromptSelector from "../components/ui/PromptSelector";
 
 export default function GuestSearch() {
@@ -75,12 +75,6 @@ export default function GuestSearch() {
             />
           </FormField>
         </div>
-
-        <RuntimeVariablesEditor
-          variableKey={runtimeVarKey}
-          variableValue={query}
-          onKeyChange={setRuntimeVarKey}
-        />
 
         <div className="mt-4 flex justify-end">
           <Button variant="primary" loading={loading} onClick={handleSearch}>

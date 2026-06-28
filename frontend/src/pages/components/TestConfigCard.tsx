@@ -3,13 +3,11 @@ import { Card, FormField, Input } from "../../components/ui";
 
 interface TestConfigCardProps {
   testMode: TestMode;
-  batchUuid: string;
   friendlyName: string;
   customerName: string;
   sequentialBatch: number;
   concurrentBatch: number;
   onTestModeChange: (mode: TestMode) => void;
-  onBatchUuidChange: (uuid: string) => void;
   onFriendlyNameChange: (name: string) => void;
   onCustomerNameChange: (name: string) => void;
   onSequentialBatchChange: (size: number) => void;
@@ -18,13 +16,11 @@ interface TestConfigCardProps {
 
 export default function TestConfigCard({
   testMode,
-  batchUuid,
   friendlyName,
   customerName,
   sequentialBatch,
   concurrentBatch,
   onTestModeChange,
-  onBatchUuidChange,
   onFriendlyNameChange,
   onCustomerNameChange,
   onSequentialBatchChange,
@@ -77,17 +73,6 @@ export default function TestConfigCard({
           configured below.
         </div>
       )}
-
-      {/* Batch UUID */}
-      <div className="mb-4">
-        <FormField htmlFor="batchUuid" label="Batch UUID" prefix="(auto-generated)">
-          <Input
-            id="batchUuid"
-            value={batchUuid}
-            onChange={(e) => onBatchUuidChange(e.target.value)}
-          />
-        </FormField>
-      </div>
 
       {/* Friendly Name */}
       <div className="mb-4">
