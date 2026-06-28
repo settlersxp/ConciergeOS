@@ -85,9 +85,9 @@ def _call_guest_llm(customer_name: str, settings: TestSettings) -> tuple[str, bo
 
     result, was_cached = query_guest_with_llm(
         customer_name,
-        prompt_id=settings.prompt_id or "guest-search",
+        prompt_id=settings.prompt_id,
         version=settings.prompt_version,
-        runtime_variables=guest_vars or None,
+        runtime_variables=guest_vars,
     )
 
     logger.info(

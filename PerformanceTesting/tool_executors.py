@@ -7,7 +7,6 @@ tool definitions) to these callable implementations.
 
 from __future__ import annotations
 
-import json
 from typing import Any, Callable
 
 from app.services.tool_logic import (

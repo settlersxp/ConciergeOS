@@ -230,19 +230,21 @@ TOOL_DEFINITIONS = [
 # LLM Client & Config
 # ---------------------------------------------------------------------------
 
+def _get_base_client() -> tuple[OpenAI, str]:
+    """Internal helper to create an OpenAI client from config."""
+    models_endpoint = config_manager.test_settings.models_endpoint
+    base_url = models_endpoint.rstrip('/').replace('/models', '')
+    return OpenAI(base_url=base_url, api_key="none"), base_url
+
+
 def get_llm_config() -> tuple[OpenAI, str]:
     """
     Dynamically fetch the LLM client and model name from the global configuration.
     If the vLLM server is unreachable, returns a fallback client and model.
-    Derives base_url from models_endpoint by removing '/models' suffix.
     """
-    models_endpoint = config_manager.test_settings.models_endpoint
+    client, _ = _get_base_client()
     model_name = config_manager.test_settings.model_name
     
-    # Derive base URL from models endpoint (remove '/models' suffix)
-    base_url = models_endpoint.rstrip('/').replace('/models', '')
-    
-    client = OpenAI(base_url=base_url, api_key="none")
     try:
         # Verify connectivity and model availability
         models = client.models.list()
@@ -253,10 +255,10 @@ def get_llm_config() -> tuple[OpenAI, str]:
             if model_name in available_model_ids:
                 return client, model_name
             else:
-                print(f"Warning: Configured model '{model_name}' not found. Using first available: {models.data[0].id}")
+                logger.warning("Configured model '%s' not found. Using first available: %s", model_name, models.data[0].id)
                 return client, models.data[0].id
     except Exception as e:
-        print(f"Warning: Failed to fetch LLM config dynamically: {e}. Using fallback.")
+        logger.warning("Failed to fetch LLM config dynamically: %s. Using fallback.", e)
     
     # Extremely basic fallback if everything fails
     return client, "facebook/opt-125m"
@@ -268,15 +270,12 @@ def get_available_models() -> list[LLMModelInfo]:
     Returns:
         List of LLMModelInfo objects representing available models.
     """
-    models_endpoint = config_manager.test_settings.models_endpoint
-    base_url = models_endpoint.rstrip('/').replace('/models', '')
-    
-    client = OpenAI(base_url=base_url, api_key="none")
+    client, _ = _get_base_client()
     try:
         models = client.models.list()
         return [LLMModelInfo(id=m.id, object=m.object, created=m.created, owned_by=m.owned_by) for m in models.data]
     except Exception as e:
-        print(f"Warning: Failed to fetch available models: {e}")
+        logger.warning("Failed to fetch available models: %s", e)
         return []
 
 

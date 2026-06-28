@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .model_info import create_openai_client
+from app.services.llm import get_llm_config
 from .settings import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_TEMPERATURE,
@@ -22,7 +22,6 @@ from .settings import (
 
 
 def query_guest_with_llm(
-    base_url: str,
     model_name: str,
     system_content: str,
     user_prompt: str,
@@ -39,7 +38,6 @@ def query_guest_with_llm(
     multi-guest code paths delegate to.
 
     Args:
-        base_url: The vLLM server URL.
         model_name: The model name to use.
         system_content: The system prompt to use.
         user_prompt: The user's query (customer name).
@@ -58,8 +56,8 @@ def query_guest_with_llm(
         )
 
     # Non-tool-calling mode: direct chat completion
-    client = create_openai_client(base_url)
-    messages: list[dict[str, str]] = [
+    client, _ = get_llm_config()
+    messages: list[Any] = [
         {"role": "system", "content": system_content},
         {"role": "user", "content": user_prompt},
     ]

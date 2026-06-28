@@ -581,7 +581,6 @@ def _validate_single_pair(
 
     # Call LLM using the cached implementation
     try:
-        from openai import OpenAI
         from app.services.llm import get_llm_config
 
         client, model = get_llm_config()
