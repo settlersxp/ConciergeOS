@@ -34,23 +34,24 @@ Usage:
 
 import hashlib
 import logging
+import threading
 import time
+from collections import OrderedDict
 from typing import Optional
 
 from app.db import SessionLocal
 from app.models import Guest, Reservation, Room
+from app.services.cache_store import CacheConfig, FailureCacheStore
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Name-to-ID resolution cache
+# Name-to-ID resolution cache with thread safety and LRU eviction
 # ---------------------------------------------------------------------------
-# TTL for cached name-to-ID lookups (in seconds).
-# When guest data changes, call resolve_cache_clear() to invalidate.
-_NAME_CACHE_TTL = 300  # 5 minutes
 
 # In-memory cache: "table:column:value" -> {"ids": [...], "timestamp": float}
-_name_cache: dict[str, dict] = {}
+_name_cache: OrderedDict[str, dict] = OrderedDict()
+_name_cache_lock = threading.Lock()
 
 
 def _get_name_cache_key(table: str, column: str, value: str) -> str:
@@ -58,54 +59,144 @@ def _get_name_cache_key(table: str, column: str, value: str) -> str:
     return f"{table}:{column}:{value}"
 
 
+def _name_cache_evict_lru() -> None:
+    """Evict least recently used entry. Must be called with lock held."""
+    if _name_cache:
+        _name_cache.popitem(last=False)
+        logger.debug("[NAME-CACHE] LRU evicted an entry")
+
+
 def resolve_cache_get(cache_key: str) -> list[int] | None:
     """
     Get a cached name-to-ID resolution result.
     
     Returns None if not cached or expired.
+    Thread-safe with LRU move on hit.
     """
-    entry = _name_cache.get(cache_key)
-    if entry is None:
-        return None
-    if time.time() - entry["timestamp"] > _NAME_CACHE_TTL:
-        del _name_cache[cache_key]
-        return None
-    return entry["ids"]
+    with _name_cache_lock:
+        entry = _name_cache.get(cache_key)
+        if entry is None:
+            return None
+        if time.time() - entry["timestamp"] > CacheConfig.NAME_CACHE_TTL:
+            del _name_cache[cache_key]
+            return None
+        # Move to end (most recently used) for LRU
+        _name_cache.move_to_end(cache_key)
+        return entry["ids"]
 
 
 def resolve_cache_set(cache_key: str, ids: list[int]) -> None:
-    """Cache a name-to-ID resolution result."""
-    _name_cache[cache_key] = {
-        "ids": ids,
-        "timestamp": time.time(),
-    }
+    """Cache a name-to-ID resolution result. Thread-safe with LRU eviction."""
+    with _name_cache_lock:
+        if cache_key in _name_cache:
+            _name_cache[cache_key] = {
+                "ids": ids,
+                "timestamp": time.time(),
+            }
+            _name_cache.move_to_end(cache_key)
+        else:
+            if CacheConfig.NAME_CACHE_MAX_SIZE is not None and len(_name_cache) >= CacheConfig.NAME_CACHE_MAX_SIZE:
+                _name_cache_evict_lru()
+            _name_cache[cache_key] = {
+                "ids": ids,
+                "timestamp": time.time(),
+            }
 
 
 def resolve_cache_clear() -> int:
     """Clear the name-to-ID resolution cache. Returns the count of entries cleared."""
-    count = len(_name_cache)
-    _name_cache.clear()
-    return count
+    with _name_cache_lock:
+        count = len(_name_cache)
+        _name_cache.clear()
+        return count
 
 
 def resolve_cache_cleanup() -> int:
     """Remove expired entries. Returns the count removed."""
     now = time.time()
-    expired_keys = [
-        k for k, v in _name_cache.items()
-        if now - v["timestamp"] > _NAME_CACHE_TTL
-    ]
-    for key in expired_keys:
-        del _name_cache[key]
-    return len(expired_keys)
+    with _name_cache_lock:
+        expired_keys = [
+            k for k, v in _name_cache.items()
+            if now - v["timestamp"] > CacheConfig.NAME_CACHE_TTL
+        ]
+        for key in expired_keys:
+            del _name_cache[key]
+        return len(expired_keys)
 
 
 def resolve_cache_stats() -> dict:
     """Return cache statistics."""
-    return {
-        "size": len(_name_cache),
-        "ttl": _NAME_CACHE_TTL,
-    }
+    with _name_cache_lock:
+        return {
+            "size": len(_name_cache),
+            "ttl": CacheConfig.NAME_CACHE_TTL,
+            "max_size": CacheConfig.NAME_CACHE_MAX_SIZE,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Failure cache for DB lookups - prevents repeated failed queries
+# ---------------------------------------------------------------------------
+_failure_cache = FailureCacheStore(
+    ttl=CacheConfig.FAILURE_CACHE_TTL,
+    max_size=CacheConfig.NAME_CACHE_MAX_SIZE,
+)
+
+
+def _is_name_lookup_failed(cache_key: str) -> bool:
+    """Check if this name lookup recently failed."""
+    return _failure_cache.is_failed(cache_key)
+
+
+def _record_name_lookup_failure(cache_key: str) -> None:
+    """Record that this name lookup recently failed."""
+    _failure_cache.record_failure(cache_key)
+
+
+# ---------------------------------------------------------------------------
+# Batch resolution cache
+# ---------------------------------------------------------------------------
+# Cache for resolved batch lookups: "table:resolved_key" -> {"result": dict, "timestamp": float}
+_batch_resolve_cache: OrderedDict[str, dict] = OrderedDict()
+_batch_resolve_lock = threading.Lock()
+_BATCH_RESOLVE_TTL = 60  # 1 minute for batch results
+_BATCH_RESOLVE_MAX_SIZE = 500
+
+
+def _batch_cache_evict_lru() -> None:
+    if _batch_resolve_cache:
+        _batch_resolve_cache.popitem(last=False)
+
+
+def _batch_cache_get(cache_key: str) -> dict | None:
+    with _batch_resolve_lock:
+        entry = _batch_resolve_cache.get(cache_key)
+        if entry is None:
+            return None
+        if time.time() - entry["timestamp"] > _BATCH_RESOLVE_TTL:
+            del _batch_resolve_cache[cache_key]
+            return None
+        _batch_resolve_cache.move_to_end(cache_key)
+        return entry["result"]
+
+
+def _batch_cache_set(cache_key: str, result: dict) -> None:
+    with _batch_resolve_lock:
+        if cache_key in _batch_resolve_cache:
+            _batch_resolve_cache[cache_key] = {"result": result, "timestamp": time.time()}
+            _batch_resolve_cache.move_to_end(cache_key)
+        else:
+            if len(_batch_resolve_cache) >= _BATCH_RESOLVE_MAX_SIZE:
+                _batch_cache_evict_lru()
+            _batch_resolve_cache[cache_key] = {"result": result, "timestamp": time.time()}
+
+
+def _batch_cache_clear() -> int:
+    with _batch_resolve_lock:
+        count = len(_batch_resolve_cache)
+        _batch_resolve_cache.clear()
+        return count
+
 
 # Map tool names to database table/entity names
 TOOL_TO_TABLE_MAP: dict[str, str] = {
@@ -156,6 +247,7 @@ def _resolve_guest_params(params: dict) -> dict:
     to support single and array-based queries.
     
     Uses an in-memory cache for name-based lookups to avoid redundant DB queries.
+    Consolidates name and filter lookups into a single DB query.
     """
     # Priority 1: Direct guest_ids (plural) or guest_id (singular)
     guest_ids = params.get("guest_ids") or params.get("guest_id")
@@ -177,18 +269,22 @@ def _resolve_guest_params(params: dict) -> dict:
     
     name_cache_key = _get_name_cache_key("guests", ":".join(cache_key_parts), "") if cache_key_parts else None
     
+    # Check failure cache first - skip if this lookup recently failed
+    if name_cache_key and _is_name_lookup_failed(name_cache_key):
+        logger.debug(f"[NAME-FAIL-CACHE] SKIP for guests lookup: {cache_key_parts} (recent failure)")
+        # Return empty result to indicate no guests found
+        return {}
+    
     if name_cache_key:
         cached = resolve_cache_get(name_cache_key)
         if cached is not None:
             logger.debug(f"[NAME-CACHE] HIT for guests lookup: {cache_key_parts}")
-            if len(cached) == 1:
-                return {"guest_ids": cached}
-            elif len(cached) > 1:
-                return {"guest_ids": cached}
-            # Multiple matches or none - fall through to DB query for accuracy
+            return {"guest_ids": cached}
+        # Cache miss or not set - fall through to DB query
     
     db = SessionLocal()
     try:
+        # Single consolidated query - handles all filters at once
         query = db.query(Guest)
 
         if params.get("first_name"):
@@ -206,16 +302,24 @@ def _resolve_guest_params(params: dict) -> dict:
         guests = query.all()
         guest_ids = [g.guest_id for g in guests]
         
-        # Cache name-based results
-        if name_cache_key and guest_ids:
-            resolve_cache_set(name_cache_key, guest_ids)
-            if len(guest_ids) == 1:
-                logger.debug(f"[NAME-CACHE] SET for guests lookup: {cache_key_parts} -> {guest_ids}")
-            else:
+        # Cache name-based results on success
+        if name_cache_key:
+            if guest_ids:
+                resolve_cache_set(name_cache_key, guest_ids)
+                # Clear failure cache entry on success
+                _failure_cache.clear()
                 logger.debug(f"[NAME-CACHE] SET for guests lookup: {cache_key_parts} -> {len(guest_ids)} results")
+            else:
+                # No results - record in failure cache to skip future queries
+                _record_name_lookup_failure(name_cache_key)
+                logger.debug(f"[NAME-FAIL-CACHE] RECORD for guests lookup: {cache_key_parts} (no results)")
 
         if guests:
             return {"guest_ids": guest_ids}
+    except Exception as e:
+        logger.error(f"[NAME-CACHE] DB error during guests lookup: {e}", exc_info=True)
+        if name_cache_key:
+            _record_name_lookup_failure(name_cache_key)
     finally:
         db.close()
 
@@ -251,6 +355,8 @@ def _resolve_room_params(params: dict) -> dict:
         room = query.first()
         if room:
             return {"room_ids": [room.room_id]}
+    except Exception as e:
+        logger.error(f"[NAME-CACHE] DB error during rooms lookup: {e}", exc_info=True)
     finally:
         db.close()
 
@@ -404,3 +510,110 @@ def build_summary_cache_key(
     """
     key_string = f"summary:_all_:{prompt_id}:{prompt_version}:{model_name}"
     return hashlib.sha256(key_string.encode("utf-8")).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Batch Parameter Resolution
+# ---------------------------------------------------------------------------
+
+def resolve_params_batch(
+    table: str,
+    params_list: list[dict],
+) -> list[dict]:
+    """
+    Resolve multiple parameter sets for the same table in a single batch.
+    
+    This reduces DB queries by consolidating name-based lookups for the same table.
+    Direct ID lookups are returned immediately without DB query.
+    
+    Args:
+        table: Database table name
+        params_list: List of parameter dicts to resolve
+        
+    Returns:
+        List of resolved dicts matching the input order
+    """
+    if not params_list:
+        return []
+    
+    results: list[dict] = []
+    
+    if table == "guests":
+        for params in params_list:
+            results.append(_resolve_guest_params_batch_entry(params))
+    elif table == "rooms":
+        for params in params_list:
+            results.append(_resolve_room_params_batch_entry(params))
+    elif table == "reservations":
+        for params in params_list:
+            results.append(_resolve_reservation_params_batch_entry(params))
+    else:
+        results = [{}] * len(params_list)
+    
+    return results
+
+
+def _resolve_guest_params_batch_entry(params: dict) -> dict:
+    """Handle a single guest resolution entry in batch mode."""
+    # Direct IDs - no DB needed
+    guest_ids = params.get("guest_ids") or params.get("guest_id")
+    if guest_ids is not None:
+        if isinstance(guest_ids, int):
+            guest_ids = [guest_ids]
+        elif not isinstance(guest_ids, list):
+            guest_ids = [guest_ids]
+        return {"guest_ids": list(map(int, guest_ids))}
+    
+    # Name-based - use cache
+    cache_key_parts = []
+    if params.get("first_name"):
+        cache_key_parts.append(f"first:{params['first_name']}")
+    if params.get("last_name"):
+        cache_key_parts.append(f"last:{params['last_name']}")
+    if params.get("is_special_guest") is not None:
+        cache_key_parts.append(f"special:{params['is_special_guest']}")
+    
+    name_cache_key = _get_name_cache_key("guests", ":".join(cache_key_parts), "") if cache_key_parts else None
+    
+    # Check failure cache
+    if name_cache_key and _is_name_lookup_failed(name_cache_key):
+        return {}
+    
+    if name_cache_key:
+        cached = resolve_cache_get(name_cache_key)
+        if cached is not None:
+            return {"guest_ids": cached}
+    
+    # Fall through to single resolution (which handles DB + caching)
+    return _resolve_guest_params(params)
+
+
+def _resolve_room_params_batch_entry(params: dict) -> dict:
+    """Handle a single room resolution entry in batch mode."""
+    room_ids = params.get("room_ids") or params.get("room_id")
+    if room_ids is not None:
+        if isinstance(room_ids, int):
+            room_ids = [room_ids]
+        elif not isinstance(room_ids, list):
+            room_ids = [room_ids]
+        return {"room_ids": list(map(int, room_ids))}
+    
+    return _resolve_room_params(params)
+
+
+def _resolve_reservation_params_batch_entry(params: dict) -> dict:
+    """Handle a single reservation resolution entry in batch mode."""
+    return _resolve_reservation_params(params)
+
+
+def cache_key_builder_stats() -> dict:
+    """Return statistics for all cache components in this module."""
+    return {
+        "name_cache": resolve_cache_stats(),
+        "failure_cache": _failure_cache.stats,
+        "batch_cache": {
+            "size": len(_batch_resolve_cache),
+            "max_size": _BATCH_RESOLVE_MAX_SIZE,
+            "ttl": _BATCH_RESOLVE_TTL,
+        },
+    }

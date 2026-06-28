@@ -603,7 +603,12 @@ def _validate_single_pair(
 
         # Store in cache if enabled
         if use_cache:
-            _get_cache().set(cache_key, answer)
+            from app.services.response_cache import CacheEntry
+            _get_cache().set(cache_key, CacheEntry(
+                response=answer,
+                timestamp=__import__("time").time(),
+                ttl=_get_cache().ttl,
+            ))
             logger.info(
                 f"[VALIDATE] [CACHE] STORED for '{ground_truth_name}' | "
                 f"is_match={is_match}"

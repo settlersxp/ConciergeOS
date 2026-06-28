@@ -138,12 +138,17 @@ class HttpCacheMiddleware:
                         for k, v in capture.headers_list:
                             resp_headers[k.decode()] = v.decode()
 
+                        # Import HttpCacheEntry and wrap the response data
+                        from app.services.response_cache import HttpCacheEntry
                         self.cache.set(
                             key=cache_key,
-                            status_code=capture.status_code,
-                            headers=resp_headers,
-                            body=body_str,
-                            ttl=self._ttl,
+                            value=HttpCacheEntry(
+                                status_code=capture.status_code,
+                                headers=resp_headers,
+                                body=body_str,
+                                timestamp=time.time(),
+                                ttl=self._ttl,
+                            ),
                         )
                         logger.info(
                             f"[HTTP-CACHE] STORED for {path} | "

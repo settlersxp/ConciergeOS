@@ -25,17 +25,58 @@ Usage:
 import hashlib
 import json
 import logging
+import random
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode, urlparse, parse_qs
 
+from app.services.cache_store import BaseCacheStore, CacheConfig
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Full cache value logging — no truncation
+# Full cache value logging — no truncation with sampling and rotation
 # ---------------------------------------------------------------------------
 _CACHE_FULL_VALUE_FILE = Path("/tmp/cof_cache_full_value.log")
+
+
+def _rotate_log_file() -> None:
+    """Rotate log file if it exceeds max size. Keeps rotated copies."""
+    if not _CACHE_FULL_VALUE_FILE.exists():
+        return
+
+    try:
+        file_size = _CACHE_FULL_VALUE_FILE.stat().st_size
+        max_size = CacheConfig.CACHE_LOG_MAX_FILE_SIZE
+        rotate_count = CacheConfig.CACHE_LOG_ROTATE_COUNT
+
+        if file_size < max_size:
+            return
+
+        # Rotate files: .log.2 -> .log.3, .log.1 -> .log.2, current -> .log.1
+        for i in range(rotate_count, 1, -1):
+            src = _CACHE_FULL_VALUE_FILE.with_suffix(f".log.{i}")
+            dst = _CACHE_FULL_VALUE_FILE.with_suffix(f".log.{i + 1}")
+            if src.exists():
+                src.rename(dst)
+
+        _CACHE_FULL_VALUE_FILE.rename(_CACHE_FULL_VALUE_FILE.with_suffix(".log.1"))
+        _CACHE_FULL_VALUE_FILE.touch()
+    except Exception:
+        pass  # Best-effort — don't break the application if logging fails
+
+
+def _should_log(value_len: int) -> bool:
+    """Determine if this cache entry should be logged based on sampling and size."""
+    # Skip entries below minimum size threshold
+    if value_len < CacheConfig.CACHE_LOG_MIN_SIZE:
+        return False
+    # Sample-based logging (e.g., 10% of qualifying entries)
+    if random.random() > CacheConfig.CACHE_LOG_SAMPLE_RATE:
+        return False
+    return True
 
 
 def _log_cache_entry_full(
@@ -53,6 +94,13 @@ def _log_cache_entry_full(
       - timestamp: epoch float
       - value_len: len(value) for quick scanning
     """
+    # Check if we should log this entry (sampling + size)
+    if not _should_log(len(value)):
+        return
+
+    # Check if log file needs rotation before writing
+    _rotate_log_file()
+
     try:
         entry = {
             "op": operation,
@@ -75,101 +123,7 @@ _MAX_IDENTICAL_TOOL_CALLS = 3
 
 
 # ---------------------------------------------------------------------------
-# Tool call cache data structures
-# ---------------------------------------------------------------------------
-
-
-class ToolCallCacheEntry:
-    """A single cached tool call result with expiration tracking."""
-
-    def __init__(self, result: str, timestamp: float, ttl: int):
-        self.result = result
-        self.timestamp = timestamp
-        self.ttl = ttl
-
-    @property
-    def is_expired(self) -> bool:
-        """Return True if this entry has exceeded its TTL."""
-        return (time.time() - self.timestamp) >= self.ttl
-
-
-class ToolCallCacheStore:
-    """
-    In-memory cache for tool call results with TTL-based expiration.
-
-    Caches results by structured cache key (model_identifier:resource_identifier:prompt_id:prompt_version:model_name).
-    """
-
-    def __init__(self, ttl: int = 3600):
-        self._store: dict[str, ToolCallCacheEntry] = {}
-        self._ttl = ttl
-        self._hits = 0
-        self._misses = 0
-
-    @property
-    def ttl(self) -> int:
-        return self._ttl
-
-    @ttl.setter
-    def ttl(self, value: int) -> None:
-        self._ttl = value
-
-    def get(self, key: str) -> ToolCallCacheEntry | None:
-        entry = self._store.get(key)
-        if entry is None:
-            self._misses += 1
-            return None
-        if entry.is_expired:
-            del self._store[key]
-            self._misses += 1
-            return None
-        self._hits += 1
-        return entry
-
-    def set(self, key: str, result: str, ttl: int | None = None) -> None:
-        effective_ttl = ttl if ttl is not None else self._ttl
-        self._store[key] = ToolCallCacheEntry(
-            result=result,
-            timestamp=time.time(),
-            ttl=effective_ttl,
-        )
-        _log_cache_entry_full("SET", key, result)
-
-    def delete(self, key: str) -> bool:
-        if key in self._store:
-            del self._store[key]
-            return True
-        return False
-
-    def clear(self) -> int:
-        count = len(self._store)
-        self._store.clear()
-        self._hits = 0
-        self._misses = 0
-        return count
-
-    def cleanup_expired(self) -> int:
-        expired_keys = [k for k, v in self._store.items() if v.is_expired]
-        for key in expired_keys:
-            del self._store[key]
-        return len(expired_keys)
-
-    @property
-    def stats(self) -> dict[str, Any]:
-        total = self._hits + self._misses
-        return {
-            "tool_cache_hits": self._hits,
-            "tool_cache_misses": self._misses,
-            "size": len(self._store),
-            "hit_rate": round(self._hits / total * 100, 1) if total > 0 else 0.0,
-        }
-
-    def __len__(self) -> int:
-        return len(self._store)
-
-
-# ---------------------------------------------------------------------------
-# Cache data structures
+# Cache data structures — concrete implementations using BaseCacheStore
 # ---------------------------------------------------------------------------
 
 
@@ -187,78 +141,75 @@ class CacheEntry:
         return (time.time() - self.timestamp) >= self.ttl
 
 
-class CacheStore:
+class CacheStore(BaseCacheStore[CacheEntry]):
     """
-    In-memory LLM response cache with TTL-based expiration.
+    In-memory LLM response cache with TTL-based expiration and LRU eviction.
     """
 
-    def __init__(self, ttl: int = 3600):
-        self._store: dict[str, CacheEntry] = {}
-        self._ttl = ttl
-        self._hits = 0
-        self._misses = 0
+    def __init__(self, ttl: int | None = None, max_size: int | None = None):
+        effective_ttl = ttl or CacheConfig.RESPONSE_CACHE_TTL
+        effective_max = max_size or CacheConfig.RESPONSE_CACHE_MAX_SIZE
+        super().__init__(ttl=effective_ttl, max_size=effective_max)
+
+    def _is_expired(self, entry: CacheEntry) -> bool:
+        return entry.is_expired
+
+
+class HttpCacheEntry:
+    """A cached HTTP response with expiration tracking."""
+
+    def __init__(self, status_code: int, headers: dict[str, str], body: str, timestamp: float, ttl: int):
+        self.status_code = status_code
+        self.headers = headers
+        self.body = body
+        self.timestamp = timestamp
+        self.ttl = ttl
 
     @property
-    def ttl(self) -> int:
-        return self._ttl
+    def is_expired(self) -> bool:
+        return (time.time() - self.timestamp) >= self.ttl
 
-    @ttl.setter
-    def ttl(self, value: int) -> None:
-        self._ttl = value
 
-    def get(self, key: str) -> CacheEntry | None:
-        entry = self._store.get(key)
-        if entry is None:
-            self._misses += 1
-            return None
-        if entry.is_expired:
-            del self._store[key]
-            self._misses += 1
-            return None
-        self._hits += 1
-        return entry
+class HttpCacheStore(BaseCacheStore[HttpCacheEntry]):
+    """In-memory HTTP response cache with TTL-based expiration and LRU eviction."""
 
-    def set(self, key: str, response: str, ttl: int | None = None) -> None:
-        effective_ttl = ttl if ttl is not None else self._ttl
-        self._store[key] = CacheEntry(
-            response=response,
-            timestamp=time.time(),
-            ttl=effective_ttl,
-        )
-        _log_cache_entry_full("SET", key, response)
+    def __init__(self, ttl: int | None = None, max_size: int | None = None):
+        effective_ttl = ttl or CacheConfig.HTTP_CACHE_TTL
+        effective_max = max_size or CacheConfig.HTTP_CACHE_MAX_SIZE
+        super().__init__(ttl=effective_ttl, max_size=effective_max)
 
-    def delete(self, key: str) -> bool:
-        if key in self._store:
-            del self._store[key]
-            return True
-        return False
+    def _is_expired(self, entry: HttpCacheEntry) -> bool:
+        return entry.is_expired
 
-    def clear(self) -> int:
-        count = len(self._store)
-        self._store.clear()
-        self._hits = 0
-        self._misses = 0
-        return count
 
-    def cleanup_expired(self) -> int:
-        expired_keys = [k for k, v in self._store.items() if v.is_expired]
-        for key in expired_keys:
-            del self._store[key]
-        return len(expired_keys)
+class ToolCallCacheEntry:
+    """A single cached tool call result with expiration tracking."""
+
+    def __init__(self, result: str, timestamp: float, ttl: int):
+        self.result = result
+        self.timestamp = timestamp
+        self.ttl = ttl
 
     @property
-    def stats(self) -> dict[str, Any]:
-        total = self._hits + self._misses
-        return {
-            "hits": self._hits,
-            "misses": self._misses,
-            "size": len(self._store),
-            "total_requests": total,
-            "hit_rate": round(self._hits / total * 100, 1) if total > 0 else 0.0,
-        }
+    def is_expired(self) -> bool:
+        """Return True if this entry has exceeded its TTL."""
+        return (time.time() - self.timestamp) >= self.ttl
 
-    def __len__(self) -> int:
-        return len(self._store)
+
+class ToolCallCacheStore(BaseCacheStore[ToolCallCacheEntry]):
+    """
+    In-memory cache for tool call results with TTL-based expiration and LRU eviction.
+
+    Caches results by structured cache key (model_identifier:resource_identifier:prompt_id:prompt_version:model_name).
+    """
+
+    def __init__(self, ttl: int | None = None, max_size: int | None = None):
+        effective_ttl = ttl or CacheConfig.TOOL_CACHE_TTL
+        effective_max = max_size or CacheConfig.TOOL_CACHE_MAX_SIZE
+        super().__init__(ttl=effective_ttl, max_size=effective_max)
+
+    def _is_expired(self, entry: ToolCallCacheEntry) -> bool:
+        return entry.is_expired
 
 
 # ---------------------------------------------------------------------------
@@ -283,11 +234,11 @@ def generate_cache_key(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Singleton cache stores
+# Singleton cache stores (using centralized config)
 # ---------------------------------------------------------------------------
 
 # Structured response cache: keyed by conversation hash
-_response_cache = CacheStore(ttl=3600)
+_response_cache = CacheStore()
 
 
 def _get_cache() -> CacheStore:
@@ -302,7 +253,11 @@ def cache_get(key: str) -> CacheEntry | None:
 
 def cache_set(key: str, response: str, ttl: int | None = None) -> None:
     """Cache a response with the given key."""
-    _get_cache().set(key, response, ttl)
+    _get_cache().set(key, CacheEntry(
+        response=response,
+        timestamp=time.time(),
+        ttl=ttl if ttl is not None else _get_cache().ttl,
+    ))
 
 
 def cache_clear() -> int:
@@ -325,94 +280,6 @@ def cache_stats() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-class HttpCacheEntry:
-    """A cached HTTP response with expiration tracking."""
-
-    def __init__(self, status_code: int, headers: dict[str, str], body: str, timestamp: float, ttl: int):
-        self.status_code = status_code
-        self.headers = headers
-        self.body = body
-        self.timestamp = timestamp
-        self.ttl = ttl
-
-    @property
-    def is_expired(self) -> bool:
-        return (time.time() - self.timestamp) >= self.ttl
-
-
-class HttpCacheStore:
-    """In-memory HTTP response cache with TTL-based expiration."""
-
-    def __init__(self, ttl: int = 3600):
-        self._store: dict[str, HttpCacheEntry] = {}
-        self._ttl = ttl
-        self._hits = 0
-        self._misses = 0
-
-    @property
-    def ttl(self) -> int:
-        return self._ttl
-
-    @ttl.setter
-    def ttl(self, value: int) -> None:
-        self._ttl = value
-
-    def get(self, key: str) -> HttpCacheEntry | None:
-        entry = self._store.get(key)
-        if entry is None:
-            self._misses += 1
-            return None
-        if entry.is_expired:
-            del self._store[key]
-            self._misses += 1
-            return None
-        self._hits += 1
-        return entry
-
-    def set(self, key: str, status_code: int, headers: dict[str, str], body: str, ttl: int | None = None) -> None:
-        effective_ttl = ttl if ttl is not None else self._ttl
-        self._store[key] = HttpCacheEntry(
-            status_code=status_code,
-            headers=headers,
-            body=body,
-            timestamp=time.time(),
-            ttl=effective_ttl,
-        )
-
-    def delete(self, key: str) -> bool:
-        if key in self._store:
-            del self._store[key]
-            return True
-        return False
-
-    def clear(self) -> int:
-        count = len(self._store)
-        self._store.clear()
-        self._hits = 0
-        self._misses = 0
-        return count
-
-    def cleanup_expired(self) -> int:
-        expired_keys = [k for k, v in self._store.items() if v.is_expired]
-        for key in expired_keys:
-            del self._store[key]
-        return len(expired_keys)
-
-    @property
-    def stats(self) -> dict[str, Any]:
-        total = self._hits + self._misses
-        return {
-            "hits": self._hits,
-            "misses": self._misses,
-            "size": len(self._store),
-            "total_requests": total,
-            "hit_rate": round(self._hits / total * 100, 1) if total > 0 else 0.0,
-        }
-
-    def __len__(self) -> int:
-        return len(self._store)
-
-
 def generate_http_cache_key(url: str) -> str:
     """Generate a deterministic cache key from a request URL."""
     parsed = urlparse(url)
@@ -422,7 +289,7 @@ def generate_http_cache_key(url: str) -> str:
 
 
 # Singleton HTTP cache store
-_http_response_cache = HttpCacheStore(ttl=3600)
+_http_response_cache = HttpCacheStore()
 
 
 def _get_http_cache() -> HttpCacheStore:
@@ -434,7 +301,13 @@ def http_cache_get(key: str) -> HttpCacheEntry | None:
 
 
 def http_cache_set(key: str, status_code: int, headers: dict[str, str], body: str) -> None:
-    _get_http_cache().set(key, status_code, headers, body)
+    _get_http_cache().set(key, HttpCacheEntry(
+        status_code=status_code,
+        headers=headers,
+        body=body,
+        timestamp=time.time(),
+        ttl=_get_http_cache().ttl,
+    ))
 
 
 def http_cache_clear() -> int:
@@ -453,7 +326,7 @@ def http_cache_stats() -> dict[str, Any]:
 # Tool call cache singleton and helpers
 # ---------------------------------------------------------------------------
 
-_tool_call_cache = ToolCallCacheStore(ttl=3600)
+_tool_call_cache = ToolCallCacheStore()
 
 
 def _get_tool_call_cache() -> ToolCallCacheStore:
@@ -465,7 +338,11 @@ def tool_call_cache_get(key: str) -> ToolCallCacheEntry | None:
 
 
 def tool_call_cache_set(key: str, result: str) -> None:
-    _get_tool_call_cache().set(key, result)
+    _get_tool_call_cache().set(key, ToolCallCacheEntry(
+        result=result,
+        timestamp=time.time(),
+        ttl=_get_tool_call_cache().ttl,
+    ))
 
 
 def tool_call_cache_clear() -> int:
@@ -736,7 +613,11 @@ def _store_structured_response(
     )
     response_cache_key_preview = response_cache_key[:12]
 
-    cache.set(response_cache_key, final_result)
+    cache.set(response_cache_key, CacheEntry(
+        response=final_result,
+        timestamp=time.time(),
+        ttl=cache.ttl,
+    ))
     logger.info(
         f"[CACHE] STRUCTURED STORED for key={response_cache_key_preview}... | "
         f"conv_hash={conversation_hash[:12]}... | "
@@ -835,6 +716,7 @@ def _call_llm_impl(
     recent_calls: dict[tuple[str, tuple], int] = {}
 
     def _freeze_args(args: dict) -> tuple:
+        """Freeze a dict into a hashable tuple for loop detection."""
         result = []
         for k in sorted(args):
             v = args[k]
@@ -845,6 +727,7 @@ def _call_llm_impl(
         return tuple(result)
 
     def _check_loop(tool_calls_list: list) -> bool:
+        """Check if the same tool call is being repeated excessively."""
         for tc in tool_calls_list:
             fname = tc.function.name  # type: ignore[attr-defined]
             fargs = json.loads(tc.function.arguments)  # type: ignore[attr-defined]
@@ -989,7 +872,11 @@ def _call_llm_impl(
                     result = f"Unknown tool: {func_name}"
 
                 if use_cache and tool_cache_key is not None:
-                    tool_cache.set(tool_cache_key, result)
+                    tool_cache.set(tool_cache_key, ToolCallCacheEntry(
+                        result=result,
+                        timestamp=time.time(),
+                        ttl=tool_cache.ttl,
+                    ))
                     logger.info(
                         f"[TOOL-CACHE] STORED for key={tool_cache_key_preview}... | "
                         f"tool={func_name} | result_len={len(result)}"
