@@ -10,6 +10,9 @@ Uses the model configured in app/config.json under test_settings.model_name.
 
 import base64
 import logging
+import os
+import subprocess
+from datetime import datetime
 from io import BytesIO
 
 from typing import cast
@@ -189,47 +192,90 @@ AUDIO_SYSTEM_PROMPT = (
 )
 
 
+def convert_to_wav(audio_bytes, original_format) -> bytes:
+    from pydub import AudioSegment
+    import io
+    # Load the original audio bytes
+    audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format=original_format)
+    
+    # Force to Mono and 16,000Hz (16kHz)
+    audio = audio.set_channels(1).set_frame_rate(16000)
+    
+    # Export cleanly to PCM WAV bytes without extra metadata
+    wav_io = io.BytesIO()
+    audio.export(wav_io, format="wav", codec="pcm_s16le")
+    return wav_io.getvalue()
+
+def _save_debug_wav(wav_bytes: bytes):
+    """
+    Save the converted WAV file locally for debugging.
+    """
+    try:
+        output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "audio_extracted")
+        os.makedirs(output_dir, exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{timestamp}.wav"
+        filepath = os.path.join(output_dir, filename)
+
+        with open(filepath, "wb") as f:
+            f.write(wav_bytes)
+
+        logger.info("DEBUG: Saved WAV file to %s (size: %d bytes)", filepath, len(wav_bytes))
+        return filepath
+    except Exception as e:
+        logger.error("Failed to save debug WAV file: %s", str(e))
+
+
 def extract_name_from_audio(audio_bytes: bytes, audio_format: str = "webm") -> str:
     """
     Send an audio recording to the configured LLM and extract the guest name.
 
+    Automatically converts any input audio format to WAV using ffmpeg before sending to the LLM.
+    Also saves the WAV file locally for debugging.
+
     Args:
-        audio_bytes: Raw audio data.
-        audio_format: File format extension (e.g., "webm", "mp3", "wav").
+        audio_bytes: Raw audio data (any supported format).
+        audio_format: Source file format extension (e.g., "webm", "mp3", "wav").
 
     Returns:
         Extracted name string.
     """
     client, model = _get_client_and_model()
 
-    b64 = base64.b64encode(audio_bytes).decode("utf-8")
+    # Convert any audio format to WAV for reliable LLM processing
+    wav_bytes = convert_to_wav(audio_bytes, audio_format)
+
+    # Save the WAV file locally for debugging (before LLM call)
+    filepath = _save_debug_wav(wav_bytes)
+    if not filepath:
+        raise Exception("Could not save audio file")
+    
+    b64 = base64.b64encode(wav_bytes).decode('utf-8')
 
     try:
+        logger.info("Sending WAV audio to LLM - original format: %s, WAV size: %d bytes", audio_format, len(wav_bytes))
         response = client.chat.completions.create(
             model=model,
-            messages=cast(
-                list[ChatCompletionUserMessageParam],
-                [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "Please transcribe the spoken name in this audio. Return only the name.",
-                            },
-                            {
-                                "type": "input_audio",
-                                "input_audio": {
-                                    "data": b64,
-                                    "format": audio_format,
-                                },
-                            },
-                        ],
-                    }
-                ],
-            ),
-            max_tokens=300,
-            temperature=0,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Extract the name from this audio file."
+                        },
+                        {
+                            "type": "input_audio",
+                            "input_audio": {
+                                "data": b64,
+                                "format": "wav"
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_tokens=512
         )
 
         name = response.choices[0].message.content or ""
@@ -238,7 +284,7 @@ def extract_name_from_audio(audio_bytes: bytes, audio_format: str = "webm") -> s
         if not name:
             logger.warning("Audio LLM returned an empty name extraction")
 
-        logger.info("Extracted name from audio: %s (model: %s, format: %s)", name, model, audio_format)
+        logger.info("Extracted name from audio: %s (model: %s, original format: %s)", name, model, audio_format)
         return name
 
     except Exception as e:

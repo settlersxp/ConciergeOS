@@ -74,12 +74,32 @@ export default function GuestSearch() {
     e.target.value = "";
   };
 
+  // ── Helpers: Detect supported MIME type for MediaRecorder ──────────────
+
+  const getSupportedMimeType = (): string => {
+    const types = [
+      "audio/webm;codecs=opus",
+      "audio/mp4",
+      "audio/webm",
+      "audio/ogg;codecs=opus",
+      "audio/ogg",
+      "audio/mpeg",
+    ];
+    for (const type of types) {
+      if (MediaRecorder.isTypeSupported(type)) return type;
+    }
+    return "";
+  };
+
   // ── Handlers: Voice recording ────────────────────────────────────────
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const mimeType = getSupportedMimeType();
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
       chunksRef.current = [];
 
       recorder.ondataavailable = (evt) => {
@@ -88,11 +108,25 @@ export default function GuestSearch() {
 
       recorder.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(chunksRef.current, { type: mimeType || "audio/webm" });
         const url = URL.createObjectURL(blob);
         setAudioRecordingUrl(url);
         setMediaMode("audio");
-        setAudioFile(new File([blob], "recording.webm", { type: "audio/webm" }));
+        
+        // Standardize format for the backend
+        let formatStr = "webm";
+        if (mimeType.includes("mp4")) formatStr = "mp4";
+        else if (mimeType.includes("ogg")) formatStr = "webm";
+        
+        const ext = formatStr === "mp4" ? "m4a" : "webm";
+        setAudioFile(new File([blob], `recording.${ext}`, { type: mimeType || "audio/webm" }));
+      };
+
+      // Handle recording errors
+      recorder.onerror = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setIsRecording(false);
+        setToast({ message: "Recording error. Please try again.", type: "error" });
       };
 
       recorder.start();

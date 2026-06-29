@@ -1,7 +1,7 @@
 {
     "test_settings": {
         "models_endpoint": "http://10.0.0.227:8000/v1/models",
-        "model_name": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+        "model_name": "google/gemma-4-12B-it",
         "vllm_version": "unknown",
         "thinking_enabled": true,
         "expected_format": "text"
