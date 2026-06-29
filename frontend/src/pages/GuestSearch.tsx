@@ -23,7 +23,7 @@ export default function GuestSearch() {
   });
 
   // Runtime variable key (pre-populated for easy editing)
-  const [runtimeVarKey, setRuntimeVarKey] = useState("customer_name");
+  const [runtimeVarKey] = useState("customer_name");
 
   // Build runtime variables from the current query
   const runtimeVariables: Record<string, string> = query.trim()

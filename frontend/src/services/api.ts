@@ -4,6 +4,7 @@ import type {
   GuestDetail,
   GuestSearchResponse,
   ModelsApiResponse,
+  PerformanceStats,
   PerformanceTestRequest,
   ReservationsSummary,
   ShiftResponse,
@@ -192,4 +193,7 @@ export const performanceApi = {
       method: 'PATCH',
       body: JSON.stringify({ identifier }),
     }),
+
+  getPerformanceStats: () =>
+    request<PerformanceStats[]>('/api/performance-testing/stats'),
 };

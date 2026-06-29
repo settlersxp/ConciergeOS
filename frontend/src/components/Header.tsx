@@ -7,6 +7,7 @@ export default function Header() {
     { path: '/', label: 'Reservations' },
     { path: '/guest-search', label: 'Guest Search' },
     { path: '/performance-testing', label: 'Performance' },
+    { path: '/performance-dashboard', label: 'Dashboard' },
     { path: '/prompts', label: 'Prompt Management' },
     { path: '/prompt-groups', label: 'Prompt Groups' },
     { path: '/settings', label: 'Settings' },
