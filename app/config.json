@@ -1,9 +1,9 @@
 {
     "test_settings": {
         "models_endpoint": "http://10.0.0.227:8000/v1/models",
-        "model_name": "google/gemma-4-12B-it",
+        "model_name": "Qwen/Qwen3.6-27B",
         "vllm_version": "unknown",
-        "thinking_enabled": true,
+        "thinking_enabled": false,
         "expected_format": "text"
     }
 }

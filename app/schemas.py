@@ -349,6 +349,9 @@ class SingleGuestValidation(BaseModel):
     guest_name: str
     result_id: int | None = None
     is_match: bool | None = None
+    """LLM's suggestion: True=Match, False=Mismatch, None=Error"""
+    valid_response: bool | None = None
+    """Human's previous validation flag from the database (null = not reviewed)"""
     llm_reasoning: str | None = None
     ground_truth: str | None = None
     llm_response_content: str | None = None
