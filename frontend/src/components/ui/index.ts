@@ -22,3 +22,4 @@ export { default as RuntimeVariablesEditor } from "./RuntimeVariablesEditor";
 export { default as CreatePromptModal } from "./CreatePromptModal";
 export { default as PromptImprovementChat } from "./PromptImprovementChat";
 export { default as CloneSectionModal } from "./CloneSectionModal";
+export { default as RegionSelector } from "./RegionSelector";

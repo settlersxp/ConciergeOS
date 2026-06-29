@@ -133,6 +133,13 @@ class GuestSearchResponse(BaseModel):
     """Indicates whether the response was served from cache (True) or generated fresh (False)."""
 
 
+class NameExtractionResponse(BaseModel):
+    """Response from the extract-name endpoint (multimodal name extraction)."""
+
+    extracted_name: str
+    source: str  # "image" or "audio"
+
+
 # ---------------------------------------------------------------------------
 # Prompt versioning schemas
 # ---------------------------------------------------------------------------
