@@ -248,3 +248,72 @@ import PerformanceDashboard from './pages/PerformanceDashboard';
 | `performanceApi` | `services/api.ts` | All frontend data fetching |
 | `TestResult` type | `types/index.ts` | Data reference patterns |
 | Tailwind classes | Existing project config | All components |
+
+## Differences from Original Spec
+
+The following items deviate from the original implementation plan. All other tasks (1.1–6.1) were implemented as specified.
+
+### 1.1 — Backend: Datetime parsing improvement
+**Original**: Used `.timestamp()` on datetime objects
+**Actual**: Changed to `datetime.fromisoformat()` for robust string timestamp parsing from the database
+
+### 4.1 — PerformanceChart: Enhanced beyond original spec
+**Original spec**:
+- Color-coded by model name
+- Use `strokeDasharray` to differentiate sequential vs concurrent
+- Include a checkbox list below the chart for enabling/disabling batches
+
+**Actual implementation**:
+- **Color by batch UUID** (not model name) using deterministic HSL rainbow via `hashString()` + `getBatchColor()`
+- **Scatter shape differs by batch type**: sequential = solid circle, concurrent = filled circle + dashed outline circle group (not `strokeDasharray` on the XAxis)
+- **Interactive `BatchLegend` component** replaces checkbox list — click legend items to show/hide batches
+- **Custom tooltip** with friendly_name, model, speed (2 decimal places), accuracy, requests count, and batch type Badge
+- **X-axis clamped** to [0, 200] range via computed `clampedSpeed` field
+- **Reference line** at Y=100% (dashed)
+- **Props are optional**: `visibleBatches` and `onToggleBatch` default to undefined (backward compatible)
+- **`isAnimationActive={false}`** to disable animation
+
+**New helper functions added**:
+```typescript
+function hashString(str: string): number     // deterministic string → int hash
+function getBatchColor(batchUuid: string, totalBatches: number): string  // HSL rainbow
+```
+
+### 4.3 — PerformanceDashboard: Enhanced beyond original spec
+**Original spec**:
+- Fetches stats, displays chart, shows loading/error states, provides select/deselect controls
+
+**Actual implementation** (all above plus):
+- **Multi-column sort** on stats table: Shift+click column headers to add sort keys; click again cycles asc → desc → clear
+- **Batch search filter** input: filters batches by name or UUID before rendering checkboxes
+- **Three action buttons**: "Select All", "Deselect All", "Clear Sort" (conditional)
+- **Full sortable stats table** with columns: Friendly Name, Model, Batch Type (colored Badge), Avg Speed (font-mono, 3 decimals), Accuracy (font-mono), Requests
+- **Visual toggle states**: checked = `bg-primary-50` with border, unchecked = `opacity-50`
+- **Empty state card** when no test data exists
+
+**Actual Layout**:
+```
+┌───────────────────────────────────────────────────┐
+│  Performance Dashboard          [Select All]      │
+│                                 [Deselect All]    │
+│                                 [Clear Sort] (cond.)│
+├───────────────────────────────────────────────────┤
+│  ┌─ PerformanceChart ───────────────────────────┐ │
+│  │  [Scatter plot with Recharts]               │ │
+│  │  [Interactive Batch Legend below chart]     │ │
+│  └─────────────────────────────────────────────┘ │
+├───────────────────────────────────────────────────┤
+│  ┌─ Batch Controls ─────────────────────────────┐ │
+│  │  [Search: "Search batches by name or ID..."] │ │
+│  │  [Checkbox grid with visual states]          │ │
+│  └─────────────────────────────────────────────┘ │
+├───────────────────────────────────────────────────┤
+│  ┌─ Detailed Statistics ────────────────────────┐ │
+│  │  [Multi-sortable table]                      │ │
+│  └─────────────────────────────────────────────┘ │
+└───────────────────────────────────────────────────┘
+```
+
+### 5.2 — Header nav label
+**Original**: `{ path: '/performance-dashboard', label: 'Performance Dashboard' }`
+**Actual**: `{ path: '/performance-dashboard', label: 'Dashboard' }`
