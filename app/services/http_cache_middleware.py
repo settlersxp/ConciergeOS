@@ -51,7 +51,9 @@ class HttpCacheMiddleware:
     # API paths that should never be cached (extendable by adding prefixes)
     _CACHE_EXCLUSION_PREFIXES: tuple[str, ...] = (
         "/api/prompts",
-        "/api/performance-testing/batches"
+        "/api/performance-testing/batches",
+        "/api/performance-testing/results-by-batch",
+        "/api/performance-testing/stats"
     )
 
     def __init__(self, app: ASGIApp, ttl: int = 3600) -> None:

@@ -12,6 +12,16 @@ function MatchBadge({ isMatch }: { isMatch: boolean | null }) {
   return <Badge variant="danger">Mismatch</Badge>;
 }
 
+function ValidationStatusBadge({ validResponse }: { validResponse: boolean | null }) {
+  if (validResponse === null) {
+    return <Badge variant="neutral" className="bg-surface-100 dark:bg-primary-700 text-primary-400 dark:text-primary-300">⊘ Not reviewed</Badge>;
+  }
+  if (validResponse) {
+    return <Badge variant="success" className="bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300">✓ Validated</Badge>;
+  }
+  return <Badge variant="danger" className="bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300">✗ Invalidated</Badge>;
+}
+
 export function GuestComparisonView({ validation }: GuestComparisonViewProps) {
   return (
     <div className="flex flex-col h-full">
@@ -37,7 +47,10 @@ export function GuestComparisonView({ validation }: GuestComparisonViewProps) {
             )}
           </div>
         </div>
-        <MatchBadge isMatch={validation.is_match} />
+        <div className="flex items-center gap-1.5">
+          <MatchBadge isMatch={validation.is_match} />
+          <ValidationStatusBadge validResponse={validation.valid_response} />
+        </div>
       </div>
 
       {/* LLM Reasoning Banner (always visible when reasoning exists) */}

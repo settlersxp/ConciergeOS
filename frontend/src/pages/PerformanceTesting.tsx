@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { performanceApi } from "../services/api";
 import { useSettings } from "../context/SettingsContext";
+import { useNavigate } from "react-router-dom";
 import type {
   TestResult,
   Batch,
@@ -49,6 +50,8 @@ function computeSummary(rows: TestResult[]): SummaryData {
 }
 
 export default function PerformanceTesting() {
+  const navigate = useNavigate();
+
   // Form state
   const [customerName, setCustomerName] = useState("عائشة إبراهيم");
   const [testMode, setTestMode] = useState<TestMode>("single");
@@ -56,7 +59,6 @@ export default function PerformanceTesting() {
   const [sequentialBatch, setSequentialBatch] = useState(5);
   const [concurrentBatch, setConcurrentBatch] = useState(8);
   const [friendlyName, setFriendlyName] = useState("");
-  const [batchUuid, setBatchUuid] = useState(generateUuid());
 
   // Runtime variable key (pre-populated for easy editing)
   const [runtimeVarKey, setRuntimeVarKey] = useState("customer_name");
@@ -97,8 +99,15 @@ export default function PerformanceTesting() {
   // Validation state
   const [validating, setValidating] = useState(false);
   const [validationModalOpen, setValidationModalOpen] = useState(false);
-  const [validationResults, setValidationResults] = useState<SingleGuestValidation[]>([]);
+  // Store validation results as a Record keyed by result_id for O(1) updates
+  const [validationResultsMap, setValidationResultsMap] = useState<Record<number, SingleGuestValidation>>({});
   const [validationSummary, setValidationSummary] = useState<ValidateGuestsResponse['summary'] | undefined>(undefined);
+
+  // Convert Record to array for modal rendering
+  const validationResults = useMemo(
+    () => Object.values(validationResultsMap),
+    [validationResultsMap]
+  );
 
   // Load batches and guests on mount
   useEffect(() => {
@@ -140,7 +149,6 @@ export default function PerformanceTesting() {
   const handleRun = async () => {
     // Generate a new batch UUID for each run
     const newBatchUuid = generateUuid();
-    setBatchUuid(newBatchUuid);
 
     setRunning(true);
     setStatus({ message: "Running performance tests... This may take a while.", type: "running" });
@@ -295,7 +303,7 @@ export default function PerformanceTesting() {
   const handleToggleValid = async (id: number, valid: boolean) => {
     try {
       await performanceApi.updateValidResponse(id, valid);
-      // Update local state
+      // Update local state (results list)
       setResults((prev) =>
         prev.map((r) => (r.id === id ? { ...r, valid_response: valid } : r))
       );
@@ -303,6 +311,11 @@ export default function PerformanceTesting() {
       setSelectedForCompare((prev) =>
         prev.map((r) => (r.id === id ? { ...r, valid_response: valid } : r))
       );
+      // ✨ Update validation results for O(1) badge display in modal — no iteration needed
+      setValidationResultsMap((prev) => ({
+        ...prev,
+        [id]: { ...prev[id], valid_response: valid },
+      }));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setStatus({ message: `Error updating result: ${msg}`, type: "error" });
@@ -428,7 +441,14 @@ export default function PerformanceTesting() {
       const data = await performanceApi.validateGuests(batchToValidate);
 
       if (data.ok) {
-        setValidationResults(data.results);
+        // Store validation results as a Record keyed by result_id for O(1) updates
+        const resultMap: Record<number, SingleGuestValidation> = {};
+        for (const r of data.results) {
+          if (r.result_id != null) {
+            resultMap[r.result_id] = r;
+          }
+        }
+        setValidationResultsMap(resultMap);
         setValidationSummary(data.summary);
         setValidationModalOpen(true);
         setStatus({
@@ -458,7 +478,15 @@ export default function PerformanceTesting() {
 
   return (
     <div className="mx-auto max-w-[95vw] px-6 py-8">
-      <PageHeader title="Performance Testing" />
+      <div className="flex items-center justify-between mb-4">
+        <PageHeader title="Performance Testing" />
+        <button
+          onClick={() => navigate("/performance-dashboard")}
+          className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors shadow-sm"
+        >
+          View Performance Dashboard →
+        </button>
+      </div>
 
       {/* Status Banner */}
       {status && (

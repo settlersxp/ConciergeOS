@@ -156,6 +156,16 @@ export interface Batch {
   first_run_time: string;
 }
 
+export interface PerformanceStats {
+  batch_uuid: string;
+  friendly_name: string;
+  model_name: string;
+  batch_type: "sequential" | "concurrent";
+  avg_speed_seconds: number;
+  accuracy_pct: number;
+  total_requests: number;
+}
+
 export interface TestGuest {
   guest_id: number;
   first_name: string;
@@ -255,6 +265,8 @@ export interface SingleGuestValidation {
   guest_name: string;
   result_id: number | null;
   is_match: boolean | null;
+  /** Human's previous validation flag from the database (null = not reviewed) */
+  valid_response: boolean | null;
   llm_reasoning: string | null;
   ground_truth: string | null;
   llm_response_content: string | null;

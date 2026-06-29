@@ -225,6 +225,61 @@ async def api_get_performance_batches(
     ]
 
 
+from datetime import datetime
+
+@router.get("/api/performance-testing/stats")
+async def api_get_performance_stats(
+    db: Session = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Get aggregated performance stats per batch for dashboard visualization."""
+    rows = (
+        db.query(PerformanceTestResult)
+        .order_by(PerformanceTestResult.batch_uuid, PerformanceTestResult.batch_type)
+        .all()
+    )
+    from collections import defaultdict
+
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for r in rows:
+        elapsed = 0.0
+        if r.response_received_time and r.request_sent_time:
+            try:
+                sent = datetime.fromisoformat(r.request_sent_time)
+                received = datetime.fromisoformat(r.response_received_time)
+                elapsed = (received - sent).total_seconds()
+            except (ValueError, TypeError):
+                elapsed = 0.0
+        groups[r.batch_uuid].append({
+            "elapsed": elapsed,
+            "valid": r.valid_response,
+            "batch_type": r.batch_type,
+            "model_name": r.model_name,
+            "friendly_name": r.friendly_name,
+        })
+
+    stats = []
+    for batch_uuid, entries in groups.items():
+        sequential_entries = [e for e in entries if e["batch_type"] == "sequential"]
+        concurrent_entries = [e for e in entries if e["batch_type"] == "concurrent"]
+
+        for label, elapses in [("sequential", sequential_entries), ("concurrent", concurrent_entries)]:
+            if not elapses:
+                continue
+            avg_speed = sum(e["elapsed"] for e in elapses) / len(elapses)
+            valid_count = sum(1 for e in elapses if e["valid"] is True)
+            accuracy = valid_count / len(elapses) * 100
+            stats.append({
+                "batch_uuid": batch_uuid,
+                "friendly_name": elapses[0]["friendly_name"],
+                "model_name": elapses[0]["model_name"],
+                "batch_type": label,
+                "avg_speed_seconds": round(avg_speed, 3),
+                "accuracy_pct": round(accuracy, 1),
+                "total_requests": len(elapses),
+            })
+    return stats
+
+
 @router.get("/api/performance-testing/results-by-batch")
 async def api_get_results_by_batch(
     batch_uuid: str,
@@ -712,6 +767,7 @@ async def api_validate_guests(
                     guest_name=full_name,
                     result_id=matched_result.id if matched_result else None,
                     is_match=is_match,
+                    valid_response=matched_result.valid_response if matched_result else None,
                     llm_reasoning=reasoning,
                     ground_truth=ground_truth_json,
                     llm_response_content=matched_result.response_content if matched_result else None,
