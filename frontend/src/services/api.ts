@@ -47,6 +47,18 @@ export interface GuestSearchOptions {
   runtime_variables?: Record<string, string>;
 }
 
+export interface NameExtractionResponse {
+  extracted_name: string;
+  source: 'image' | 'audio';
+}
+
+export interface CropRegion {
+  x: number;   // 0.0 - 1.0
+  y: number;   // 0.0 - 1.0
+  width: number;  // 0.0 - 1.0
+  height: number; // 0.0 - 1.0
+}
+
 export const guestSearchApi = {
   search: (customerName: string, options?: GuestSearchOptions) =>
     request<GuestSearchResponse>('/api/guest-search', {
@@ -58,6 +70,37 @@ export const guestSearchApi = {
         runtime_variables: options?.runtime_variables ?? {},
       }),
     }),
+
+  /**
+   * Extract a guest name from an image or audio file.
+   * Uses fetch directly to avoid Content-Type: application/json conflict with multipart/form-data.
+   */
+  extractName: async (
+    file: File,
+    crop?: CropRegion,
+  ): Promise<NameExtractionResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    if (crop) {
+      formData.append('crop_x', String(crop.x));
+      formData.append('crop_y', String(crop.y));
+      formData.append('crop_w', String(crop.width));
+      formData.append('crop_h', String(crop.height));
+    }
+
+    const resp = await fetch('/api/guest-search/extract-name', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '');
+      throw new Error(resp.statusText + (body ? `: ${body}` : ''));
+    }
+
+    return resp.json() as Promise<NameExtractionResponse>;
+  },
 };
 
 // ── Settings ────────────────────────────────────────────────────────────────

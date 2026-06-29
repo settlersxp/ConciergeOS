@@ -40,6 +40,7 @@ export interface GuestSearchRequest {
 export interface GuestSearchResponse {
   query: string;
   llm_response: string;
+  cached?: boolean;
 }
 
 /** Settings — matches app/config.py TestSettings dataclass */
