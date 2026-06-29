@@ -125,27 +125,6 @@ export default function PlaceholderPalette({
     onRuntimeVariablesChange?.(next);
   };
 
-  const updateKey = (oldKey: string, newKey: string) => {
-    if (oldKey === newKey || !newKey) {
-      if (oldKey !== newKey) {
-        const next = { ...vars };
-        if (oldKey in next) {
-          next[newKey] = next[oldKey];
-          delete next[oldKey];
-        }
-        setVars(next);
-        onRuntimeVariablesChange?.(next);
-      }
-      return;
-    }
-    const next: Record<string, string> = { ...vars };
-    const val = next[oldKey];
-    delete next[oldKey];
-    next[newKey] = val ?? "";
-    setVars(next);
-    onRuntimeVariablesChange?.(next);
-  };
-
   const updateValue = (key: string, value: string) => {
     const next = { ...vars, [key]: value };
     setVars(next);

@@ -13,6 +13,8 @@ export default function PerformanceDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [enabledBatches, setEnabledBatches] = useState<Set<string>>(new Set());
+  // Batch search filter
+  const [batchSearch, setBatchSearch] = useState("");
   // Multi-column sort: array of sort configs, first element is primary sort
   const [sortConfig, setSortConfig] = useState<SortConfig[]>([]);
 
@@ -155,6 +157,16 @@ export default function PerformanceDashboard() {
     return Array.from(map.values());
   }, [data]);
 
+  const filteredBatches = useMemo(() => {
+    if (!batchSearch.trim()) return uniqueBatches;
+    const query = batchSearch.toLowerCase();
+    return uniqueBatches.filter(
+      (b) =>
+        b.batch_uuid.toLowerCase().includes(query) ||
+        b.friendly_name?.toLowerCase().includes(query)
+    );
+  }, [uniqueBatches, batchSearch]);
+
   if (loading) {
     return (
       <div className="mx-auto max-w-7xl p-6">
@@ -226,8 +238,17 @@ export default function PerformanceDashboard() {
             title="Batch Controls"
             description="Enable or disable batches from the visualization"
           >
+            <div className="mb-3">
+              <input
+                type="text"
+                placeholder="Search batches by name or ID..."
+                value={batchSearch}
+                onChange={(e) => setBatchSearch(e.target.value)}
+                className="w-full rounded-md border border-surface-200 bg-surface-50 px-3 py-2 text-sm text-primary-700 placeholder-primary-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-primary-800 dark:bg-primary-900/30 dark:text-primary-300 dark:placeholder-primary-600"
+              />
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
-              {uniqueBatches.map((b) => (
+              {filteredBatches.map((b) => (
                 <label
                   key={b.batch_uuid}
                   className={`flex items-center gap-2 rounded-md px-3 py-2 cursor-pointer transition-colors ${
@@ -244,15 +265,6 @@ export default function PerformanceDashboard() {
                   />
                   <span className="text-sm text-primary-700 dark:text-primary-300 truncate">
                     {b.friendly_name || b.batch_uuid.slice(0, 8)}
-                  </span>
-                  <span
-                    className={`ml-auto text-xs px-1.5 py-0.5 rounded ${
-                      b.batch_type === "sequential"
-                        ? "bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"
-                        : "bg-secondary-100 text-secondary-600 dark:bg-secondary-900/30 dark:text-secondary-400"
-                    }`}
-                  >
-                    {b.batch_type}
                   </span>
                 </label>
               ))}

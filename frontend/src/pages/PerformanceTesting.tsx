@@ -59,7 +59,6 @@ export default function PerformanceTesting() {
   const [sequentialBatch, setSequentialBatch] = useState(5);
   const [concurrentBatch, setConcurrentBatch] = useState(8);
   const [friendlyName, setFriendlyName] = useState("");
-  const [batchUuid, setBatchUuid] = useState(generateUuid());
 
   // Runtime variable key (pre-populated for easy editing)
   const [runtimeVarKey, setRuntimeVarKey] = useState("customer_name");
@@ -150,7 +149,6 @@ export default function PerformanceTesting() {
   const handleRun = async () => {
     // Generate a new batch UUID for each run
     const newBatchUuid = generateUuid();
-    setBatchUuid(newBatchUuid);
 
     setRunning(true);
     setStatus({ message: "Running performance tests... This may take a while.", type: "running" });
