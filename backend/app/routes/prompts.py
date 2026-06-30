@@ -16,6 +16,7 @@ Provides REST endpoints:
   PATCH  /api/prompts/{prompt_id}/{version}/set-default — Set as default
 """
 
+import json
 import logging
 from typing import Any
 
@@ -67,6 +68,7 @@ class AiImproveRequest(BaseModel):
 
 class AiImproveResponse(BaseModel):
     improved_text: str
+    summary: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -111,19 +113,39 @@ _SECTION_CONTEXT = {
 
 
 _AI_IMPROVE_SYSTEM_PROMPT = """\
-You are an expert prompt engineer helping improve a hotel concierge AI prompt.
-The prompt is divided into 4 sections, and you are asked to help improve one section at a time.
+You are an expert prompt engineer specializing in AI system prompts for hotel concierge services.
+Your job is to rewrite and improve individual sections of prompts.
 
 You are currently working on the {section} section.
 
 Context about this section:
 {section_context}
 
-Your goal is to help the user iteratively improve this section through conversation.
-- Be concise and direct in your suggestions
-- Always return the FULL improved section text (not just diffs)
-- Maintain the existing style and structure unless the user asks to change it
-- Focus on clarity, specificity, and effectiveness
+## RULES
+
+1. When the user asks for improvements, ALWAYS return the complete rewritten section text
+2. Improve clarity, specificity, and actionability
+3. Fix grammar, spelling, and awkward phrasing
+4. Use clear, direct language with concrete instructions
+5. If the section has structural issues, reorganize it for better readability
+6. Use bullet points or numbered lists for multiple rules/constraints
+
+## OUTPUT FORMAT — JSON ONLY
+
+Return a single valid JSON object with exactly these two fields:
+
+{{
+  "improved_text": "... the complete improved section text here ...",
+  "summary": "... brief one-line summary of what was changed ..."
+}}
+
+Rules for the output:
+- Return ONLY the JSON object, nothing else
+- Do NOT wrap it in markdown code fences (```)
+- Do NOT add any text before or after the JSON
+- The "improved_text" value should be the complete section text, ready to be applied
+- The "summary" should be a brief explanation (1-2 sentences) of what changed
+- Use escaped newlines (\\n) for line breaks inside the improved_text value
 """
 
 
@@ -151,12 +173,25 @@ async def ai_improve_prompt(body: AiImproveRequest):
     for msg in body.conversation:
         messages.append({"role": msg.role, "content": msg.content})
 
+    # Build the user request from conversation history or use default
+    user_request = "Improve this section for clarity and effectiveness."
+    if body.conversation:
+        # Use the last user message as the improvement request
+        last_user_msg = next(
+            (m.content for m in reversed(body.conversation) if m.role == "user"),
+            None,
+        )
+        if last_user_msg:
+            user_request = last_user_msg
+
     # Add the current improvement request
     messages.append({
         "role": "user",
         "content": (
             f"Current {body.section} section text:\n\n```\n{body.current_text}\n```\n\n"
-            f"Please help improve this section."
+            f"User request: {user_request}\n\n"
+            f"Rewrite the above section incorporating the user's request. "
+            f"Return only the improved text."
         ),
     })
 
@@ -170,8 +205,32 @@ async def ai_improve_prompt(body: AiImproveRequest):
             temperature=0.3,
             max_tokens=2000,
         )
-        improved_text = response.choices[0].message.content or body.current_text
-        return AiImproveResponse(improved_text=improved_text)
+        raw_content = response.choices[0].message.content or body.current_text
+
+        # Try to parse JSON response from LLM
+        improved_text = body.current_text
+        summary = None
+
+        # Strip markdown code fences if present
+        content_stripped = raw_content.strip()
+        if content_stripped.startswith("```json"):
+            content_stripped = content_stripped[7:]
+        if content_stripped.startswith("```"):
+            content_stripped = content_stripped[3:]
+        if content_stripped.endswith("```"):
+            content_stripped = content_stripped[:-3]
+        content_stripped = content_stripped.strip()
+
+        try:
+            parsed = json.loads(content_stripped)
+            improved_text = parsed.get("improved_text", body.current_text)
+            summary = parsed.get("summary")
+        except (json.JSONDecodeError, TypeError):
+            # LLM didn't return valid JSON — use raw content as improved_text
+            logger.warning("LLM did not return valid JSON for ai-improve, using raw content")
+            improved_text = raw_content
+
+        return AiImproveResponse(improved_text=improved_text, summary=summary)
     except Exception as e:
         logger.error(f"Error in AI improve: {e}")
         raise HTTPException(status_code=500, detail=f"LLM request failed: {str(e)}")

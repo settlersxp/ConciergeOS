@@ -132,8 +132,8 @@ export function aiImprove(
   currentText: string,
   conversation: Array<{ role: string; content: string }>,
   model?: string,
-): Promise<{ improved_text: string }> {
-  return request<{ improved_text: string }>('/api/prompts/ai-improve', {
+): Promise<{ improved_text: string; summary?: string }> {
+  return request<{ improved_text: string; summary?: string }>('/api/prompts/ai-improve', {
     method: 'POST',
     body: JSON.stringify({ section, current_text: currentText, conversation, model }),
   });
