@@ -149,9 +149,22 @@ export default function usePromptData(
   // Expose refetch callback to parent
   useEffect(() => {
     if (refetchRef) {
-      refetchRef.current = () => {
+      refetchRef.current = async () => {
         if (selectedPromptId) {
-          fetchVersions(selectedPromptId);
+          // Fetch the latest versions to find the highest version number,
+          // then pass it as explicitVersion so fetchVersions selects it
+          // instead of falling back to userSelectedVersionRef (which would
+          // select an old version that may still be marked as default).
+          try {
+            const versionsList = await listVersions(selectedPromptId);
+            const sorted = [...versionsList].sort((a: { version: number }, b: { version: number }) => b.version - a.version);
+            const highestVersion = sorted[0]?.version;
+            if (highestVersion !== undefined) {
+              fetchVersions(selectedPromptId, highestVersion);
+            }
+          } catch {
+            // Ignore refetch errors
+          }
         }
       };
     }

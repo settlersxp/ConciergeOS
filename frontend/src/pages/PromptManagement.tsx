@@ -135,8 +135,8 @@ export default function PromptManagement() {
       // Reload versions to get the updated list
       const updatedVersions = await listVersions(selectedPromptId);
       setVersions(updatedVersions);
-      // Select the new version
-      setSelectedVersion(newVersion.version);
+      // Force the PromptSelector dropdown to refresh and auto-select the new version
+      selectorRefetchRef.current?.();
       showNotification(`Version v${newVersion.version} created successfully`, "success");
     } catch (err) {
       showNotification(`Failed to create new version: ${(err as Error).message}`, "error");
@@ -289,6 +289,8 @@ export default function PromptManagement() {
       } else {
         setEditingVersion(null);
       }
+      // Sync the PromptSelector dropdown
+      selectorRefetchRef.current?.();
     } catch (err) {
       showNotification(`Delete failed: ${(err as Error).message}`, "error");
     }
