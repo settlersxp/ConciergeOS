@@ -321,6 +321,25 @@ class DeleteBatchResponse(BaseModel):
     error: str | None = None
 
 
+class DuplicateGuestInfo(BaseModel):
+    """Information about duplicate test guests with the same name."""
+
+    first_name: str
+    last_name: str
+    count: int
+    guest_ids: List[int]
+
+
+class CheckDuplicatesResponse(BaseModel):
+    """Response from the check-duplicates endpoint."""
+
+    ok: bool = True
+    has_duplicates: bool = False
+    duplicates: List[DuplicateGuestInfo] = []
+    total_test_guests: int = 0
+    error: str | None = None
+
+
 class UpdateValidResponseResponse(BaseModel):
     """Response from the update-valid-response endpoint."""
 

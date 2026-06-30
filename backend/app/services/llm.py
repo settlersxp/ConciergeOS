@@ -190,13 +190,11 @@ _SYSTEM_PROMPT_WITH_SCHEMA = f"""\
 
 {_GUEST_INFORMATION}
 ## Available Tools
-You have access to the following database query tools:
-- `query_guests`: Search for guests by name, ID, or attributes
-- `query_rooms`: Search for rooms by ID or name
-- `query_reservations`: Search for reservations by various criteria
-- `get_hotel_summary`: Get overall hotel statistics
+You have access to exactly one database query tool:
 
-Use these tools to answer questions about the hotel database. Always call the appropriate tool rather than guessing at data.
+- `query_guest_with_reservations`: Search for guests by name or ID and retrieve ALL their reservations in a single tool call. Pass the guest's first name, last name, or guest_id in the params field.
+
+**IMPORTANT:** This is your ONLY tool. Use it for every guest query. It returns complete guest information with all associated reservations in one response. Do not attempt to use any other tools.
 """
 
 # Exported unified system prompt
@@ -208,12 +206,9 @@ SHARED_SYSTEM_PROMPT = _SYSTEM_PROMPT_WITH_SCHEMA
 # ---------------------------------------------------------------------------
 
 # Mapping of tool names to their executor functions and Pydantic schemas
+# Only query_guest_with_reservations is registered — it handles all guest/reservation queries
+# in a single tool call, eliminating the multi-turn workflow that was causing latency.
 _TOOL_REGISTRY = {
-    "query_guests": (tool_logic.execute_query_guests, tool_logic.GuestQuerySchema),
-    "query_rooms": (tool_logic.execute_query_rooms, tool_logic.RoomQuerySchema),
-    "query_reservations": (tool_logic.execute_query_reservations, tool_logic.ReservationQuerySchema),
-    "get_hotel_summary": (tool_logic.execute_get_hotel_summary, tool_logic.HotelSummarySchema),
-    # Optimised tool: combines guest + reservations in a single call to reduce LLM turns
     "query_guest_with_reservations": (tool_logic.execute_query_guest_with_reservations, tool_logic.GuestWithReservationsParam),
 }
 
@@ -245,30 +240,58 @@ TOOL_DEFINITIONS = [
 # LLM Client & Config
 # ---------------------------------------------------------------------------
 
-def _get_base_client() -> tuple[OpenAI, str]:
-    """Internal helper to create an OpenAI client with connection pooling.
+# Shared HTTP transport — all OpenAI clients share this single connection pool.
+# This is critical: without a shared transport, each OpenAI client gets its own
+# isolated pool and concurrent requests cannot reuse connections across calls.
+_SHARED_TRANSPORT: httpx.HTTPTransport | None = None
+_SHARED_HTTP_CLIENT: httpx.Client | None = None
+_http_init_lock = threading.Lock()
 
-    Uses an httpx.AsyncHTTPTransport with a shared connection pool (20 connections)
-    so that concurrent requests from different threads reuse TCP connections instead
-    of creating new ones each time.  This benefits ALL callers — guest search API,
-    performance tests, etc.
+
+def _get_shared_http_client() -> httpx.Client:
+    """Return a module-level singleton httpx.Client with connection pooling.
+
+    Created lazily on first use.  All OpenAI clients constructed via
+    ``_get_base_client()`` share this single underlying transport, which means
+    TCP connections are reused across ALL concurrent requests — not just within
+    a single client.
+    """
+    global _SHARED_TRANSPORT, _SHARED_HTTP_CLIENT
+    if _SHARED_HTTP_CLIENT is not None:
+        return _SHARED_HTTP_CLIENT
+
+    with _http_init_lock:
+        # Double-check inside lock
+        if _SHARED_HTTP_CLIENT is not None:
+            return _SHARED_HTTP_CLIENT
+
+        _SHARED_TRANSPORT = httpx.HTTPTransport(
+            retries=3,
+            limits=httpx.Limits(
+                max_connections=20,
+                max_keepalive_connections=20,
+            ),
+        )
+        _SHARED_HTTP_CLIENT = httpx.Client(
+            transport=_SHARED_TRANSPORT,
+            timeout=httpx.Timeout(120.0),
+        )
+    return _SHARED_HTTP_CLIENT
+
+
+def _get_base_client() -> tuple[OpenAI, str]:
+    """Internal helper to create an OpenAI client that shares a connection pool.
+
+    Every OpenAI client passes the **same** underlying ``httpx.Client`` so that
+    TCP connections are reused across all concurrent requests.
     """
     models_endpoint = config_manager.test_settings.models_endpoint
     base_url = models_endpoint.rstrip('/').replace('/models', '')
 
-    transport = httpx.AsyncHTTPTransport(
-        retries=3,
-        limits=httpx.Limits(
-            max_connections=20,
-            max_keepalive_connections=20,
-        ),
-    )
-    http_client = httpx.AsyncClient(
-        transport=transport,
-        timeout=httpx.Timeout(120.0),
-    )
+    # Reuse the existing shared httpx.Client
+    shared_client = _get_shared_http_client()
     client = OpenAI(
-        http_client=http_client,  # type: ignore[arg-type]
+        http_client=shared_client,  # type: ignore[arg-type]
         base_url=base_url,
         api_key="none",
     )

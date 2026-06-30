@@ -15,7 +15,7 @@ Usage:
 import os
 import random
 import sys
-from datetime import date, timedelta
+from datetime import date
 from typing import Any, Dict, List
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -23,13 +23,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.db import SessionLocal
 from app.enums import BookingSource, ReservationStatus
 from app.models import Guest, Reservation, Room
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-from utils import (
+from app.services.generator_utils import (
     generate_random_dob,
     get_bucket_dates,
     split_name,
 )
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -74,11 +74,16 @@ def load_arabic_names(path: str) -> List[str]:
 # ---------------------------------------------------------------------------
 def delete_performance_test_guests(db: Session) -> int:
     """
-    Delete previously created performance test guests (marked with
+    Delete all previously created performance test guests (marked with
     special_preferences = 'performance_test').
+
+    This is a two-phase deletion:
+    1. Delete all reservations for performance test guests
+    2. Delete all performance test guests
 
     Returns the number of guests deleted.
     """
+    # Phase 1: Find all performance test guests
     guests = (
         db.query(Guest)
         .filter(Guest.special_preferences == "performance_test")
@@ -86,12 +91,72 @@ def delete_performance_test_guests(db: Session) -> int:
     )
 
     count = len(guests)
-    for guest in guests:
-        # Delete reservations first (foreign key constraint)
+    if count > 0:
+        # Phase 2: Delete all their reservations first (foreign key constraint)
+        for guest in guests:
+            db.query(Reservation).filter(Reservation.guest_id == guest.guest_id).delete()
+        # Phase 3: Delete the guests
+        for guest in guests:
+            db.delete(guest)
+
+        db.commit()
+
+    return count
+
+
+def find_duplicate_test_guests(db: Session) -> List[Dict[str, Any]]:
+    """
+    Find duplicate test guests by (first_name, last_name) among performance_test guests.
+
+    Returns a list of dicts with duplicate info, or empty list if no duplicates.
+    """
+    from sqlalchemy import text
+
+    query = text(
+        """
+        SELECT first_name, last_name, COUNT(*) as cnt, GROUP_CONCAT(guest_id) as guest_ids
+        FROM guests
+        WHERE special_preferences = 'performance_test'
+        GROUP BY first_name, last_name
+        HAVING cnt > 1
+        ORDER BY cnt DESC
+        """
+    )
+    results = db.execute(query).fetchall()
+    duplicates = []
+    for row in results:
+        duplicates.append({
+            "first_name": row[0],
+            "last_name": row[1],
+            "count": row[2],
+            "guest_ids": [int(x) for x in str(row[3]).split(",")],
+        })
+    return duplicates
+
+
+def delete_duplicate_test_guests(db: Session, keep_guest_id: int) -> int:
+    """
+    Delete all performance test guests EXCEPT the one with keep_guest_id.
+
+    Returns the number of guests deleted.
+    """
+    guests_to_delete = (
+        db.query(Guest)
+        .filter(
+            Guest.special_preferences == "performance_test",
+            Guest.guest_id != keep_guest_id,
+        )
+        .all()
+    )
+
+    count = len(guests_to_delete)
+    for guest in guests_to_delete:
         db.query(Reservation).filter(Reservation.guest_id == guest.guest_id).delete()
         db.delete(guest)
 
-    db.commit()
+    if count > 0:
+        db.commit()
+
     return count
 
 
@@ -157,10 +222,12 @@ def setup_performance_test_guests() -> List[Dict[str, Any]]:
     db = SessionLocal()
 
     try:
-        # Clean up any previous performance test guests
+        # Clean up ANY previous performance test guests (including orphans)
         deleted = delete_performance_test_guests(db)
         if deleted > 0:
             print(f"🗑️  Removed {deleted} previous performance test guest(s)")
+        else:
+            print("ℹ️  No existing performance test guests found.")
 
         # Get available rooms
         available_rooms = db.query(Room).order_by(Room.room_id).all()
@@ -210,7 +277,34 @@ def setup_performance_test_guests() -> List[Dict[str, Any]]:
 
             print(f"    → {reservation_count} reservations created")
 
-        # Verify
+        # Post-cleanup verification: check for duplicates
+        duplicates = find_duplicate_test_guests(db)
+        if duplicates:
+            print("\n" + "!" * 60)
+            print("⚠️  DUPLICATE DETECTED after setup!")
+            for dup in duplicates:
+                print(f"    - {dup['first_name']} {dup['last_name']}: {dup['count']} entries (IDs: {dup['guest_ids']})")
+            print("!" * 60)
+            print("Cleaning up duplicates by keeping only the first entry...")
+
+            # Keep the first guest for each duplicate name, delete the rest
+            for dup in duplicates:
+                keep_id = dup["guest_ids"][0]
+                deleted_count = delete_duplicate_test_guests(db, keep_id)
+                print(f"    → Deleted {deleted_count} duplicate(s) for {dup['first_name']} {dup['last_name']}")
+
+            # Re-check — should be clean now
+            duplicates = find_duplicate_test_guests(db)
+            if duplicates:
+                print("\n" + "!" * 60)
+                print("❌ WARNING: Some duplicates could not be automatically cleaned!")
+                for dup in duplicates:
+                    print(f"    - {dup['first_name']} {dup['last_name']}: {dup['count']} entries (IDs: {dup['guest_ids']})")
+                print("Please run setup again or clean up manually.")
+                print("!" * 60)
+
+        # Final verification: check reservation counts
+        orphan_guests = []
         for guest_dict in result_guests:
             gid = guest_dict["guest_id"]
             count = (
@@ -221,6 +315,7 @@ def setup_performance_test_guests() -> List[Dict[str, Any]]:
             guest_dict["reservation_count"] = count
 
             if count != RESERVATIONS_PER_GUEST:
+                orphan_guests.append(guest_dict)
                 print(f"⚠️  Warning: Guest '{guest_dict['full_name']}' has {count} "
                       f"reservations (expected {RESERVATIONS_PER_GUEST})")
 
@@ -231,10 +326,21 @@ def setup_performance_test_guests() -> List[Dict[str, Any]]:
         print(f"  Test guests created:     {len(result_guests)}")
         print(f"  Reservations per guest:  {RESERVATIONS_PER_GUEST}")
         print(f"  Total reservations:      {len(result_guests) * RESERVATIONS_PER_GUEST}")
+
+        # Check final duplicate state
+        final_duplicates = find_duplicate_test_guests(db)
+        if final_duplicates:
+            print(f"\n  ⚠️  DUPLICATES REMAINING: {len(final_duplicates)} name(s) with duplicates")
+        else:
+            print(f"\n  ✓ No duplicate guests detected")
+
         print("\n  Guest list:")
         for i, g in enumerate(result_guests, 1):
             assignment = "Sequential" if i <= 5 else "Concurrent"
             print(f"    {i:2d}. {g['full_name']:<30s} ({g['reservation_count']} reservations) [{assignment}]")
+
+        if orphan_guests:
+            print(f"\n  ⚠️  {len(orphan_guests)} guest(s) have incorrect reservation counts!")
 
         print("\n✅ Performance test guests setup complete!")
 

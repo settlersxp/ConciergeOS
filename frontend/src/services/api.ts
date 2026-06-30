@@ -174,6 +174,11 @@ export const performanceApi = {
   getGuestDetail: (guestId: number) =>
     request<GuestDetail>(`/api/performance-testing/guest/${guestId}`),
 
+  // ── Duplicate Check ───────────────────────────────────────────────────
+
+  checkDuplicates: () =>
+    request<CheckDuplicatesResult>('/api/performance-testing/check-duplicates'),
+
   // ── Validation ────────────────────────────────────────────────────────
 
   validateGuests: (batchUuid: string, guestIds?: number[], resultIds?: number[]) =>

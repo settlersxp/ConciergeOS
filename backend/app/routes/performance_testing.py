@@ -13,7 +13,9 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal, get_db
 from app.models import Guest, PerformanceTestResult, Reservation, Room, PromptVersion
 from app.schemas import (
+    CheckDuplicatesResponse,
     DeleteBatchResponse,
+    DuplicateGuestInfo,
     GenerateAllResponse,
     GenerateXmlResponse,
     GuestDetailSchema,
@@ -483,6 +485,63 @@ async def api_get_test_guests() -> list[TestGuestSchema]:
         return result
     finally:
         db.close()
+
+
+@router.get("/api/performance-testing/check-duplicates")
+async def api_check_duplicate_test_guests(
+    db: Session = Depends(get_db),
+) -> CheckDuplicatesResponse:
+    """Check for duplicate test guests among those marked with special_preferences = 'performance_test'.
+
+    Returns a report showing which name combinations have multiple entries,
+    which can cause validation issues during performance testing.
+    """
+    try:
+        from sqlalchemy import text
+
+        # Get total count of test guests
+        total_count = (
+            db.query(func.count(Guest.guest_id))
+            .filter(Guest.special_preferences == "performance_test")
+            .scalar()
+        )
+
+        # Find duplicates using raw SQL for GROUP BY with HAVING
+        query = text(
+            """
+            SELECT first_name, last_name, COUNT(*) as cnt, GROUP_CONCAT(guest_id) as guest_ids
+            FROM guests
+            WHERE special_preferences = 'performance_test'
+            GROUP BY first_name, last_name
+            HAVING cnt > 1
+            ORDER BY cnt DESC
+            """
+        )
+        results = db.execute(query).fetchall()
+
+        duplicates = []
+        for row in results:
+            duplicates.append(
+                DuplicateGuestInfo(
+                    first_name=row[0],
+                    last_name=row[1],
+                    count=row[2],
+                    guest_ids=[int(x) for x in str(row[3]).split(",")],
+                )
+            )
+
+        return CheckDuplicatesResponse(
+            ok=True,
+            has_duplicates=len(duplicates) > 0,
+            duplicates=duplicates,
+            total_test_guests=total_count,
+        )
+    except Exception as e:
+        return CheckDuplicatesResponse(
+            ok=False,
+            error=str(e),
+            total_test_guests=0,
+        )
 
 
 @router.get("/api/performance-testing/guest/{guest_id}")

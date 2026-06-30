@@ -278,11 +278,20 @@ def execute_query_reservations(
 def execute_query_guest_with_reservations(args: dict[str, Any]) -> str:
     """Search for guests and return their reservations in a single call.
 
-    This optimized tool combines query_guests + query_reservations to reduce
-    LLM round-trips. Instead of calling two separate tools, the LLM can call
-    this single tool to get guest data **and** all associated reservations at once.
+    PREFER THIS TOOL over calling query_guests + query_reservations separately.
+    This tool combines both operations into a single API round-trip, reducing
+    LLM turns by 1-2 per query.
 
-    Returns a JSON array of guest objects, each with a nested ``reservations`` list.
+    Use this whenever the user query asks about a guest's information AND their
+    reservations. Only fall back to separate tools if you have a specific reason.
+
+    Args:
+        params: Filter by guest_id, or first_name + last_name.
+                Accepts a single dict or a list of dicts for batch queries.
+
+    Returns:
+        JSON array of guest objects, each with a nested ``reservations`` list
+        containing full reservation details (room, dates, status, etc.).
     """
     params = args.get("params", args)
 
