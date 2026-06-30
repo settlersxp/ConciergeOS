@@ -12,7 +12,15 @@ to the Guest Search flow.
 from __future__ import annotations
 
 import logging
+import os
+import sys
+from pathlib import Path
 from typing import Optional
+
+# Add the backend directory to sys.path so `from app.xxx` imports work
+_BACKEND_DIR = str(Path(__file__).resolve().parent.parent)
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
 
 from .batch_runners import (
     run_concurrent_batch_multi_guest,

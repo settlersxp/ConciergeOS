@@ -1,6 +1,10 @@
 import json
 import os
 from dataclasses import dataclass, asdict, field
+from pathlib import Path
+
+# Resolve config path relative to this file's location
+_CONFIG_DIR = Path(__file__).resolve().parent
 
 @dataclass
 class TestSettings:
@@ -20,8 +24,8 @@ class AppConfig:
 class ConfigManager:
     """Manages persistent application configuration via a JSON file."""
     
-    def __init__(self, config_path: str = "app/config.json"):
-        self.config_path = config_path
+    def __init__(self, config_path: str | None = None):
+        self.config_path = config_path or str(_CONFIG_DIR / "config.json")
         self.config = self._load_config()
 
     def _load_config(self) -> AppConfig:

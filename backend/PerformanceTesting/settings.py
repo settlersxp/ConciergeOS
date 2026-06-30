@@ -33,7 +33,7 @@ class TestSettings:
     vllm_url: str = ""  # Derived from models_endpoint if not provided
     models_endpoint: str = _MODELS_ENDPOINT
     database_path: Path = field(
-        default_factory=lambda: Path(__file__).parent.parent.parent / "database.db"
+        default_factory=lambda: Path(__file__).parent.parent / "database.db"
     )
     sequential_batch_size: int = 5
     concurrent_batch_size: int = 8
