@@ -298,3 +298,99 @@ export interface FieldInfo {
 export interface FieldSchema {
   [tableName: string]: FieldInfo[];
 }
+
+/** Prompt Performance Analysis */
+
+export interface PromptOverview {
+  prompt_id: string;
+  prompt_version: number | null;
+  prompt_name: string;
+  model_name: string;
+  batch_type: "sequential" | "concurrent";
+  avg_speed_seconds: number;
+  accuracy_pct: number;
+  total_runs: number;
+  total_requests: number;
+}
+
+export interface PromptDetailRun {
+  batch_uuid: string;
+  friendly_name: string;
+  batch_type: "sequential" | "concurrent";
+  model_name: string;
+  vllm_version: string;
+  thinking_enabled: boolean;
+  request_sent_time: string;
+  response_received_time: string;
+  elapsed: number;
+  valid_response: boolean | null;
+  response_length: number | null;
+  json_malformed: boolean | null;
+  request_index: number;
+}
+
+export interface PromptDetailResponse {
+  prompt_id: string;
+  prompt_version: number | null;
+  prompt_name: string;
+  model_name: string | null;
+  batch_type: string | null;
+  avg_speed_seconds: number;
+  accuracy_pct: number;
+  total_runs: number;
+  total_requests: number;
+  runs: PromptDetailRun[];
+}
+
+export interface PromptBatchInfo {
+  batch_uuid: string;
+  batch_type: string;
+  model_name: string;
+  vllm_version: string | null;
+  thinking_enabled: boolean | null;
+  friendly_name: string | null;
+  avg_speed_seconds: number;
+  accuracy_pct: number;
+  total_requests: number;
+  min_speed_seconds: number;
+  max_speed_seconds: number;
+  individual_timings: number[];
+}
+
+export interface PromptBatchStatsResponse {
+  prompt_id: string;
+  prompt_version: number | null;
+  prompt_name: string;
+  batches: PromptBatchInfo[];
+  overall_avg_speed: number;
+  overall_accuracy: number;
+  total_batches: number;
+  total_requests: number;
+}
+
+/** Grouped batch data for the reorganized Batch Details table */
+export interface GroupedBatchTypeStats {
+  concurrent?: BatchTypeRow;
+  sequential?: BatchTypeRow;
+  // Computed overall metrics (average of concurrent and sequential)
+  overall_avg_speed?: number;
+  overall_accuracy?: number;
+  overall_total_requests?: number;
+  overall_min_speed?: number;
+  overall_max_speed?: number;
+}
+
+export interface BatchTypeRow {
+  avg_speed_seconds: number;
+  min_speed_seconds: number;
+  max_speed_seconds: number;
+  accuracy_pct: number;
+  total_requests: number;
+}
+
+export interface GroupedBatch {
+  batch_name: string;
+  batch_uuids: string[];
+  model_name: string;
+  types: GroupedBatchTypeStats;
+}
