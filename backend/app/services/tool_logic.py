@@ -98,6 +98,14 @@ class HotelSummarySchema(BaseModel):
     pass
 
 
+class GuestWithReservationsParam(BaseModel):
+    """Schema for querying guests with their reservations."""
+
+    first_name: str | None = Field(None, description="Filter by first name (case-insensitive partial match)")
+    last_name: str | None = Field(None, description="Filter by last name (case-insensitive partial match)")
+    guest_id: int | None = Field(None, description="Filter by specific guest ID")
+
+
 # ── Executor implementations ────────────────────────────────────────────────
 
 
@@ -265,6 +273,78 @@ def execute_query_reservations(
         return json.dumps({"result": results["0"]}, indent=2)
 
     return json.dumps(results, indent=2)
+
+
+def execute_query_guest_with_reservations(args: dict[str, Any]) -> str:
+    """Search for guests and return their reservations in a single call.
+
+    This optimized tool combines query_guests + query_reservations to reduce
+    LLM round-trips. Instead of calling two separate tools, the LLM can call
+    this single tool to get guest data **and** all associated reservations at once.
+
+    Returns a JSON array of guest objects, each with a nested ``reservations`` list.
+    """
+    params = args.get("params", args)
+
+    if isinstance(params, dict):
+        param_list = [params]
+        is_list_input = False
+    elif isinstance(params, list):
+        param_list = params
+        is_list_input = True
+    else:
+        param_list = [params]
+        is_list_input = False
+
+    results: list[dict[str, Any]] = []
+
+    for i, p in enumerate(param_list):
+        if isinstance(p, dict):
+            p = TypeAdapter(GuestWithReservationsParam).validate_python(p)
+
+        db = SessionLocal()
+        try:
+            query = db.query(Guest)
+            if p.guest_id is not None:
+                query = query.filter(Guest.guest_id == p.guest_id)
+            if p.first_name:
+                query = query.filter(Guest.first_name.ilike(f"%{p.first_name}%"))
+            if p.last_name:
+                query = query.filter(Guest.last_name.ilike(f"%{p.last_name}%"))
+
+            guests = query.all()
+            if not guests:
+                results.append({"guest_id": str(i), "found": False, "message": "No guests found matching the criteria."})
+                continue
+
+            guest_entries: list[dict[str, Any]] = []
+            for guest in guests:
+                # Fetch reservations in a single query per guest
+                reservations = (
+                    db.query(Reservation)
+                    .filter(Reservation.guest_id == guest.guest_id)
+                    .order_by(Reservation.reservation_id)
+                    .all()
+                )
+                reservation_list = [_format_reservation(r) for r in reservations]
+
+                guest_entry = _format_guest(guest)
+                guest_entry["reservations"] = reservation_list
+                guest_entries.append(guest_entry)
+
+            results.append({
+                "guest_id": str(i),
+                "found": True,
+                "count": len(guest_entries),
+                "guests": guest_entries,
+            })
+        finally:
+            db.close()
+
+    if not is_list_input:
+        return json.dumps({"result": results[0] if results else {}}, indent=2)
+
+    return json.dumps(results, indent=2, ensure_ascii=False)
 
 
 def execute_get_hotel_summary(args: dict[str, Any]) -> str:

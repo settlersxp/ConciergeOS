@@ -11,10 +11,12 @@ import io
 import inspect
 import json
 import logging
+import threading
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Callable
 
+import httpx
 from openai import OpenAI
 
 from app.services import tool_logic
@@ -211,6 +213,8 @@ _TOOL_REGISTRY = {
     "query_rooms": (tool_logic.execute_query_rooms, tool_logic.RoomQuerySchema),
     "query_reservations": (tool_logic.execute_query_reservations, tool_logic.ReservationQuerySchema),
     "get_hotel_summary": (tool_logic.execute_get_hotel_summary, tool_logic.HotelSummarySchema),
+    # Optimised tool: combines guest + reservations in a single call to reduce LLM turns
+    "query_guest_with_reservations": (tool_logic.execute_query_guest_with_reservations, tool_logic.GuestWithReservationsParam),
 }
 
 # Create batch schemas dynamically to support lists of parameters
@@ -242,10 +246,33 @@ TOOL_DEFINITIONS = [
 # ---------------------------------------------------------------------------
 
 def _get_base_client() -> tuple[OpenAI, str]:
-    """Internal helper to create an OpenAI client from config."""
+    """Internal helper to create an OpenAI client with connection pooling.
+
+    Uses an httpx.AsyncHTTPTransport with a shared connection pool (20 connections)
+    so that concurrent requests from different threads reuse TCP connections instead
+    of creating new ones each time.  This benefits ALL callers — guest search API,
+    performance tests, etc.
+    """
     models_endpoint = config_manager.test_settings.models_endpoint
     base_url = models_endpoint.rstrip('/').replace('/models', '')
-    return OpenAI(base_url=base_url, api_key="none"), base_url
+
+    transport = httpx.AsyncHTTPTransport(
+        retries=3,
+        limits=httpx.Limits(
+            max_connections=20,
+            max_keepalive_connections=20,
+        ),
+    )
+    http_client = httpx.AsyncClient(
+        transport=transport,
+        timeout=httpx.Timeout(120.0),
+    )
+    client = OpenAI(
+        http_client=http_client,  # type: ignore[arg-type]
+        base_url=base_url,
+        api_key="none",
+    )
+    return client, base_url
 
 
 def get_llm_config() -> tuple[OpenAI, str]:
@@ -371,6 +398,45 @@ _OUTPUT_PATHS: dict[str, Path] = {
     "json": Path("data/guests_data.json"),
     "xml": Path("data/guests_data.xml"),
 }
+
+# ---------------------------------------------------------------------------
+# Dataset caching — fetch once, reuse everywhere
+# ---------------------------------------------------------------------------
+
+_CACHED_DATASET: str | None = None
+_DATASET_LOCK: threading.Lock = threading.Lock()
+
+
+def _get_cached_dataset() -> str:
+    """Return the pre-computed dataset string, computing it once on first call.
+
+    Thread-safe with double-checked locking: the first call fetches from the
+    database and serialises to CSV.  Every subsequent call returns the cached
+    string instantly without touching the database.
+    """
+    global _CACHED_DATASET
+    if _CACHED_DATASET is None:
+        with _DATASET_LOCK:
+            # Double-check inside lock in case another thread computed it
+            if _CACHED_DATASET is None:
+                rooms, guests = _fetch_raw_data()
+                _CACHED_DATASET = _to_csv(rooms, guests)
+    return _CACHED_DATASET
+
+
+def dataset_refresh() -> str:
+    """Force-refresh the cached dataset from the database.
+
+    Call this after bulk data changes (e.g. population scripts, migrations).
+
+    Returns:
+        The freshly-computed CSV dataset string.
+    """
+    global _CACHED_DATASET
+    with _DATASET_LOCK:
+        rooms, guests = _fetch_raw_data()
+        _CACHED_DATASET = _to_csv(rooms, guests)
+    return _CACHED_DATASET
 
 
 def _to_csv(rooms_list: list[dict[str, Any]], guests_list: list[dict[str, Any]]) -> str:
