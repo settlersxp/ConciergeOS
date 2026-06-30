@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { PerformanceStats } from "../../types";
 import {
   ScatterChart,
@@ -159,22 +159,20 @@ export default function PerformanceChart({
   visibleBatches,
   onToggleBatch,
 }: PerformanceChartWithTogglesProps) {
-  const [chartData] = useState<PerformanceStats[]>(data);
-
   // Clamp X-axis values to 0-200 range
   const chartDataWithKey = useMemo(() => {
-    return chartData.map((d, i) => ({
+    return data.map((d, i) => ({
       ...d,
       _key: `${d.batch_uuid}-${d.batch_type}-${i}`,
       clampedSpeed: Math.min(d.avg_speed_seconds, 200),
     }));
-  }, [chartData]);
+  }, [data]);
 
   // Unique batches for color assignment (only visible ones)
   const visibleChartData = useMemo(() => {
-    if (!visibleBatches) return chartData;
-    return chartData.filter((d) => visibleBatches.has(d.batch_uuid));
-  }, [chartData, visibleBatches]);
+    if (!visibleBatches) return data;
+    return data.filter((d) => visibleBatches.has(d.batch_uuid));
+  }, [data, visibleBatches]);
 
   const uniqueBatches = useMemo(() => {
     const seen = new Set<string>();
@@ -285,7 +283,7 @@ export default function PerformanceChart({
               />
             </ScatterChart>
           )}
-          <BatchLegend data={chartData} visibleBatches={visibleBatches} onToggleBatch={onToggleBatch} />
+          <BatchLegend data={data} visibleBatches={visibleBatches} onToggleBatch={onToggleBatch} />
           <div className="mt-2 text-center text-xs text-primary-400">
             <span className="inline-flex items-center gap-4">
               <span className="inline-flex items-center gap-1">

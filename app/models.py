@@ -104,6 +104,8 @@ class PerformanceTestResult(Base):
     response_content: Mapped[str | None] = mapped_column(String, nullable=True)
     valid_response: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     identifier: Mapped[str | None] = mapped_column(String, nullable=True)
+    prompt_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    prompt_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 # ---------------------------------------------------------------------------

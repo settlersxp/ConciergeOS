@@ -8,11 +8,27 @@ A new page (`/performance-dashboard`) that visualizes all saved performance test
 - **Color**: Model name
 - **Border style**: Solid = sequential, Dashed = concurrent
 
+**Later enhancements**: Added "Prompt View" mode for analyzing performance by prompt, with batch grouping, summary cards, and grouped data tables.
+
 ## Dependency Order
 
 ```
 Backend (DB query) → Backend API endpoint → Frontend types → Frontend API client →
 Frontend chart component → Frontend page → Router → Header nav link
+```
+
+**Post-refactor architecture**:
+```
+Backend (DB query) → Backend API endpoint → Frontend types → Frontend API client →
+├── Frontend chart component → Frontend page → Router → Header nav link
+└── Extracted reusable components (Phase 4.4–4.10)
+    ├── ViewModeToggle → PerformanceDashboard (view switching)
+    ├── MultiSortTable → Extracted from PerformanceDashboard (sort logic)
+    ├── BatchToggleList → Extracted from PerformanceDashboard (batch toggles)
+    ├── SummaryCardGrid → Extracted from PerformanceDashboard (summary cards)
+    ├── GroupedDataTable → Extracted from PerformanceDashboard (grouped table)
+    ├── ChartWithLegend → Extracted from PerformanceDashboard (chart wrapper)
+    └── useSelectionState → Hook for selection + API deduplication
 ```
 
 ## Tasks
@@ -100,6 +116,18 @@ export interface PerformanceStats {
 }
 ```
 
+**Additional types added** (Prompt View support):
+```typescript
+export interface PromptOverview { ... }
+export interface PromptDetailRun { ... }
+export interface PromptDetailResponse { ... }
+export interface PromptBatchInfo { ... }
+export interface PromptBatchStatsResponse { ... }
+export interface GroupedBatchTypeStats { ... }
+export interface BatchTypeRow { ... }
+export interface GroupedBatch { ... }
+```
+
 ---
 
 ### Phase 3: Frontend API Client
@@ -110,6 +138,13 @@ export interface PerformanceStats {
 **Description**: Add a new method to `performanceApi`:
 ```typescript
 getPerformanceStats: () => request<PerformanceStats[]>('/api/performance-testing/stats'),
+```
+
+**Additional endpoints added** (Prompt View support):
+```typescript
+getPromptOverview: () => request<PromptOverview[]>('/api/performance-testing/prompt-stats'),
+getPromptBatchStats: (promptId: string, version?: number | null) => request<PromptBatchStatsResponse>(...),
+getPromptDetail: (promptId: string, version?: number | null) => request<PromptDetailResponse>(...),
 ```
 
 ---
@@ -190,6 +225,143 @@ export { default as PerformanceChart } from "./PerformanceChart";
 
 ---
 
+#### 4.4 — Frontend: Extract ViewModeToggle component
+**File**: `frontend/src/components/ui/ViewModeToggle.tsx` (NEW)
+**Dependencies**: None
+**Reused In**: PerformanceDashboard (view mode switching)
+**Description**: Generic view mode toggle with typed generic `T extends string`. Renders styled toggle buttons for switching between Batch and Prompt views.
+
+**Props**:
+```typescript
+interface ViewModeToggleProps<T extends string> {
+  modes: { key: T; label: string }[];
+  activeMode: T;
+  onChange: (mode: T) => void;
+}
+```
+
+---
+
+#### 4.5 — Frontend: Extract MultiSortTable component
+**File**: `frontend/src/components/ui/MultiSortTable.tsx` (NEW)
+**Dependencies**: None
+**Reused In**: Extracted from PerformanceDashboard
+**Description**: Generic sortable data table with multi-column sort support (Shift+click), column indicators (1↑, 2↓), and clear-sort capability.
+
+**Props**:
+```typescript
+export interface SortConfig { key: string; direction: "asc" | "desc"; }
+export interface TableColumn<TData> {
+  key: string; header: string;
+  render?: (item: TData) => React.ReactNode;
+  cellClassName?: (item: TData, index: number) => string;
+}
+interface MultiSortTableProps<TData> {
+  data: TData[]; columns: TableColumn<TData>[];
+  sortConfig: SortConfig[]; onSort: (key: string, event?: React.MouseEvent) => void;
+  onClearSort?: () => void; hasActiveSort?: boolean;
+  rowKey?: (item: TData, index: number) => string;
+  onRowClick?: (item: TData) => void;
+  rowClassName?: (item: TData, index: number) => string;
+}
+```
+
+---
+
+#### 4.6 — Frontend: Extract BatchToggleList component
+**File**: `frontend/src/components/ui/BatchToggleList.tsx` (NEW)
+**Dependencies**: None
+**Reused In**: Extracted from PerformanceDashboard
+**Description**: Searchable list of checkbox toggles for enabling/disabling items (batches, groups, etc.) with configurable grid layout.
+
+**Props**:
+```typescript
+interface BatchToggleListProps<TItem> {
+  items: TItem[]; enabledItems: Set<string>; onToggle: (id: string) => void;
+  searchPlaceholder?: string;
+  getId: (item: TItem) => string; getName: (item: TItem) => string;
+  gridColumns?: 1 | 2 | 3; renderItem?: (item: TItem) => React.ReactNode;
+}
+```
+
+---
+
+#### 4.7 — Frontend: Extract SummaryCardGrid component
+**File**: `frontend/src/components/ui/SummaryCardGrid.tsx` (NEW)
+**Dependencies**: `Card` component
+**Reused In**: Extracted from PerformanceDashboard (Prompt View summary cards)
+**Description**: Responsive grid of metric summary cards with title, description, and value.
+
+**Props**:
+```typescript
+export interface SummaryCardData {
+  title: string; description: string; value: React.ReactNode;
+}
+interface SummaryCardGridProps {
+  cards: SummaryCardData[]; gridColumns?: number;
+}
+```
+
+---
+
+#### 4.8 — Frontend: Extract GroupedDataTable component
+**File**: `frontend/src/components/ui/GroupedDataTable.tsx` (NEW)
+**Dependencies**: None
+**Reused In**: Extracted from PerformanceDashboard (Prompt View grouped batch details)
+**Description**: Table with grouped rows that expand into sub-rows (e.g., batch name → concurrent/sequential sub-rows).
+
+**Props**:
+```typescript
+interface GroupedRow<TGroup, TRow> {
+  groupKey: string; groupLabel: string; subRows: TRow[];
+}
+interface GroupedDataTableProps<TGroup, TRow> {
+  groups: GroupedRow<TGroup, TRow>[];
+  columns: GroupedColumn<TRow>[];
+  rowKey?: (row: TRow, globalIndex: number) => string;
+  subRowLabel?: (row: TRow) => React.ReactNode;
+  rowClassName?: (row: TRow, groupIndex: number) => string;
+}
+```
+
+---
+
+#### 4.9 — Frontend: Create ChartWithLegend wrapper
+**File**: `frontend/src/components/ui/ChartWithLegend.tsx` (NEW)
+**Dependencies**: None
+**Reused In**: Extracted from PerformanceDashboard
+**Description**: Generic wrapper that adds a chart title, description, and empty-state messaging around any chart component.
+
+**Props**:
+```typescript
+interface ChartWithLegendProps {
+  title: string; description: string;
+  children: React.ReactNode; legend?: React.ReactNode;
+  emptyMessage?: string;
+}
+```
+
+---
+
+#### 4.10 — Frontend: Create useSelectionState hook
+**File**: `frontend/src/hooks/useSelectionState.ts` (NEW)
+**Dependencies**: None
+**Reused In**: Pattern inspired selection state management
+**Description**: Hook for managing selection state with API call deduplication using refs to prevent redundant fetches.
+
+**Interface**:
+```typescript
+export interface SelectionState<TData> {
+  data: TData | null; isLoading: boolean; error: string | null;
+}
+export default function useSelectionState<TSelection, TData>(
+  selection: TSelection | null,
+  options: { apiFetcher: (selection: TSelection) => Promise<TData> }
+): SelectionState<TData>
+```
+
+---
+
 ### Phase 5: Routing & Navigation
 
 #### 5.1 — Frontend: Add route in App.tsx
@@ -207,7 +379,7 @@ import PerformanceDashboard from './pages/PerformanceDashboard';
 **Dependencies**: Phase 5.1 (route exists)
 **Description**: Add nav link to existing links array:
 ```typescript
-{ path: '/performance-dashboard', label: 'Performance Dashboard' }
+{ path: '/performance-dashboard', label: 'Dashboard' }  // Note: shortened from spec
 ```
 
 ---
@@ -234,19 +406,22 @@ import PerformanceDashboard from './pages/PerformanceDashboard';
 | 7 | 5.1 Add route in App.tsx | 4.3 |
 | 8 | 5.2 Add nav link in Header.tsx | 5.1 |
 | 9 | 6.1 Install recharts | Can be done in parallel with 1-8 |
+| 10 | 4.4–4.10 Extract reusable components | 4.3 (after dashboard exists) |
 
-**Note**: Task 6.1 (npm install) can be started first since it has no dependencies and other tasks can be written in parallel.
+**Note**: Tasks 6.1 and 4.4–4.10 can be done in parallel with other tasks.
 
 ## Reused Components
 
 | Component | Source | Used In |
 |-----------|--------|---------|
-| `Card` | `components/ui/Card.tsx` | PerformanceChart wrapper, PerformanceDashboard |
+| `Card` | `components/ui/Card.tsx` | PerformanceChart wrapper, PerformanceDashboard, SummaryCardGrid |
 | `Badge` | `components/ui/Badge.tsx` | PerformanceChart labels (batch type, model) |
 | `PageHeader` | `components/ui/PageHeader.tsx` | PerformanceDashboard page |
 | `StatusBanner` | `components/ui/StatusBanner.tsx` | PerformanceDashboard loading/error states |
 | `performanceApi` | `services/api.ts` | All frontend data fetching |
 | `TestResult` type | `types/index.ts` | Data reference patterns |
+| `Select` | `components/ui/Select.tsx` | PromptSelector |
+| `PromptTextarea` | `components/ui/PromptTextarea.tsx` | PromptSelector preview display |
 | Tailwind classes | Existing project config | All components |
 
 ## Differences from Original Spec
@@ -284,14 +459,16 @@ function getBatchColor(batchUuid: string, totalBatches: number): string  // HSL 
 - Fetches stats, displays chart, shows loading/error states, provides select/deselect controls
 
 **Actual implementation** (all above plus):
+- **Two view modes**: Batch View (original) + Prompt View (new) for analyzing performance by prompt
 - **Multi-column sort** on stats table: Shift+click column headers to add sort keys; click again cycles asc → desc → clear
 - **Batch search filter** input: filters batches by name or UUID before rendering checkboxes
 - **Three action buttons**: "Select All", "Deselect All", "Clear Sort" (conditional)
 - **Full sortable stats table** with columns: Friendly Name, Model, Batch Type (colored Badge), Avg Speed (font-mono, 3 decimals), Accuracy (font-mono), Requests
 - **Visual toggle states**: checked = `bg-primary-50` with border, unchecked = `opacity-50`
 - **Empty state card** when no test data exists
+- **Prompt View features**: prompt selector, summary cards, batch performance chart, grouped batch details table with concurrent/sequential sub-rows and computed overall accuracy
 
-**Actual Layout**:
+**Batch View Layout**:
 ```
 ┌───────────────────────────────────────────────────┐
 │  Performance Dashboard          [Select All]      │
@@ -310,6 +487,29 @@ function getBatchColor(batchUuid: string, totalBatches: number): string  // HSL 
 ├───────────────────────────────────────────────────┤
 │  ┌─ Detailed Statistics ────────────────────────┐ │
 │  │  [Multi-sortable table]                      │ │
+│  └─────────────────────────────────────────────┘ │
+└───────────────────────────────────────────────────┘
+```
+
+**Prompt View Layout**:
+```
+┌───────────────────────────────────────────────────┐
+│  Performance Dashboard      [Batch View] [Prompt] │
+├───────────────────────────────────────────────────┤
+│  ┌─ Prompt Selector ────────────────────────────┐ │
+│  │  [Prompt ID dropdown + Version dropdown]     │ │
+│  └─────────────────────────────────────────────┘ │
+├───────────────────────────────────────────────────┤
+│  ┌─ Summary Cards (4-col grid) ─────────────────┐ │
+│  │  [Avg Speed] [Accuracy] [Total Batches] ...  │ │
+│  └─────────────────────────────────────────────┘ │
+├───────────────────────────────────────────────────┤
+│  ┌─ Batch Performance Chart ────────────────────┐ │
+│  │  [Scatter plot for selected prompt]          │ │
+│  └─────────────────────────────────────────────┘ │
+├───────────────────────────────────────────────────┤
+│  ┌─ Batch Details (grouped table) ──────────────┐ │
+│  │  [Grouped by batch name, concurrent/seq rows]│ │
 │  └─────────────────────────────────────────────┘ │
 └───────────────────────────────────────────────────┘
 ```

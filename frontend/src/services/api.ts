@@ -6,6 +6,9 @@ import type {
   ModelsApiResponse,
   PerformanceStats,
   PerformanceTestRequest,
+  PromptBatchStatsResponse,
+  PromptDetailResponse,
+  PromptOverview,
   ReservationsSummary,
   ShiftResponse,
   TestGuest,
@@ -196,4 +199,25 @@ export const performanceApi = {
 
   getPerformanceStats: () =>
     request<PerformanceStats[]>('/api/performance-testing/stats'),
+
+  // ── Prompt Performance Analysis ────────────────────────────────────────
+
+  getPromptOverview: () =>
+    request<PromptOverview[]>('/api/performance-testing/prompt-stats'),
+
+  getPromptBatchStats: (promptId: string, version?: number | null) => {
+    const params = new URLSearchParams({ prompt_id: promptId });
+    if (version !== undefined && version !== null) {
+      params.append('version', String(version));
+    }
+    return request<PromptBatchStatsResponse>(`/api/performance-testing/prompt-batches?${params.toString()}`);
+  },
+
+  getPromptDetail: (promptId: string, version?: number | null) => {
+    const params = new URLSearchParams({ prompt_id: promptId });
+    if (version !== undefined && version !== null) {
+      params.append('version', String(version));
+    }
+    return request<PromptDetailResponse>(`/api/performance-testing/prompt-detail?${params.toString()}`);
+  },
 };
