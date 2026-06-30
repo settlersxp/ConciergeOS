@@ -1,0 +1,3843 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ConciergeOS",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/reservations": {
+      "get": {
+        "summary": "Api Reservations",
+        "description": "JSON endpoint returning reservations grouped by room and errors.",
+        "operationId": "api_reservations_api_reservations_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reservations/shift": {
+      "post": {
+        "summary": "Api Shift Reservations",
+        "description": "Shift all reservation dates forward/backward by the specified number of days.",
+        "operationId": "api_shift_reservations_api_reservations_shift_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShiftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShiftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/guest-search": {
+      "post": {
+        "summary": "Api Guest Search",
+        "description": "Query the LLM for all information about a given guest.",
+        "operationId": "api_guest_search_api_guest_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuestSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/guest-search/extract-name": {
+      "post": {
+        "summary": "Api Extract Name",
+        "description": "Extract a guest name from a multimedia file (image or audio).\n\nFor images:\n- If crop coordinates are provided (non-zero crop_w), the image is cropped first.\n\nFor audio:\n- The entire file is sent to the audio-capable LLM.",
+        "operationId": "api_extract_name_api_guest_search_extract_name_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_api_extract_name_api_guest_search_extract_name_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NameExtractionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "summary": "Api Get Settings",
+        "description": "Get current global configuration settings.",
+        "operationId": "api_get_settings_api_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Api Update Settings",
+        "description": "Update global configuration settings.",
+        "operationId": "api_update_settings_api_settings_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/models": {
+      "get": {
+        "summary": "Api Get Models",
+        "description": "Proxy request to the configured vLLM models endpoint.",
+        "operationId": "api_get_models_api_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing": {
+      "post": {
+        "summary": "Api Run Performance Testing",
+        "description": "Run performance tests with the provided settings.",
+        "operationId": "api_run_performance_testing_api_performance_testing_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PerformanceTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Api Run Performance Testing Api Performance Testing Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/results": {
+      "get": {
+        "summary": "Api Get Performance Results",
+        "description": "Get the latest test results from the database.",
+        "operationId": "api_get_performance_results_api_performance_testing_results_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PerformanceTestResultSchema"
+                  },
+                  "type": "array",
+                  "title": "Response Api Get Performance Results Api Performance Testing Results Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/all-results": {
+      "get": {
+        "summary": "Api Get All Performance Results",
+        "description": "Get all test results from the database (no limit).",
+        "operationId": "api_get_all_performance_results_api_performance_testing_all_results_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PerformanceTestResultSchema"
+                  },
+                  "type": "array",
+                  "title": "Response Api Get All Performance Results Api Performance Testing All Results Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/batches": {
+      "get": {
+        "summary": "Api Get Performance Batches",
+        "description": "Get all unique test batches with their UUID and friendly name.",
+        "operationId": "api_get_performance_batches_api_performance_testing_batches_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PerformanceTestBatchSchema"
+                  },
+                  "type": "array",
+                  "title": "Response Api Get Performance Batches Api Performance Testing Batches Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/stats": {
+      "get": {
+        "summary": "Api Get Performance Stats",
+        "description": "Get aggregated performance stats per batch for dashboard visualization.",
+        "operationId": "api_get_performance_stats_api_performance_testing_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response Api Get Performance Stats Api Performance Testing Stats Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/results-by-batch": {
+      "get": {
+        "summary": "Api Get Results By Batch",
+        "description": "Get test results for a specific batch identified by UUID.",
+        "operationId": "api_get_results_by_batch_api_performance_testing_results_by_batch_get",
+        "parameters": [
+          {
+            "name": "batch_uuid",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Batch Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PerformanceTestResultSchema"
+                  },
+                  "title": "Response Api Get Results By Batch Api Performance Testing Results By Batch Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/result/{result_id}": {
+      "patch": {
+        "summary": "Api Update Valid Response",
+        "description": "Update the valid_response flag for a specific test result.",
+        "operationId": "api_update_valid_response_api_performance_testing_result__result_id__patch",
+        "parameters": [
+          {
+            "name": "result_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Result Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateValidResponseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateValidResponseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/setup-guests": {
+      "post": {
+        "summary": "Api Setup Test Guests",
+        "description": "Setup 13 test guests with 4 reservations each for performance testing.",
+        "operationId": "api_setup_test_guests_api_performance_testing_setup_guests_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupGuestsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/generate-xml": {
+      "post": {
+        "summary": "Api Generate Xml",
+        "description": "Regenerate the guests data file (CSV) and return its path.",
+        "operationId": "api_generate_xml_api_performance_testing_generate_xml_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateXmlResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/generate-all": {
+      "post": {
+        "summary": "Api Generate All",
+        "description": "Regenerate all 3 data file formats (CSV, JSON, XML) and return their paths.",
+        "operationId": "api_generate_all_api_performance_testing_generate_all_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateAllResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/batch/{batch_uuid}": {
+      "delete": {
+        "summary": "Api Delete Batch",
+        "description": "Delete all test results for a specific batch identified by UUID.",
+        "operationId": "api_delete_batch_api_performance_testing_batch__batch_uuid__delete",
+        "parameters": [
+          {
+            "name": "batch_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Batch Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteBatchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/test-guests": {
+      "get": {
+        "summary": "Api Get Test Guests",
+        "description": "Get all performance test guests (marked with special_preferences = 'performance_test').",
+        "operationId": "api_get_test_guests_api_performance_testing_test_guests_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TestGuestSchema"
+                  },
+                  "type": "array",
+                  "title": "Response Api Get Test Guests Api Performance Testing Test Guests Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/guest/{guest_id}": {
+      "get": {
+        "summary": "Api Get Guest Detail",
+        "description": "Get detailed information for a single guest including all reservations.",
+        "operationId": "api_get_guest_detail_api_performance_testing_guest__guest_id__get",
+        "parameters": [
+          {
+            "name": "guest_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Guest Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestDetailSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/validate-guests": {
+      "post": {
+        "summary": "Api Validate Guests",
+        "description": "Validate that all test guests are correctly found in a batch's test responses.",
+        "operationId": "api_validate_guests_api_performance_testing_validate_guests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateGuestsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateGuestsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/prompt-batches": {
+      "get": {
+        "summary": "Api Get Prompt Batches",
+        "description": "Get batch-level aggregated stats for a specific prompt.\n\nGroups individual test results by batch_uuid and returns aggregated\nstats per batch (avg speed, accuracy, request count) along with\nall individual request timings for scatter plot visualization.",
+        "operationId": "api_get_prompt_batches_api_performance_testing_prompt_batches_get",
+        "parameters": [
+          {
+            "name": "prompt_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Api Get Prompt Batches Api Performance Testing Prompt Batches Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/prompt-stats": {
+      "get": {
+        "summary": "Api Get Prompt Stats",
+        "description": "Get aggregated performance stats grouped by prompt_id and prompt_version.\n\nReturns an overview of all prompts with their aggregated performance metrics\nincluding average speed, accuracy, and total runs/requests.",
+        "operationId": "api_get_prompt_stats_api_performance_testing_prompt_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response Api Get Prompt Stats Api Performance Testing Prompt Stats Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/prompt-detail": {
+      "get": {
+        "summary": "Api Get Prompt Detail",
+        "description": "Get detailed run information for a specific prompt.\n\nReturns all individual runs for a given prompt_id and version,\nincluding timing, validity, and batch information.",
+        "operationId": "api_get_prompt_detail_api_performance_testing_prompt_detail_get",
+        "parameters": [
+          {
+            "name": "prompt_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Api Get Prompt Detail Api Performance Testing Prompt Detail Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/result/{result_id}/identifier": {
+      "patch": {
+        "summary": "Api Update Identifier",
+        "description": "Update the identifier for a specific test result.",
+        "operationId": "api_update_identifier_api_performance_testing_result__result_id__identifier_patch",
+        "parameters": [
+          {
+            "name": "result_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Result Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateIdentifierRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateIdentifierResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/batch/{batch_uuid}/populate-identifiers": {
+      "post": {
+        "summary": "Api Populate Identifiers",
+        "description": "Populate identifiers for all results in a batch by mapping request_index to guest names.",
+        "operationId": "api_populate_identifiers_api_performance_testing_batch__batch_uuid__populate_identifiers_post",
+        "parameters": [
+          {
+            "name": "batch_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Batch Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Api Populate Identifiers Api Performance Testing Batch  Batch Uuid  Populate Identifiers Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/ai-improve": {
+      "post": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Ai Improve Prompt",
+        "description": "Use LLM to iteratively improve a prompt section via chat conversation.",
+        "operationId": "ai_improve_prompt_api_prompts_ai_improve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiImproveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts": {
+      "get": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "List All Prompts",
+        "description": "List summary of all prompt IDs.",
+        "operationId": "list_all_prompts_api_prompts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/placeholders": {
+      "get": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "List Available Placeholders",
+        "description": "Return all available placeholder definitions for the frontend.",
+        "operationId": "list_available_placeholders_api_prompts_placeholders_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/field-schema": {
+      "get": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Get Field Schema",
+        "description": "Return structured database schema info for runtime variable discovery.\n\nReturns a dict mapping table names to lists of column info dicts,\nso the frontend can show users what {table.field} variables are available.",
+        "operationId": "get_field_schema_api_prompts_field_schema_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/{prompt_id}/{version}/preview": {
+      "post": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Preview Prompt",
+        "description": "Resolve all placeholders and return the fully rendered prompt.",
+        "operationId": "preview_prompt_api_prompts__prompt_id___version__preview_post",
+        "parameters": [
+          {
+            "name": "prompt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/{prompt_id}/default": {
+      "get": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Get Default",
+        "description": "Get the default version for a prompt ID.",
+        "operationId": "get_default_api_prompts__prompt_id__default_get",
+        "parameters": [
+          {
+            "name": "prompt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/{prompt_id}/{version}": {
+      "get": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Get Version",
+        "description": "Get a specific version.",
+        "operationId": "get_version_api_prompts__prompt_id___version__get",
+        "parameters": [
+          {
+            "name": "prompt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Update Version",
+        "description": "Update an existing version.",
+        "operationId": "update_version_api_prompts__prompt_id___version__put",
+        "parameters": [
+          {
+            "name": "prompt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePromptRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Delete Version",
+        "description": "Delete a version.",
+        "operationId": "delete_version_api_prompts__prompt_id___version__delete",
+        "parameters": [
+          {
+            "name": "prompt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/{prompt_id}": {
+      "get": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "List Versions",
+        "description": "List all versions for a prompt ID.",
+        "operationId": "list_versions_api_prompts__prompt_id__get",
+        "parameters": [
+          {
+            "name": "prompt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Create Version",
+        "description": "Create a new version (auto-increments if prompt_id exists).",
+        "operationId": "create_version_api_prompts__prompt_id__post",
+        "parameters": [
+          {
+            "name": "prompt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePromptRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/{prompt_id}/{version}/duplicate": {
+      "post": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Duplicate Version",
+        "description": "Duplicate a version, creating the next version.",
+        "operationId": "duplicate_version_api_prompts__prompt_id___version__duplicate_post",
+        "parameters": [
+          {
+            "name": "prompt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DuplicatePromptRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/{prompt_id}/{version}/set-default": {
+      "patch": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Set Default Version",
+        "description": "Set a specific version as the default.",
+        "operationId": "set_default_version_api_prompts__prompt_id___version__set_default_patch",
+        "parameters": [
+          {
+            "name": "prompt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompt-groups": {
+      "get": {
+        "tags": [
+          "prompt-groups"
+        ],
+        "summary": "List Groups",
+        "description": "List all prompt groups.",
+        "operationId": "list_groups_api_prompt_groups_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "prompt-groups"
+        ],
+        "summary": "Create Group",
+        "description": "Create a new prompt group with optional items.",
+        "operationId": "create_group_api_prompt_groups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompt-groups/{group_id}": {
+      "get": {
+        "tags": [
+          "prompt-groups"
+        ],
+        "summary": "Get Group",
+        "description": "Get a single prompt group with all details.",
+        "operationId": "get_group_api_prompt_groups__group_id__get",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "prompt-groups"
+        ],
+        "summary": "Update Group",
+        "description": "Update group name, description, and/or items.",
+        "operationId": "update_group_api_prompt_groups__group_id__put",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGroupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "prompt-groups"
+        ],
+        "summary": "Delete Group",
+        "description": "Delete a prompt group and all related data.",
+        "operationId": "delete_group_api_prompt_groups__group_id__delete",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompt-groups/{group_id}/toggle": {
+      "patch": {
+        "tags": [
+          "prompt-groups"
+        ],
+        "summary": "Toggle Group",
+        "description": "Toggle the active state of a prompt group.",
+        "operationId": "toggle_group_api_prompt_groups__group_id__toggle_patch",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompt-groups/{group_id}/execute": {
+      "post": {
+        "tags": [
+          "prompt-groups"
+        ],
+        "summary": "Execute Group",
+        "description": "Execute the prompt chain now (Recalculate Now).",
+        "operationId": "execute_group_api_prompt_groups__group_id__execute_post",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "initial_input",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Initial Input"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompt-groups/{group_id}/schedule": {
+      "post": {
+        "tags": [
+          "prompt-groups"
+        ],
+        "summary": "Schedule Group",
+        "description": "Schedule a prompt chain execution at a specific time.",
+        "operationId": "schedule_group_api_prompt_groups__group_id__schedule_post",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptGroupScheduleCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompt-groups/{group_id}/schedules/{schedule_id}": {
+      "delete": {
+        "tags": [
+          "prompt-groups"
+        ],
+        "summary": "Cancel Schedule",
+        "description": "Cancel a specific schedule for a group.",
+        "operationId": "cancel_schedule_api_prompt_groups__group_id__schedules__schedule_id__delete",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Schedule Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompt-groups/{group_id}/results": {
+      "get": {
+        "tags": [
+          "prompt-groups"
+        ],
+        "summary": "Get Results",
+        "description": "Get execution history for a group.",
+        "operationId": "get_results_api_prompt_groups__group_id__results_get",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompt-groups/{group_id}/schedules": {
+      "delete": {
+        "tags": [
+          "prompt-groups"
+        ],
+        "summary": "Clear Schedules",
+        "description": "Clear all active schedules for a group.",
+        "operationId": "clear_schedules_api_prompt_groups__group_id__schedules_delete",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompt-groups/results/{result_id}/download": {
+      "get": {
+        "tags": [
+          "prompt-groups"
+        ],
+        "summary": "Download Result",
+        "description": "Download a result file for a specific execution result.",
+        "operationId": "download_result_api_prompt_groups_results__result_id__download_get",
+        "parameters": [
+          {
+            "name": "result_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Result Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/debug/tool-calling-info": {
+      "get": {
+        "tags": [
+          "debug"
+        ],
+        "summary": "Get Tool Calling Info",
+        "description": "Return information about available tools and LLM configuration for debugging.",
+        "operationId": "get_tool_calling_info_api_debug_tool_calling_info_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/debug/test-tool-call": {
+      "post": {
+        "tags": [
+          "debug"
+        ],
+        "summary": "Test Tool Call Endpoint",
+        "description": "Test a specific tool call directly to verify database connectivity.",
+        "operationId": "test_tool_call_endpoint_api_debug_test_tool_call_post",
+        "parameters": [
+          {
+            "name": "tool_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tool Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Params"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/debug/test-llm-completion": {
+      "post": {
+        "tags": [
+          "debug"
+        ],
+        "summary": "Test Llm Completion Endpoint",
+        "description": "Test the LLM completion endpoint directly with tool calling.\n\nUses response_cache wrapper for diagnostic logging. To enable:\n- Edit response_cache.py and set log_level=\"DEBUG\" for verbose output\n- Set log_level=\"INFO\" for summary diagnostics only",
+        "operationId": "test_llm_completion_endpoint_api_debug_test_llm_completion_post",
+        "parameters": [
+          {
+            "name": "user_message",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Message"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/debug/cache-stats": {
+      "get": {
+        "tags": [
+          "debug"
+        ],
+        "summary": "Get Cache Stats",
+        "description": "Return statistics for both LLM and HTTP response caches.",
+        "operationId": "get_cache_stats_api_debug_cache_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/debug/cache/clear-llm": {
+      "post": {
+        "tags": [
+          "debug"
+        ],
+        "summary": "Clear Llm Cache",
+        "description": "Clear the LLM response cache.",
+        "operationId": "clear_llm_cache_api_debug_cache_clear_llm_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/debug/cache/clear-http": {
+      "post": {
+        "tags": [
+          "debug"
+        ],
+        "summary": "Clear Http Cache",
+        "description": "Clear the HTTP response cache.",
+        "operationId": "clear_http_cache_api_debug_cache_clear_http_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/debug/cache/clear-all": {
+      "post": {
+        "tags": [
+          "debug"
+        ],
+        "summary": "Clear All Caches",
+        "description": "Clear both LLM and HTTP response caches.",
+        "operationId": "clear_all_caches_api_debug_cache_clear_all_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/debug/cache/http": {
+      "delete": {
+        "tags": [
+          "debug"
+        ],
+        "summary": "Delete Http Cache Entry",
+        "description": "Delete a specific HTTP cache entry by cache key.\n\nQuery param: key=sha256hex...",
+        "operationId": "delete_http_cache_entry_api_debug_cache_http_delete",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/debug/cache/http/by-pattern": {
+      "post": {
+        "tags": [
+          "debug"
+        ],
+        "summary": "Clear Http Cache By Pattern",
+        "description": "Clear HTTP cache entries matching a URI pattern.\n\nQuery param: pattern=/api/reservations\n\nThis clears ALL entries (iterates and matches).",
+        "operationId": "clear_http_cache_by_pattern_api_debug_cache_http_by_pattern_post",
+        "parameters": [
+          {
+            "name": "pattern",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pattern"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/debug/cache/http/cleanup-expired": {
+      "post": {
+        "tags": [
+          "debug"
+        ],
+        "summary": "Cleanup Expired Http Cache",
+        "description": "Remove all expired HTTP cache entries.",
+        "operationId": "cleanup_expired_http_cache_api_debug_cache_http_cleanup_expired_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/debug/shift-reservations": {
+      "post": {
+        "tags": [
+          "debug"
+        ],
+        "summary": "Shift Reservations Endpoint",
+        "description": "Shift all reservation check_in and check_out dates by a given number\nof days (default: 1).\n\nRequest body (optional):\n    {\"days\": 3}   \u2013 shift forward by 3 days\n    {\"days\": -2}  \u2013 shift backward by 2 days",
+        "operationId": "shift_reservations_endpoint_api_debug_shift_reservations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShiftRequest",
+                "default": {
+                  "days": 1
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShiftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AiImproveRequest": {
+        "properties": {
+          "section": {
+            "type": "string",
+            "title": "Section"
+          },
+          "current_text": {
+            "type": "string",
+            "title": "Current Text"
+          },
+          "conversation": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            },
+            "type": "array",
+            "title": "Conversation",
+            "default": []
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "type": "object",
+        "required": [
+          "section",
+          "current_text"
+        ],
+        "title": "AiImproveRequest"
+      },
+      "Body_api_extract_name_api_guest_search_extract_name_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "crop_x": {
+            "type": "number",
+            "title": "Crop X",
+            "default": 0.0
+          },
+          "crop_y": {
+            "type": "number",
+            "title": "Crop Y",
+            "default": 0.0
+          },
+          "crop_w": {
+            "type": "number",
+            "title": "Crop W",
+            "default": 0.0
+          },
+          "crop_h": {
+            "type": "number",
+            "title": "Crop H",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_api_extract_name_api_guest_search_extract_name_post"
+      },
+      "BookingSource": {
+        "type": "string",
+        "enum": [
+          "WALK_IN",
+          "WEBSITE",
+          "PHONE",
+          "OTA",
+          "INTERNAL"
+        ],
+        "title": "BookingSource",
+        "description": "Where a reservation was created / booked from."
+      },
+      "ChatMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ChatMessage"
+      },
+      "CreateGroupRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PromptGroupItemCreate"
+            },
+            "type": "array",
+            "title": "Items",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CreateGroupRequest",
+        "description": "Request body for creating a new prompt group."
+      },
+      "CreatePromptRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "intention": {
+            "type": "string",
+            "title": "Intention"
+          },
+          "restrictions": {
+            "type": "string",
+            "title": "Restrictions"
+          },
+          "output_structure": {
+            "type": "string",
+            "title": "Output Structure"
+          },
+          "user_prompt_template": {
+            "type": "string",
+            "title": "User Prompt Template"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "intention",
+          "restrictions",
+          "output_structure",
+          "user_prompt_template"
+        ],
+        "title": "CreatePromptRequest"
+      },
+      "DeleteBatchResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "deleted_count": {
+            "type": "integer",
+            "title": "Deleted Count",
+            "default": 0
+          },
+          "batch_uuid": {
+            "type": "string",
+            "title": "Batch Uuid",
+            "default": ""
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "DeleteBatchResponse",
+        "description": "Response from the delete-batch endpoint."
+      },
+      "DuplicatePromptRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "title": "DuplicatePromptRequest"
+      },
+      "GenerateAllResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "files": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Files",
+            "default": {}
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "GenerateAllResponse",
+        "description": "Response from the generate-all endpoint."
+      },
+      "GenerateXmlResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "GenerateXmlResponse",
+        "description": "Response from the generate-xml endpoint."
+      },
+      "GuestDetailSchema": {
+        "properties": {
+          "guest_id": {
+            "type": "integer",
+            "title": "Guest Id"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "date_of_birth": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Of Birth"
+          },
+          "is_special_guest": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Special Guest"
+          },
+          "special_preferences": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Special Preferences"
+          },
+          "reservations": {
+            "items": {
+              "$ref": "#/components/schemas/ReservationDetailSchema"
+            },
+            "type": "array",
+            "title": "Reservations",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "guest_id",
+          "first_name",
+          "last_name"
+        ],
+        "title": "GuestDetailSchema",
+        "description": "Detailed guest information including all reservations."
+      },
+      "GuestSearchRequest": {
+        "properties": {
+          "customer_name": {
+            "type": "string",
+            "title": "Customer Name",
+            "description": "Full or partial name of the customer to search for"
+          },
+          "prompt_id": {
+            "type": "string",
+            "title": "Prompt Id",
+            "description": "Prompt ID to use for the LLM query",
+            "default": "guest-search"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version",
+            "description": "Prompt version (uses default if None)"
+          },
+          "runtime_variables": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Runtime Variables",
+            "description": "Runtime variables for {table.field} placeholders in the user_prompt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "customer_name"
+        ],
+        "title": "GuestSearchRequest",
+        "description": "Request body for searching a guest by name."
+      },
+      "GuestSearchResponse": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "llm_response": {
+            "type": "string",
+            "title": "Llm Response"
+          },
+          "cached": {
+            "type": "boolean",
+            "title": "Cached",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "llm_response"
+        ],
+        "title": "GuestSearchResponse",
+        "description": "Response from the guest-search endpoint."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "NameExtractionResponse": {
+        "properties": {
+          "extracted_name": {
+            "type": "string",
+            "title": "Extracted Name"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "extracted_name",
+          "source"
+        ],
+        "title": "NameExtractionResponse",
+        "description": "Response from the extract-name endpoint (multimodal name extraction)."
+      },
+      "PerformanceTestBatchSchema": {
+        "properties": {
+          "batch_uuid": {
+            "type": "string",
+            "title": "Batch Uuid"
+          },
+          "friendly_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Friendly Name"
+          },
+          "total_requests": {
+            "type": "integer",
+            "title": "Total Requests",
+            "default": 0
+          },
+          "first_run_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Run Time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch_uuid"
+        ],
+        "title": "PerformanceTestBatchSchema",
+        "description": "Summary of a unique test batch."
+      },
+      "PerformanceTestRequest": {
+        "properties": {
+          "customer_name": {
+            "type": "string",
+            "title": "Customer Name",
+            "default": "\u0639\u0627\u0626\u0634\u0629 \u0625\u0628\u0631\u0627\u0647\u064a\u0645"
+          },
+          "vllm_url": {
+            "type": "string",
+            "title": "Vllm Url",
+            "default": "http://10.0.0.227:8000/v1"
+          },
+          "models_endpoint": {
+            "type": "string",
+            "title": "Models Endpoint",
+            "default": "http://10.0.0.227:8000/v1/models"
+          },
+          "sequential_batch_size": {
+            "type": "integer",
+            "title": "Sequential Batch Size",
+            "default": 5
+          },
+          "concurrent_batch_size": {
+            "type": "integer",
+            "title": "Concurrent Batch Size",
+            "default": 8
+          },
+          "test_mode": {
+            "type": "string",
+            "title": "Test Mode",
+            "default": "single"
+          },
+          "friendly_name": {
+            "type": "string",
+            "title": "Friendly Name",
+            "default": ""
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name",
+            "default": ""
+          },
+          "vllm_version": {
+            "type": "string",
+            "title": "Vllm Version",
+            "default": ""
+          },
+          "thinking_enabled": {
+            "type": "boolean",
+            "title": "Thinking Enabled",
+            "default": false
+          },
+          "user_prompt": {
+            "type": "string",
+            "title": "User Prompt",
+            "default": ""
+          },
+          "expected_response_format": {
+            "type": "string",
+            "title": "Expected Response Format",
+            "default": "auto"
+          },
+          "data_format": {
+            "type": "string",
+            "title": "Data Format",
+            "default": "csv"
+          },
+          "batch_uuid": {
+            "type": "string",
+            "title": "Batch Uuid",
+            "default": ""
+          },
+          "prompt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Id"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "runtime_variables": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Runtime Variables"
+          }
+        },
+        "type": "object",
+        "title": "PerformanceTestRequest",
+        "description": "Request body for running performance tests."
+      },
+      "PerformanceTestResultSchema": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "batch_uuid": {
+            "type": "string",
+            "title": "Batch Uuid",
+            "default": ""
+          },
+          "friendly_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Friendly Name"
+          },
+          "batch_type": {
+            "type": "string",
+            "title": "Batch Type"
+          },
+          "request_index": {
+            "type": "integer",
+            "title": "Request Index"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "context_length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Length"
+          },
+          "vllm_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vllm Version"
+          },
+          "thinking_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thinking Enabled"
+          },
+          "system_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Prompt"
+          },
+          "user_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Prompt"
+          },
+          "response_format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Format"
+          },
+          "json_malformed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Json Malformed"
+          },
+          "response_length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Length"
+          },
+          "request_sent_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Sent Time"
+          },
+          "response_received_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Received Time"
+          },
+          "response_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Content"
+          },
+          "valid_response": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Response"
+          },
+          "identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identifier"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "batch_type",
+          "request_index"
+        ],
+        "title": "PerformanceTestResultSchema",
+        "description": "Single performance test result row."
+      },
+      "PromptGroupItemCreate": {
+        "properties": {
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "prompt_id": {
+            "type": "string",
+            "title": "Prompt Id"
+          },
+          "prompt_version": {
+            "type": "integer",
+            "title": "Prompt Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "position",
+          "prompt_id",
+          "prompt_version"
+        ],
+        "title": "PromptGroupItemCreate",
+        "description": "Request body for adding a prompt+version to a group."
+      },
+      "PromptGroupScheduleCreate": {
+        "properties": {
+          "run_at": {
+            "type": "string",
+            "title": "Run At"
+          },
+          "schedule_type": {
+            "type": "string",
+            "title": "Schedule Type",
+            "default": "daily"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_at"
+        ],
+        "title": "PromptGroupScheduleCreate",
+        "description": "Request body to schedule a group execution."
+      },
+      "ReservationDetailSchema": {
+        "properties": {
+          "reservation_id": {
+            "type": "integer",
+            "title": "Reservation Id"
+          },
+          "room_id": {
+            "type": "integer",
+            "title": "Room Id"
+          },
+          "room_name": {
+            "type": "string",
+            "title": "Room Name"
+          },
+          "check_in_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Check In Date"
+          },
+          "check_out_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Check Out Date"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReservationStatus"
+          },
+          "booking_source": {
+            "$ref": "#/components/schemas/BookingSource"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reservation_id",
+          "room_id",
+          "room_name",
+          "check_in_date",
+          "check_out_date",
+          "status",
+          "booking_source"
+        ],
+        "title": "ReservationDetailSchema",
+        "description": "Detailed reservation information for guest detail view."
+      },
+      "ReservationStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "CONFIRMED",
+          "CHECKED_IN",
+          "CHECKED_OUT",
+          "CANCELLED"
+        ],
+        "title": "ReservationStatus",
+        "description": "Lifecycle statuses for reservations."
+      },
+      "SetupGuestsResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "guests": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Guests",
+            "default": []
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "SetupGuestsResponse",
+        "description": "Response from the setup-guests endpoint."
+      },
+      "ShiftRequest": {
+        "properties": {
+          "days": {
+            "type": "integer",
+            "title": "Days",
+            "description": "Number of days to shift (positive = forward, negative = backward)",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "title": "ShiftRequest",
+        "description": "Request body for shifting reservation dates."
+      },
+      "ShiftResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "shifted": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shifted"
+          },
+          "days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "before": {
+            "items": {
+              "$ref": "#/components/schemas/ShiftSampleEntry"
+            },
+            "type": "array",
+            "title": "Before",
+            "default": []
+          },
+          "after": {
+            "items": {
+              "$ref": "#/components/schemas/ShiftSampleEntry"
+            },
+            "type": "array",
+            "title": "After",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "ShiftResponse",
+        "description": "Response from the shift-reservations endpoint."
+      },
+      "ShiftSampleEntry": {
+        "properties": {
+          "check_in": {
+            "type": "string",
+            "title": "Check In"
+          },
+          "check_out": {
+            "type": "string",
+            "title": "Check Out"
+          }
+        },
+        "type": "object",
+        "required": [
+          "check_in",
+          "check_out"
+        ],
+        "title": "ShiftSampleEntry"
+      },
+      "SingleGuestValidation": {
+        "properties": {
+          "guest_id": {
+            "type": "integer",
+            "title": "Guest Id"
+          },
+          "guest_name": {
+            "type": "string",
+            "title": "Guest Name"
+          },
+          "result_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Id"
+          },
+          "is_match": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Match"
+          },
+          "valid_response": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Response"
+          },
+          "llm_reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Reasoning"
+          },
+          "ground_truth": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ground Truth"
+          },
+          "llm_response_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Response Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "guest_id",
+          "guest_name"
+        ],
+        "title": "SingleGuestValidation",
+        "description": "Validation result for a single guest-response pair."
+      },
+      "TestGuestSchema": {
+        "properties": {
+          "guest_id": {
+            "type": "integer",
+            "title": "Guest Id"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "reservation_count": {
+            "type": "integer",
+            "title": "Reservation Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "guest_id",
+          "first_name",
+          "last_name",
+          "full_name"
+        ],
+        "title": "TestGuestSchema",
+        "description": "Performance test guest information."
+      },
+      "UpdateGroupRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "items": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PromptGroupItemCreate"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "UpdateGroupRequest",
+        "description": "Request body for updating a group (name, description, items order)."
+      },
+      "UpdateIdentifierRequest": {
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "title": "Identifier"
+          }
+        },
+        "type": "object",
+        "required": [
+          "identifier"
+        ],
+        "title": "UpdateIdentifierRequest",
+        "description": "Request body for updating the identifier on a test result."
+      },
+      "UpdateIdentifierResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "default": true
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identifier"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "title": "UpdateIdentifierResponse",
+        "description": "Response from the update-identifier endpoint."
+      },
+      "UpdatePromptRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "intention": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intention"
+          },
+          "restrictions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Restrictions"
+          },
+          "output_structure": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Structure"
+          },
+          "user_prompt_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Prompt Template"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "title": "UpdatePromptRequest"
+      },
+      "UpdateValidResponseRequest": {
+        "properties": {
+          "valid_response": {
+            "type": "boolean",
+            "title": "Valid Response"
+          }
+        },
+        "type": "object",
+        "required": [
+          "valid_response"
+        ],
+        "title": "UpdateValidResponseRequest",
+        "description": "Request body for patching the valid_response flag."
+      },
+      "UpdateValidResponseResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "default": true
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "valid_response": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Response"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "title": "UpdateValidResponseResponse",
+        "description": "Response from the update-valid-response endpoint."
+      },
+      "ValidateGuestsRequest": {
+        "properties": {
+          "batch_uuid": {
+            "type": "string",
+            "title": "Batch Uuid"
+          },
+          "guest_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guest Ids"
+          },
+          "result_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch_uuid"
+        ],
+        "title": "ValidateGuestsRequest",
+        "description": "Request body for validating batch results against test guests."
+      },
+      "ValidateGuestsResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "default": true
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SingleGuestValidation"
+            },
+            "type": "array",
+            "title": "Results",
+            "default": []
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "title": "ValidateGuestsResponse",
+        "description": "Response from the validate-guests endpoint."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

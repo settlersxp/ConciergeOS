@@ -9,8 +9,6 @@ interface ChartWithLegendProps {
 }
 
 export default function ChartWithLegend({
-  title,
-  description,
   children,
   legend,
   emptyMessage,

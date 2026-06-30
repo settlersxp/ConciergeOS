@@ -1,5 +1,3 @@
-import React from "react";
-
 interface ViewModeToggleProps<T extends string> {
   modes: { key: T; label: string }[];
   activeMode: T;
