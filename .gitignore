@@ -186,4 +186,4 @@ __marimo__/
 Thumbs.db
 
 # Data files
-/app/data/audio_extracted/*.wav
+/backend/app/data/audio_extracted/*.wav
