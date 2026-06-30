@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func
+from sqlalchemy import func, cast, String
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal, get_db
@@ -793,6 +793,280 @@ async def api_validate_guests(
         return ValidateGuestsResponse(ok=False, error=str(e))
     finally:
         hotel_db.close()
+
+
+# ── Prompt Performance Analysis Endpoints ─────────────────────────────────────
+
+
+@router.get("/api/performance-testing/prompt-batches")
+async def api_get_prompt_batches(
+    prompt_id: str,
+    version: int | None = None,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Get batch-level aggregated stats for a specific prompt.
+
+    Groups individual test results by batch_uuid and returns aggregated
+    stats per batch (avg speed, accuracy, request count) along with
+    all individual request timings for scatter plot visualization.
+    """
+    query = (
+        db.query(PerformanceTestResult)
+        .filter(PerformanceTestResult.prompt_id == prompt_id,)
+    )
+    if version is not None:
+        query = query.filter(PerformanceTestResult.prompt_version == version)
+
+    rows = query.order_by(
+        PerformanceTestResult.batch_type,
+        PerformanceTestResult.batch_uuid,
+        PerformanceTestResult.request_sent_time
+    ).all()
+
+    # Get prompt name
+    prompt_name = f"prompt_{prompt_id}"
+    pv = (
+        db.query(PromptVersion)
+        .filter(
+            PromptVersion.prompt_id == prompt_id,
+            PromptVersion.version == version,
+        )
+        .first()
+    )
+    if pv:
+        prompt_name = pv.name
+
+    # Group by (batch_uuid, batch_type, model_name)
+    from collections import defaultdict
+    batches_dict: dict[tuple, list[float]] = defaultdict(list)
+    batch_meta: dict[tuple, dict[str, Any]] = {}
+
+    for r in rows:
+        elapsed = 0.0
+        if r.response_received_time and r.request_sent_time:
+            try:
+                sent = datetime.fromisoformat(r.request_sent_time)
+                received = datetime.fromisoformat(r.response_received_time)
+                elapsed = (received - sent).total_seconds()
+            except (ValueError, TypeError):
+                elapsed = 0.0
+
+        key = (r.batch_uuid, r.batch_type, r.model_name)
+        batches_dict[key].append(elapsed)
+
+        if key not in batch_meta:
+            batch_meta[key] = {
+                "batch_uuid": r.batch_uuid,
+                "batch_type": r.batch_type,
+                "model_name": r.model_name,
+                "vllm_version": r.vllm_version,
+                "thinking_enabled": r.thinking_enabled,
+                "friendly_name": r.friendly_name,
+                "valid_count": 0,
+                "total_count": 0,
+            }
+        batch_meta[key]["total_count"] += 1
+        if r.valid_response is True:
+            batch_meta[key]["valid_count"] += 1
+
+    batch_list = []
+    for key, timings in batches_dict.items():
+        meta = batch_meta[key]
+        avg_speed = sum(timings) / len(timings)
+        accuracy = (meta["valid_count"] / meta["total_count"] * 100) if meta["total_count"] > 0 else 0.0
+
+        batch_list.append({
+            "batch_uuid": meta["batch_uuid"],
+            "batch_type": meta["batch_type"],
+            "model_name": meta["model_name"],
+            "vllm_version": meta["vllm_version"],
+            "thinking_enabled": meta["thinking_enabled"],
+            "friendly_name": meta["friendly_name"],
+            "avg_speed_seconds": round(avg_speed, 3),
+            "accuracy_pct": round(accuracy, 1),
+            "total_requests": meta["total_count"],
+            "min_speed_seconds": round(min(timings), 3),
+            "max_speed_seconds": round(max(timings), 3),
+            "individual_timings": [round(t, 3) for t in timings],
+        })
+
+    # Overall stats across all batches
+    all_timings = [t for timings in batches_dict.values() for t in timings]
+    overall_avg = sum(all_timings) / len(all_timings) if all_timings else 0.0
+    total_valid = sum(m["valid_count"] for m in batch_meta.values())
+    total_req = sum(m["total_count"] for m in batch_meta.values())
+    overall_accuracy = (total_valid / total_req * 100) if total_req > 0 else 0.0
+
+    return {
+        "prompt_id": prompt_id,
+        "prompt_version": version,
+        "prompt_name": prompt_name,
+        "batches": batch_list,
+        "overall_avg_speed": round(overall_avg, 3),
+        "overall_accuracy": round(overall_accuracy, 1),
+        "total_batches": len(batch_list),
+        "total_requests": total_req,
+    }
+
+
+@router.get("/api/performance-testing/prompt-stats")
+async def api_get_prompt_stats(
+    db: Session = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Get aggregated performance stats grouped by prompt_id and prompt_version.
+    
+    Returns an overview of all prompts with their aggregated performance metrics
+    including average speed, accuracy, and total runs/requests.
+    """
+    rows = (
+        db.query(PerformanceTestResult)
+        .filter(
+            PerformanceTestResult.prompt_id.isnot(None),
+            PerformanceTestResult.prompt_id != ""
+        )
+        .order_by(PerformanceTestResult.prompt_id, PerformanceTestResult.prompt_version, PerformanceTestResult.batch_type)
+        .all()
+    )
+    
+    # Group by (prompt_id, prompt_version, model_name, batch_type)
+    from collections import defaultdict
+    groups: dict[tuple, list[dict[str, Any]]] = defaultdict(list)
+    
+    for r in rows:
+        elapsed = 0.0
+        if r.response_received_time and r.request_sent_time:
+            try:
+                sent = datetime.fromisoformat(r.request_sent_time)
+                received = datetime.fromisoformat(r.response_received_time)
+                elapsed = (received - sent).total_seconds()
+            except (ValueError, TypeError):
+                elapsed = 0.0
+        groups[(r.prompt_id, r.prompt_version, r.model_name, r.batch_type)].append({
+            "elapsed": elapsed,
+            "valid": r.valid_response,
+        })
+    
+    stats = []
+    for (prompt_id, prompt_version, model_name, batch_type), entries in groups.items():
+        avg_speed = sum(e["elapsed"] for e in entries) / len(entries)
+        valid_count = sum(1 for e in entries if e["valid"] is True)
+        accuracy = valid_count / len(entries) * 100
+        
+        # Get prompt name from PromptVersion table
+        prompt_name = f"prompt_{prompt_id}"
+        if prompt_version is not None:
+            pv = (
+                db.query(PromptVersion)
+                .filter(
+                    PromptVersion.prompt_id == prompt_id,
+                    PromptVersion.version == prompt_version,
+                )
+                .first()
+            )
+            if pv:
+                prompt_name = pv.name
+        
+        stats.append({
+            "prompt_id": prompt_id,
+            "prompt_version": prompt_version,
+            "prompt_name": prompt_name,
+            "model_name": model_name,
+            "batch_type": batch_type,
+            "avg_speed_seconds": round(avg_speed, 3),
+            "accuracy_pct": round(accuracy, 1),
+            "total_runs": len(entries),
+            "total_requests": len(entries),
+        })
+    
+    return stats
+
+
+@router.get("/api/performance-testing/prompt-detail")
+async def api_get_prompt_detail(
+    prompt_id: str,
+    version: int | None = None,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Get detailed run information for a specific prompt.
+    
+    Returns all individual runs for a given prompt_id and version,
+    including timing, validity, and batch information.
+    """
+    query = (
+        db.query(PerformanceTestResult)
+        .filter(
+            PerformanceTestResult.prompt_id == prompt_id,
+        )
+    )
+    if version is not None:
+        query = query.filter(PerformanceTestResult.prompt_version == version)
+    
+    rows = query.order_by(
+        PerformanceTestResult.batch_type,
+        PerformanceTestResult.request_sent_time
+    ).all()
+    
+    # Get prompt name
+    prompt_name = f"prompt_{prompt_id}"
+    pv = (
+        db.query(PromptVersion)
+        .filter(
+            PromptVersion.prompt_id == prompt_id,
+            PromptVersion.version == version,
+        )
+        .first()
+    )
+    if pv:
+        prompt_name = pv.name
+    
+    runs = []
+    for r in rows:
+        elapsed = 0.0
+        if r.response_received_time and r.request_sent_time:
+            try:
+                sent = datetime.fromisoformat(r.request_sent_time)
+                received = datetime.fromisoformat(r.response_received_time)
+                elapsed = (received - sent).total_seconds()
+            except (ValueError, TypeError):
+                elapsed = 0.0
+        
+        runs.append({
+            "batch_uuid": r.batch_uuid,
+            "friendly_name": r.friendly_name,
+            "batch_type": r.batch_type,
+            "model_name": r.model_name,
+            "vllm_version": r.vllm_version,
+            "thinking_enabled": r.thinking_enabled,
+            "request_sent_time": r.request_sent_time,
+            "response_received_time": r.response_received_time,
+            "elapsed": round(elapsed, 3),
+            "valid_response": r.valid_response,
+            "response_length": r.response_length,
+            "json_malformed": r.json_malformed,
+            "request_index": r.request_index,
+        })
+    
+    # Calculate aggregated stats
+    if runs:
+        avg_speed = sum(r["elapsed"] for r in runs) / len(runs)
+        valid_count = sum(1 for r in runs if r["valid_response"] is True)
+        accuracy = valid_count / len(runs) * 100
+    else:
+        avg_speed = 0.0
+        accuracy = 0.0
+    
+    return {
+        "prompt_id": prompt_id,
+        "prompt_version": version,
+        "prompt_name": prompt_name,
+        "model_name": runs[0]["model_name"] if runs else None,
+        "batch_type": runs[0]["batch_type"] if runs else None,
+        "avg_speed_seconds": round(avg_speed, 3),
+        "accuracy_pct": round(accuracy, 1),
+        "total_runs": len(runs),
+        "total_requests": len(runs),
+        "runs": runs,
+    }
 
 
 # ── Identifier Endpoints ──────────────────────────────────────────────────────
