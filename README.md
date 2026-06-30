@@ -34,7 +34,7 @@ ConciergeOS is a complete hotel management solution that combines:
 ### Guest Search
 - **Tool Calling Mode** — LLM invokes read-only database query tools on demand
 - **Data Prompting Mode** — All data embedded in prompt (CSV/JSON/XML) for benchmarking
-- Multilingual name support across 8 writing systems
+- Multilingual name support
 
 ### Performance Testing
 - Sequential and concurrent batch testing
@@ -45,15 +45,6 @@ ConciergeOS is a complete hotel management solution that combines:
 ## 🚀 Quick Start
 
 For detailed step-by-step instructions, see the [Quick Start Guide](QUICKSTART.md).
-
-**TL;DR:**
-```bash
-uv sync && cd backend && uv run alembic upgrade head
-uv run python Generator/generate_names.py && uv run python Generator/populate_rooms.py
-uv run python Generator/populate_reservations.py
-```
-
-Then start the backend (`uv run uvicorn app.main:app --reload`) and frontend (`cd ../frontend && npm run dev`).
 
 ## 📁 Project Structure
 
@@ -74,66 +65,15 @@ ConciergeOS/
 
 ## 📖 Documentation
 
-| Document | Description |
-|----------|-------------|
-| [Guest Search Multimodal](docs/IMPLEMENTATION_GUEST_SEARCH_MULTIMODAL.md) | Guest search implementation details |
-| [Performance Dashboard](docs/IMPLEMENTATION_PERFORMANCE_DASHBOARD.md) | Performance testing dashboard |
-| [Prompting System](docs/IMPLEMENTATION_PROMPTING_SYSTEM.md) | Prompt versioning and chain execution |
-| [Database Population](backend/Generator/DATABASE_POPULATION.md) | Complete database setup & wrapper scripts guide |
+For a complete list of documentation, see [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md).
 
 ## 🛠️ Development
 
-For detailed development instructions, see the component-specific guides:
-
-| Guide | Description |
-|-------|-------------|
-| [Backend Development](backend/DEVELOPMENT.md) | Server setup, migrations, data generation scripts |
-| [Frontend Development](frontend/DEVELOPMENT.md) | React app, components, build process |
-
-## 🔌 API Documentation
-
-ConciergeOS uses FastAPI's built-in OpenAPI 3.1 support for auto-generated API documentation.
-
-### Interactive Docs
-
-When the backend is running, access:
-
-| Format | URL | Description |
-|--------|-----|-------------|
-| Swagger UI | `http://localhost:8000/docs` | Interactive OpenAPI docs with try-it-out |
-| ReDoc | `http://localhost:8000/redoc` | Alternate OpenAPI documentation |
-| OpenAPI JSON | `http://localhost:8000/openapi.json` | Raw OpenAPI 3.1.0 specification |
-
-### Export OpenAPI Spec
-
-Generate the OpenAPI specification file using UV:
-
-```bash
-# Export to default location (backend/openapi.json)
-uv run python backend/export_openapi.py
-
-# Export to custom location
-uv run python backend/export_openapi.py docs/openapi.json
-```
-
-### Available Endpoints
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/reservations` | Reservations grouped by room with error detection |
-| POST | `/api/reservations/shift` | Shift all reservation dates forward/backward |
-| POST | `/api/guest-search` | AI-powered natural language guest search |
-| POST | `/api/guest-search/extract-name` | Extract guest name from image/audio |
-| GET | `/api/settings` | Get current application configuration |
-| POST | `/api/settings` | Update application configuration |
-| GET | `/api/models` | Get available LLM models |
-| POST | `/api/performance-testing` | Run performance benchmarks |
-| GET | `/api/performance-testing/results` | Get latest test results |
-| GET | `/api/performance-testing/stats` | Get aggregated performance stats |
-| POST | `/api/prompts/ai-improve` | LLM-assisted prompt improvement |
-| GET | `/api/prompts` | List all prompts |
-
-See the interactive Swagger UI for the complete endpoint reference with request/response schemas.
+| Component | Guide | Description |
+|-----------|-------|-------------|
+| Backend | [backend/README.md](backend/README.md) | Overview, quick start, project structure |
+| Backend | [backend/DEVELOPMENT.md](backend/DEVELOPMENT.md) | Server setup, migrations, data generation scripts |
+| Frontend | [frontend/DEVELOPMENT.md](frontend/DEVELOPMENT.md) | React app, components, build process |
 
 ## 📄 License
 
