@@ -156,6 +156,7 @@ class PromptVersionSchema(BaseModel):
     output_structure: str
     user_prompt_template: str
     is_default: bool
+    model_id: int | None = None
     metadata: dict | None = None
     created_at: str
     updated_at: str
@@ -180,6 +181,7 @@ class CreatePromptRequest(BaseModel):
     restrictions: str
     output_structure: str
     user_prompt_template: str
+    model_id: int | None = None
     metadata: dict | None = None
 
 
@@ -191,6 +193,7 @@ class UpdatePromptRequest(BaseModel):
     restrictions: str | None = None
     output_structure: str | None = None
     user_prompt_template: str | None = None
+    model_id: int | None = None
     metadata: dict | None = None
 
 
@@ -204,6 +207,73 @@ class SetDefaultRequest(BaseModel):
     """Request body for setting the default prompt version."""
 
     version: int
+
+
+# ---------------------------------------------------------------------------
+# LLM Model management schemas
+# ---------------------------------------------------------------------------
+
+class LLMModelSchema(BaseModel):
+    """Output schema for a single LLM model."""
+
+    model_id: int
+    name: str
+    endpoint: str
+    models_endpoint: str
+    model_name: str
+    model_type: str | None = None
+    vllm_version: str | None = None
+    thinking_enabled: bool = False
+    created_at: str
+    updated_at: str
+
+    model_config = {"from_attributes": True}
+
+
+class CreateModelRequest(BaseModel):
+    """Request body for creating a new LLM model."""
+
+    name: str = Field(..., description="Friendly display name for the model")
+    endpoint: str = Field(..., description="Base URL of the OpenAI-compatible endpoint")
+    models_endpoint: str = Field(default="", description="Models endpoint URL (e.g., /v1/models)")
+    model_name: str = Field(..., description="Actual model ID (e.g., facebook/opt-125m)")
+    model_type: str | None = Field(
+        default=None,
+        description="Capability tag: 'text', 'image_audio', or 'general'"
+    )
+    vllm_version: str | None = Field(default=None, description="vLLM version string")
+    thinking_enabled: bool = Field(default=False, description="Whether the model supports thinking mode")
+
+
+class UpdateModelRequest(BaseModel):
+    """Request body for updating an existing LLM model."""
+
+    name: str | None = None
+    endpoint: str | None = None
+    models_endpoint: str | None = None
+    model_name: str | None = None
+    model_type: str | None = None
+    vllm_version: str | None = None
+    thinking_enabled: bool | None = None
+
+
+class DeleteModelResponse(BaseModel):
+    """Response from the delete model endpoint."""
+
+    ok: bool = True
+    model_id: int | None = None
+    message: str | None = None
+    error: str | None = None
+
+
+class ModelInfoResponse(BaseModel):
+    """Response from fetching live model info from the endpoint."""
+
+    ok: bool = True
+    model_name: str | None = None
+    vllm_version: str | None = None
+    thinking_enabled: bool | None = None
+    error: str | None = None
 
 
 # ---------------------------------------------------------------------------

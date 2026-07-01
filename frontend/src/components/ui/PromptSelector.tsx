@@ -1,9 +1,12 @@
+import { useEffect, useState } from "react";
+import { modelsApi } from "../../services/api";
 import usePromptData from "../../hooks/usePromptData";
+import type { LLMModel } from "../../types";
 import PromptSettingsPanel from "./PromptSettingsPanel";
 
 interface PromptSelectorProps {
-  value?: { prompt_id: string; version?: number };
-  onChange: (value: { prompt_id: string; version?: number }) => void;
+  value?: { prompt_id: string; version?: number; model_id?: number | null };
+  onChange: (value: { prompt_id: string; version?: number; model_id?: number | null }) => void;
   onUserPromptChange?: (userPrompt: string) => void;
   label?: string;
   showPreview?: boolean;
@@ -18,6 +21,12 @@ export default function PromptSelector({
   showPreview,
   refetchRef,
 }: PromptSelectorProps) {
+  const [models, setModels] = useState<LLMModel[]>([]);
+
+  useEffect(() => {
+    modelsApi.getAll().then(setModels).catch(() => {});
+  }, []);
+
   const {
     allPrompts,
     versions,
@@ -32,8 +41,17 @@ export default function PromptSelector({
     value?.prompt_id ?? "",
     value?.version,
     onChange,
-    { showPreview, onUserPromptChange, refetchRef }
+    { showPreview, onUserPromptChange, refetchRef, pendingModel: value?.model_id }
   );
+
+  // Use value?.model_id (user's explicit selection from ModelManager) when present,
+  // otherwise fall back to the version's stored model_id (which the hook already respects via pendingModel).
+  const currentVersion = versions.find(v => v.version === selectedVersion);
+  const modelId = value?.model_id ?? (currentVersion?.model_id ?? null);
+
+  const handleModelChange = (newModelId: number | null) => {
+    onChange({ prompt_id: selectedPromptId, version: selectedVersion, model_id: newModelId });
+  };
 
   return (
     <PromptSettingsPanel
@@ -48,6 +66,9 @@ export default function PromptSelector({
       label={label}
       onPromptIdChange={handlePromptIdChange}
       onVersionChange={handleVersionChange}
+      models={models}
+      modelId={modelId}
+      onModelChange={handleModelChange}
     />
   );
 }

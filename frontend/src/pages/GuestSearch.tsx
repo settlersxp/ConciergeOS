@@ -153,13 +153,34 @@ export default function GuestSearch() {
   // ── Handlers: Extract name ───────────────────────────────────────────
 
   const handleExtractName = async () => {
-    // Determine which source to use
     if (mediaMode === "image" && imageFile) {
       setExtracting(true);
       try {
-        const resp = await guestSearchApi.extractName(imageFile, cropRegion ?? undefined);
-        setQuery(resp.extracted_name);
-        setToast({ message: `Name extracted from ${resp.source}: "${resp.extracted_name}"`, type: "success" });
+        const formData = new FormData();
+        formData.append('file', imageFile);
+        if (cropRegion) {
+          formData.append('crop_x', String(cropRegion.x));
+          formData.append('crop_y', String(cropRegion.y));
+          formData.append('crop_w', String(cropRegion.width));
+          formData.append('crop_h', String(cropRegion.height));
+        }
+        if (selectedPrompt.model_id) {
+          formData.append('model_id', String(selectedPrompt.model_id));
+        }
+
+        const resp = await fetch('/api/guest-search/extract-name', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!resp.ok) {
+          const body = await resp.text().catch(() => '');
+          throw new Error(resp.statusText + (body ? `: ${body}` : ''));
+        }
+
+        const data = await resp.json() as { extracted_name: string; source: string; model_id?: number };
+        setQuery(data.extracted_name);
+        setToast({ message: `Name extracted from ${data.source}: "${data.extracted_name}"`, type: "success" });
       } catch (e: unknown) {
         setToast({ message: e instanceof Error ? e.message : "Extraction failed", type: "error" });
       } finally {
@@ -168,9 +189,25 @@ export default function GuestSearch() {
     } else if (mediaMode === "audio" && audioFile) {
       setExtracting(true);
       try {
-        const resp = await guestSearchApi.extractName(audioFile);
-        setQuery(resp.extracted_name);
-        setToast({ message: `Name extracted from ${resp.source}: "${resp.extracted_name}"`, type: "success" });
+        const formData = new FormData();
+        formData.append('file', audioFile);
+        if (selectedPrompt.model_id) {
+          formData.append('model_id', String(selectedPrompt.model_id));
+        }
+
+        const resp = await fetch('/api/guest-search/extract-name', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!resp.ok) {
+          const body = await resp.text().catch(() => '');
+          throw new Error(resp.statusText + (body ? `: ${body}` : ''));
+        }
+
+        const data = await resp.json() as { extracted_name: string; source: string; model_id?: number };
+        setQuery(data.extracted_name);
+        setToast({ message: `Name extracted from ${data.source}: "${data.extracted_name}"`, type: "success" });
       } catch (e: unknown) {
         setToast({ message: e instanceof Error ? e.message : "Extraction failed", type: "error" });
       } finally {

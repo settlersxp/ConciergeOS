@@ -14,7 +14,7 @@ import logging
 import threading
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 import httpx
 from openai import OpenAI
@@ -23,8 +23,11 @@ from app.services import tool_logic
 from pydantic import BaseModel, Field, create_model
 
 from app.db import SessionLocal, engine
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 from app.models import Guest, Reservation, Room
 from app.config import config_manager
+from app.utils.endpoints import strip_to_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -286,7 +289,7 @@ def _get_base_client() -> tuple[OpenAI, str]:
     TCP connections are reused across all concurrent requests.
     """
     models_endpoint = config_manager.test_settings.models_endpoint
-    base_url = models_endpoint.rstrip('/').replace('/models', '')
+    base_url = strip_to_base_url(models_endpoint)
 
     # Reuse the existing shared httpx.Client
     shared_client = _get_shared_http_client()
@@ -296,6 +299,29 @@ def _get_base_client() -> tuple[OpenAI, str]:
         api_key="none",
     )
     return client, base_url
+
+
+def _build_client_from_model(model: Any) -> tuple[OpenAI, str]:
+    """Build an OpenAI client pointed at a model's endpoint using shared transport.
+
+    Parameters
+    ----------
+    model : Any
+        An ORM instance with at least ``endpoint`` and ``model_name`` fields.
+
+    Returns
+    -------
+    tuple[OpenAI, str]
+        An OpenAI client and the resolved model name.
+    """
+    base_url = strip_to_base_url(model.endpoint)
+    shared_client = _get_shared_http_client()
+    client = OpenAI(
+        http_client=shared_client,  # type: ignore[arg-type]
+        base_url=base_url,
+        api_key="none",
+    )
+    return client, model.model_name
 
 
 def get_llm_config() -> tuple[OpenAI, str]:
@@ -338,6 +364,103 @@ def get_available_models() -> list[LLMModelInfo]:
     except Exception as e:
         logger.warning("Failed to fetch available models: %s", e)
         return []
+
+
+# ---------------------------------------------------------------------------
+# DB-based model lookup (replaces config-based model selection)
+# ---------------------------------------------------------------------------
+
+def get_llm_config_by_model_id(model_id: int | None) -> tuple[OpenAI, str]:
+    """Resolve model config from the LLMModels table.
+
+    Parameters
+    ----------
+    model_id : int or None
+        The LLMModel.model_id to look up.  If ``None`` or if the model
+        cannot be found, falls back to ``get_llm_config()``.
+
+    Returns
+    -------
+    tuple[OpenAI, str]
+        An OpenAI client and the resolved model name.
+    """
+    if model_id is None:
+        return get_llm_config()
+
+    from app.db import SessionLocal
+    from app.models import LLMModel
+
+    db = SessionLocal()
+    try:
+        model = db.query(LLMModel).filter(LLMModel.model_id == model_id).first()
+        if model is None:
+            logger.warning("LLMModel %s not found, falling back to default config", model_id)
+            return get_llm_config()
+
+        client, model_name = _build_client_from_model(model)
+        return client, model_name
+    except Exception as e:
+        logger.warning("Failed to resolve model %s from DB: %s. Falling back.", model_id, e)
+        return get_llm_config()
+    finally:
+        db.close()
+
+
+def resolve_prompt_model(
+    db: "Session",
+    prompt_id: str,
+    version: int | None,
+) -> tuple[str | None, int | None]:
+    """Resolve (model_name, model_id) for a prompt version.
+
+    Returns (None, None) if no model is assigned or prompt not found.
+    """
+    from app.models import PromptVersion as PV
+
+    pv = (
+        db.query(PV)
+        .filter(
+            PV.prompt_id == prompt_id,
+            PV.version == version,
+        )
+        .first()
+    )
+    if pv and pv.model_id:
+        _, model_name = get_llm_config_by_model_id(pv.model_id)
+        return model_name, pv.model_id
+    return None, None
+
+
+def get_llm_config_by_name(name: str) -> tuple[OpenAI, str]:
+    """Resolve model config by the model's friendly name.
+
+    Parameters
+    ----------
+    name : str
+        The LLMModel.name to look up.
+
+    Returns
+    -------
+    tuple[OpenAI, str]
+        An OpenAI client and the resolved model name.
+    """
+    from app.db import SessionLocal
+    from app.models import LLMModel
+
+    db = SessionLocal()
+    try:
+        model = db.query(LLMModel).filter(LLMModel.name == name).first()
+        if model is None:
+            logger.warning("LLMModel '%s' not found, falling back to default config", name)
+            return get_llm_config()
+
+        client, model_name = _build_client_from_model(model)
+        return client, model_name
+    except Exception as e:
+        logger.warning("Failed to resolve model '%s' from DB: %s. Falling back.", name, e)
+        return get_llm_config()
+    finally:
+        db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -595,15 +718,16 @@ def query_guest_with_llm(
     The system prompt is composed from: intention + restrictions + output_structure
     The user message is composed from: user_prompt_template with {customer_name} replaced.
 
+    The LLM client is resolved based on the prompt's model_id. If the prompt version
+    has a model_id, that specific model is used. Otherwise, falls back to the first
+    configured model in the database.
+
     Uses lazy import to avoid circular import with tool_calling module.
 
     Returns:
         A tuple of (llm_response, was_cached) where was_cached is True if the
         response was served from the cache.
     """
-    # Use response_cache wrapper for diagnostic logging and caching support.
-    # This captures finish_reason, token usage, truncation warnings, and response checksums.
-    # To enable: ensure response_cache.py log_level is set appropriately (INFO or DEBUG)
     from app.services.prompts import PromptStore
     from app.services.response_cache import call_llm_with_db_tools_with_cache_flag
 
@@ -658,10 +782,31 @@ def query_guest_with_llm(
             f"Retry once with every translated language if needed. "
             f"Also bring the information about its reservations. : {customer_name}"
         )
+
+    # Resolve model from the prompt version
+    model_name = None
+    db = SessionLocal()
+    try:
+        model_name, _ = resolve_prompt_model(db, prompt_id, version)
+        if model_name:
+            logger.info(
+                "query_guest_with_llm resolved model '%s' from prompt '%s' v%d",
+                model_name, prompt_id, version or 'default',
+            )
+        else:
+            logger.info(
+                "query_guest_with_llm using default model (no model_id on prompt '%s' v%d)",
+                prompt_id, version or 'default',
+            )
+    except Exception as e:
+        logger.warning("Failed to resolve model for prompt '%s' v%d: %s", prompt_id, version, e)
+    finally:
+        db.close()
     
     try:
         result, was_cached = call_llm_with_db_tools_with_cache_flag(
             user_prompt,
+            model=model_name,
             system_prompt=final_system,
         )
         

@@ -43,6 +43,49 @@ export interface GuestSearchResponse {
   cached?: boolean;
 }
 
+/** LLM Model Management */
+
+export type ModelType = "text" | "image_audio" | "general";
+
+export interface LLMModel {
+  model_id: number;
+  name: string;
+  endpoint: string;
+  models_endpoint: string;
+  model_name: string;
+  model_type: ModelType;
+  vllm_version: string | null;
+  thinking_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateModelRequest {
+  name: string;
+  endpoint: string;
+  models_endpoint: string;
+  model_name: string;
+  model_type?: ModelType;
+  vllm_version?: string;
+  thinking_enabled?: boolean;
+}
+
+export interface UpdateModelRequest {
+  name?: string;
+  endpoint?: string;
+  models_endpoint?: string;
+  model_name?: string;
+  model_type?: ModelType;
+  vllm_version?: string;
+  thinking_enabled?: boolean;
+}
+
+export interface ModelInfoResponse {
+  model_name: string;
+  vllm_version: string;
+  thinking_enabled: boolean;
+}
+
 /** Settings — matches app/config.py TestSettings dataclass */
 
 export interface TestSettings {

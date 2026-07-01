@@ -1,8 +1,8 @@
 {
     "test_settings": {
         "models_endpoint": "http://10.0.0.227:8000/v1/models",
-        "model_name": "google/gemma-4-26B-A4B-it",
-        "vllm_version": "v0.23.0",
+        "model_name": "deepreinforce-ai/Ornith-1.0-35B-FP8",
+        "vllm_version": "unknown",
         "thinking_enabled": true,
         "expected_format": "text"
     }

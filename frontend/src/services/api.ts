@@ -3,6 +3,10 @@ import type {
   Batch,
   GuestDetail,
   GuestSearchResponse,
+  LLMModel,
+  CreateModelRequest,
+  UpdateModelRequest,
+  ModelInfoResponse,
   ModelsApiResponse,
   PerformanceStats,
   PerformanceTestRequest,
@@ -54,6 +58,7 @@ export interface GuestSearchOptions {
 export interface NameExtractionResponse {
   extracted_name: string;
   source: 'image' | 'audio';
+  model_id?: number;
 }
 
 export interface CropRegion {
@@ -108,6 +113,38 @@ export const guestSearchApi = {
 };
 
 // ── Settings ────────────────────────────────────────────────────────────────
+
+// ── LLM Model Management ────────────────────────────────────────────────────
+
+export const modelsApi = {
+  getAll: () => request<LLMModel[]>('/api/models'),
+
+  getById: (modelId: number) =>
+    request<LLMModel>(`/api/models/${modelId}`),
+
+  create: (payload: CreateModelRequest) =>
+    request<LLMModel>('/api/models', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  update: (modelId: number, payload: UpdateModelRequest) =>
+    request<LLMModel>(`/api/models/${modelId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+
+  delete: (modelId: number) =>
+    request<{ ok: boolean }>(`/api/models/${modelId}`, {
+      method: 'DELETE',
+    }),
+
+  fetchInfo: (modelsEndpoint: string) =>
+    request<ModelInfoResponse>('/api/models/fetch-info', {
+      method: 'POST',
+      body: JSON.stringify({ models_endpoint: modelsEndpoint }),
+    }),
+};
 
 export const settingsApi = {
   get: () => request<AppSettings>('/api/settings'),

@@ -38,6 +38,7 @@ class CreatePromptRequest(BaseModel):
     restrictions: str
     output_structure: str
     user_prompt_template: str
+    model_id: int | None = None
     metadata: dict | None = None
 
 
@@ -47,6 +48,7 @@ class UpdatePromptRequest(BaseModel):
     restrictions: str | None = None
     output_structure: str | None = None
     user_prompt_template: str | None = None
+    model_id: int | None = None
     metadata: dict | None = None
 
 
@@ -94,6 +96,7 @@ def _prompt_to_schema(pv: Any) -> dict[str, Any]:
         "output_structure": pv.output_structure,
         "user_prompt_template": pv.user_prompt_template,
         "is_default": pv.is_default,
+        "model_id": pv.model_id,
         "metadata": meta,
         "created_at": pv.created_at.isoformat() if pv.created_at else None,
         "updated_at": pv.updated_at.isoformat() if pv.updated_at else None,
@@ -341,6 +344,8 @@ async def list_versions(prompt_id: str):
 @router.post("/{prompt_id}")
 async def create_version(prompt_id: str, body: CreatePromptRequest):
     """Create a new version (auto-increments if prompt_id exists)."""
+    from app.db import SessionLocal
+    from app.models import PromptVersion
     from app.services.prompts import PromptStore
     store = PromptStore()
     try:
@@ -357,6 +362,18 @@ async def create_version(prompt_id: str, body: CreatePromptRequest):
             user_prompt_template=body.user_prompt_template,
             metadata_dict=body.metadata,
         )
+        # Set model_id after creation (create_prompt doesn't accept it)
+        if body.model_id is not None:
+            db_session = SessionLocal()
+            try:
+                pv = db_session.query(PromptVersion).filter_by(
+                    prompt_id=prompt_id, version=prompt.version
+                ).first()
+                if pv:
+                    pv.model_id = body.model_id
+                    db_session.commit()
+            finally:
+                db_session.close()
         return _prompt_to_schema(prompt)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
@@ -381,6 +398,20 @@ async def update_version(prompt_id: str, version: int, body: UpdatePromptRequest
             user_prompt_template=body.user_prompt_template,
             metadata_dict=body.metadata,
         )
+        # Update model_id if provided
+        if body.model_id is not None:
+            from app.db import SessionLocal
+            from app.models import PromptVersion
+            db_session = SessionLocal()
+            try:
+                pv = db_session.query(PromptVersion).filter_by(
+                    prompt_id=prompt_id, version=version
+                ).first()
+                if pv:
+                    pv.model_id = body.model_id
+                    db_session.commit()
+            finally:
+                db_session.close()
         return _prompt_to_schema(prompt)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

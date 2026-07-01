@@ -33,8 +33,8 @@ async def api_update_settings(body: dict[str, Any]) -> JSONResponse:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-@router.get("/api/models")
-async def api_get_models() -> JSONResponse:
+@router.get("/api/settings/models-info")
+async def api_get_models_info() -> JSONResponse:
     """Proxy request to the configured vLLM models endpoint."""
     models_endpoint = config_manager.test_settings.models_endpoint
     try:

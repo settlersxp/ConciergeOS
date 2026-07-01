@@ -32,3 +32,4 @@ export { default as GroupedDataTable } from "./GroupedDataTable";
 export { default as ChartWithLegend } from "./ChartWithLegend";
 export { default as useSelectionState } from "./useSelectionState";
 export { default as PromptSettingsPanel } from "./PromptSettingsPanel";
+export { default as ModelManager } from "./ModelManager";

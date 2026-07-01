@@ -1,208 +1,146 @@
-import { useEffect, useRef, useState } from 'react';
-import { useSettings } from '../context/SettingsContext';
-import type { AppSettings, TestSettings } from '../types';
-import { PageHeader, Card, FormField, Input, Select, Button, Toast } from '../components/ui';
+import { useEffect, useState } from 'react';
+import { modelsApi } from '../services/api';
+import type { LLMModel } from '../types';
+import { PageHeader, Card, Button, Toast } from '../components/ui';
+import ModelManager from '../components/ui/ModelManager';
 
 export default function Settings() {
-  const {
-    modelsEndpoint,
-    modelName,
-    vllmVersion,
-    thinkingEnabled,
-    expectedFormat,
-    saveSettings,
-  } = useSettings();
-
-  // Local edit state (may differ from saved until user clicks Save)
-  const [editEndpoint, setEditEndpoint] = useState(modelsEndpoint);
-  const [editModelName, setEditModelName] = useState(modelName);
-  const [editVllmVersion, setEditVllmVersion] = useState(vllmVersion);
-  const [editThinkingEnabled, setEditThinkingEnabled] = useState(thinkingEnabled);
-  const [editExpectedFormat, setEditExpectedFormat] = useState(expectedFormat);
-
-  // Sync local edit state when context changes (e.g., after save from another page)
-  useEffect(() => {
-    setEditEndpoint(modelsEndpoint);
-    setEditModelName(modelName);
-    setEditVllmVersion(vllmVersion);
-    setEditThinkingEnabled(thinkingEnabled);
-    setEditExpectedFormat(expectedFormat);
-  }, [modelsEndpoint, modelName, vllmVersion, thinkingEnabled, expectedFormat]);
-
-  // UI state
-  const [saving, setSaving] = useState(false);
-  const [fetching, setFetching] = useState(false);
-  const [fetchStatus, setFetchStatus] = useState('');
+  const [models, setModels] = useState<LLMModel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingModel, setEditingModel] = useState<LLMModel | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  const handleSave = async () => {
-    setSaving(true);
-    const payload: AppSettings = {
-      test_settings: {
-        models_endpoint: editEndpoint,
-        model_name: editModelName,
-        vllm_version: editVllmVersion,
-        thinking_enabled: editThinkingEnabled,
-        expected_format: editExpectedFormat,
-      } satisfies TestSettings,
-    };
+  useEffect(() => {
+    loadModels();
+  }, []);
 
+  const loadModels = async () => {
+    setLoading(true);
     try {
-      await saveSettings(payload);
-      setToast({ message: 'Settings saved successfully', type: 'success' });
-    } catch (err: unknown) {
-      setToast({ message: err instanceof Error ? err.message : 'Failed to save settings', type: 'error' });
+      console.log('[Settings] Fetching models from /api/models...');
+      const data = await modelsApi.getAll();
+      console.log('[Settings] Received models response:', data);
+      console.log('[Settings] Response is array:', Array.isArray(data), 'length:', Array.isArray(data) ? data.length : 'N/A');
+      setModels(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('[Settings] Failed to load models:', err);
+      setModels([]);
+      setToast({ message: err instanceof Error ? err.message : 'Failed to load models', type: 'error' });
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   };
 
-  const modelsEndpointRef = useRef<HTMLInputElement>(null);
+  const handleAdd = () => {
+    setEditingModel(null);
+    setModalOpen(true);
+  };
 
-  const handleFetchModelInfo = async () => {
-    setFetching(true);
-    setFetchStatus('Connecting to models endpoint...');
+  const handleEdit = (model: LLMModel) => {
+    setEditingModel(model);
+    setModalOpen(true);
+  };
 
+  const handleDelete = async (modelId: number) => {
+    if (!confirm('Delete this model?')) return;
     try {
-      const endpoint = modelsEndpointRef.current?.value?.trim() ?? '';
-
-      const resp = await fetch(endpoint);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      const models = data.data ?? [];
-      if (!models.length) throw new Error('No models found');
-
-      const m = models[0];
-      setEditModelName(m.id ?? m.model ?? 'unknown');
-
-      let version = m.vllm_version ?? '';
-      if (!version && m.extra && typeof m.extra === 'object') {
-        version = m.extra.vllm_version ?? 'unknown';
-      }
-      setEditVllmVersion(version || 'unknown');
-
-      let thinking = false;
-      if (m.capabilities && typeof m.capabilities === 'object') {
-        thinking = m.capabilities.thinking ?? false;
-      }
-      const mtype = String(m.type ?? '');
-      if (mtype.toLowerCase().includes('thinking')) thinking = true;
-      setEditThinkingEnabled(thinking);
-
-      setFetchStatus('✓ Model info fetched successfully');
-      setTimeout(() => setFetchStatus(''), 3000);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setFetchStatus('✗ Failed: ' + msg);
-      setTimeout(() => setFetchStatus(''), 5000);
-    } finally {
-      setFetching(false);
+      await modelsApi.delete(modelId);
+      await loadModels();
+      setToast({ message: 'Model deleted', type: 'success' });
+    } catch (err) {
+      setToast({ message: err instanceof Error ? err.message : 'Delete failed', type: 'error' });
     }
   };
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
+    <div className="mx-auto max-w-5xl px-4 py-8">
       <PageHeader
-        title="Model Settings"
-        description="Configure global LLM parameters for the application and performance testing."
+        title="LLM Models"
+        description="Manage your configured LLM models. Each model can be assigned to one or more prompts."
       />
 
-      <form onSubmit={(e: React.FormEvent) => e.preventDefault()}>
-        {/* vLLM Connection */}
-        <Card title="vLLM Connection" className="mb-6">
-          <div className="mt-4">
-            <FormField
-              htmlFor="models_endpoint"
-              label="Models Endpoint"
-              helperText="Example: http://localhost:8000/v1/models (base URL + /models)"
-            >
-              <Input
-                ref={modelsEndpointRef}
-                id="models_endpoint"
-                type="text"
-                value={editEndpoint}
-                onChange={(e) => setEditEndpoint(e.target.value)}
-              />
-            </FormField>
-          </div>
-
-          <div className="mt-4">
-            <FormField htmlFor="model_name" label="Model Name">
-              <Input
-                id="model_name"
-                type="text"
-                value={editModelName}
-                onChange={(e) => setEditModelName(e.target.value)}
-              />
-            </FormField>
-          </div>
-
-          <div className="mt-4 flex items-center gap-3">
-            <Button variant="secondary" loading={fetching} onClick={handleFetchModelInfo}>
-              Fetch Model Info
-            </Button>
-            {fetchStatus && (
-              <span className={`text-xs ${fetchStatus.startsWith('✗') ? 'text-accent-400' : 'text-primary-400 dark:text-primary-500'}`}>
-                {fetchStatus}
-              </span>
-            )}
-          </div>
-        </Card>
-
-        {/* Model Information */}
-        <Card title="Model Information" className="mb-6">
-          <div className="mt-4">
-            <FormField htmlFor="vllm_version" label="vLLM Version">
-              <Input
-                id="vllm_version"
-                type="text"
-                value={editVllmVersion}
-                onChange={(e) => setEditVllmVersion(e.target.value)}
-                placeholder="e.g. 0.6.0"
-              />
-            </FormField>
-          </div>
-
-          <div className="mt-4 flex items-center gap-2">
-            <input
-              id="thinking_enabled"
-              type="checkbox"
-              checked={editThinkingEnabled}
-              onChange={(e) => setEditThinkingEnabled(e.target.checked)}
-              className="h-4 w-4 rounded border-surface-300 text-secondary-400 focus:ring-secondary-400 dark:border-primary-600"
-            />
-            <label htmlFor="thinking_enabled" className="text-sm text-primary-700 dark:text-primary-300">
-              Thinking Enabled
-            </label>
-          </div>
-
-          <div className="mt-4">
-            <FormField htmlFor="expected_format" label="Expected Response Format">
-              <Select
-                id="expected_format"
-                value={editExpectedFormat}
-                onChange={(e) => setEditExpectedFormat(e.target.value)}
-              >
-                <option value="auto">Auto-Detect</option>
-                <option value="json">JSON</option>
-                <option value="text">TEXT</option>
-              </Select>
-            </FormField>
-          </div>
-        </Card>
-
-        {/* Save button */}
-        <div className="flex justify-end">
-          <Button variant="primary" size="lg" loading={saving} onClick={handleSave}>
-            Save Changes
+      <Card title="Configured Models" className="mb-6">
+        <div className="mt-4 flex justify-end">
+          <Button variant="primary" onClick={handleAdd}>
+            + Add Model
           </Button>
         </div>
-      </form>
 
-      {/* Toast */}
+        {loading ? (
+          <div className="mt-4 text-sm text-primary-500">Loading models...</div>
+        ) : models.length === 0 ? (
+          <div className="mt-4 text-sm text-primary-500">
+            No models configured. Click "Add Model" to get started.
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {models.map((model) => (
+              <ModelCard
+                key={model.model_id}
+                model={model}
+                onEdit={() => handleEdit(model)}
+                onDelete={() => handleDelete(model.model_id)}
+              />
+            ))}
+          </div>
+        )}
+      </Card>
+
       {toast && (
         <Toast message={toast.message} type={toast.type} onHidden={() => setToast(null)} />
       )}
+
+      <ModelManager
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        model={editingModel}
+        onSave={async () => {
+          await loadModels();
+          setModalOpen(false);
+        }}
+      />
+    </div>
+  );
+}
+
+function ModelCard({ model, onEdit, onDelete }: { model: LLMModel; onEdit: () => void; onDelete: () => void }) {
+  const typeColors: Record<string, string> = {
+    text: 'bg-blue-100 text-blue-800',
+    image_audio: 'bg-green-100 text-green-800',
+    general: 'bg-gray-100 text-gray-800',
+  };
+
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-primary-200 dark:border-primary-700 p-4 hover:border-primary-400">
+      <div className="flex-1">
+        <div className="flex items-center gap-2">
+          <h3 className="font-medium text-primary-900 dark:text-white">{model.name}</h3>
+          <span className={`rounded-full px-2 py-0.5 text-xs ${typeColors[model.model_type] || typeColors.general}`}>
+            {model.model_type.replace('_', ' ')}
+          </span>
+          {model.thinking_enabled && (
+            <span className="rounded-full bg-purple-100 text-purple-800 px-2 py-0.5 text-xs">
+              Thinking
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-primary-500 dark:text-primary-400">
+          Model: <code>{model.model_name}</code>
+        </p>
+        <p className="text-xs text-primary-400 dark:text-primary-500">
+          Endpoint: <code className="break-all">{model.endpoint}</code>
+        </p>
+        {model.vllm_version && (
+          <p className="text-xs text-primary-400 dark:text-primary-500">
+            vLLM: {model.vllm_version}
+          </p>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <Button variant="ghost" size="sm" onClick={onEdit}>Edit</Button>
+        <Button variant="danger" size="sm" onClick={onDelete}>Delete</Button>
+      </div>
     </div>
   );
 }

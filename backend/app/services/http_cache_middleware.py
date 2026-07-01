@@ -51,6 +51,7 @@ class HttpCacheMiddleware:
     # API paths that should never be cached (extendable by adding prefixes)
     _CACHE_EXCLUSION_PREFIXES: tuple[str, ...] = (
         "/api/prompts",
+        "/api/models",
         "/api/performance-testing/batches",
         "/api/performance-testing/results-by-batch",
         "/api/performance-testing/stats"
