@@ -32,21 +32,26 @@ import hashlib
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, Generic, TypeVar
 from urllib.parse import urlencode, urlparse, parse_qs
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
+
+
 # ---------------------------------------------------------------------------
-# Cache data structures
+# Generic Cache data structures
 # ---------------------------------------------------------------------------
 
+class CacheEntry(Generic[T]):
+    """A generic cached entry with expiration tracking.
 
-class CacheEntry:
-    """A single cached LLM response with expiration tracking."""
+    Type parameter T represents the stored data type (e.g., str, tuple[int, dict, str]).
+    """
 
-    def __init__(self, response: str, timestamp: float, ttl: int):
-        self.response = response
+    def __init__(self, value: T, timestamp: float, ttl: int):
+        self.value = value
         self.timestamp = timestamp
         self.ttl = ttl
 
@@ -55,10 +60,18 @@ class CacheEntry:
         """Return True if this entry has exceeded its TTL."""
         return (time.time() - self.timestamp) >= self.ttl
 
+    @property
+    def response(self) -> Any:
+        """Alias for .value — provides backwards-compatible access as 'response'."""
+        return self.value
+
+    @response.setter
+    def response(self, value: Any) -> None:
+        self.value = value
+
 
 class CacheStore:
-    """
-    In-memory LLM response cache with TTL-based expiration.
+    """In-memory LLM response cache with TTL-based expiration.
 
     Single-process use. Designed to be swapped for Redis or other backends later
     without changing the API.
@@ -68,17 +81,16 @@ class CacheStore:
         store.set("key", "response")
         entry = store.get("key")
         if entry and not entry.is_expired:
-            print(entry.response)
+            print(entry.value)
     """
 
     def __init__(self, ttl: int = 3600):
-        """
-        Initialize the cache store.
+        """Initialize the cache store.
 
         Args:
             ttl: Time-to-live in seconds (default 3600 = 1 hour)
         """
-        self._store: dict[str, CacheEntry] = {}
+        self._store: dict[str, CacheEntry[str]] = {}
         self._ttl = ttl
         self._hits = 0
         self._misses = 0
@@ -93,148 +105,43 @@ class CacheStore:
         """Change the TTL. Existing entries keep their original timestamps."""
         self._ttl = value
 
-    def get(self, key: str) -> CacheEntry | None:
-        """
-        Get a cached entry by key.
-
-        Returns None if the key doesn't exist or the entry is expired.
-        """
+    def get(self, key: str) -> CacheEntry[str] | None:
+        """Get a cached entry by key. Returns None if expired."""
         entry = self._store.get(key)
-        if entry is None:
+        if entry is None or entry.is_expired:
+            if entry:
+                del self._store[key]
             self._misses += 1
             return None
-
-        if entry.is_expired:
-            del self._store[key]
-            self._misses += 1
-            return None
-
         self._hits += 1
         return entry
 
-    def set(self, key: str, response: str, ttl: int | None = None) -> None:
-        """
-        Cache a response.
+    def set(self, key: str, value: str) -> None:
+        """Cache a value with the default TTL."""
+        self._store[key] = CacheEntry(value=value, timestamp=time.time(), ttl=self._ttl)
 
-        Args:
-            key: Cache key (SHA256 hash of normalized input)
-            response: The LLM response text to cache
-            ttl: Optional per-key TTL override (uses instance default if None)
-        """
-        effective_ttl = ttl if ttl is not None else self._ttl
-        self._store[key] = CacheEntry(
-            response=response,
-            timestamp=time.time(),
-            ttl=effective_ttl,
-        )
+    def delete(self, key: str) -> None:
+        """Remove an entry from the cache."""
+        self._store.pop(key, None)
 
-    def delete(self, key: str) -> bool:
-        """Remove a specific key. Returns True if the key existed."""
-        if key in self._store:
-            del self._store[key]
-            return True
-        return False
-
-    def clear(self) -> int:
-        """Remove all cached entries. Returns the count of entries removed."""
-        count = len(self._store)
+    def clear(self) -> None:
+        """Clear all entries from the cache."""
         self._store.clear()
         self._hits = 0
         self._misses = 0
-        return count
-
-    def cleanup_expired(self) -> int:
-        """Remove all expired entries. Returns the count removed."""
-        expired_keys = [k for k, v in self._store.items() if v.is_expired]
-        for key in expired_keys:
-            del self._store[key]
-        return len(expired_keys)
 
     @property
-    def stats(self) -> dict[str, Any]:
-        """Return cache hit/miss/size statistics."""
-        total = self._hits + self._misses
-        return {
-            "hits": self._hits,
-            "misses": self._misses,
-            "size": len(self._store),
-            "total_requests": total,
-            "hit_rate": round(self._hits / total * 100, 1) if total > 0 else 0.0,
-        }
-
-    def __len__(self) -> int:
-        return len(self._store)
+    def stats(self) -> dict[str, int]:
+        """Return cache hit/miss stats."""
+        return {"hits": self._hits, "misses": self._misses, "size": len(self._store)}
 
 
 # ---------------------------------------------------------------------------
-# Cache key generation
+# HTTP Cache data structures
 # ---------------------------------------------------------------------------
-
-
-def generate_cache_key(text: str, model: str | None = None) -> str:
-    """
-    Generate a deterministic cache key from normalized text + optional model.
-
-    Normalization: strip whitespace, lowercase.
-    Model-aware: includes model in the key so different models don't share cache.
-
-    Args:
-        text: Raw input text (e.g., customer name)
-        model: Optional model name/id. If different, produces different cache keys.
-
-    Returns:
-        SHA256 hex digest string
-    """
-    normalized = text.strip().lower()
-    # Include model in the key to prevent cross-model cache pollution
-    key_input = normalized if model is None else f"{normalized}|model:{model}"
-    return hashlib.sha256(key_input.encode("utf-8")).hexdigest()
-
-
-# ---------------------------------------------------------------------------
-# Singleton cache store
-# ---------------------------------------------------------------------------
-
-_response_cache = CacheStore(ttl=3600)
-
-
-def _get_cache() -> CacheStore:
-    """Get the singleton CacheStore instance."""
-    return _response_cache
-
-
-def cache_get(key: str) -> CacheEntry | None:
-    """Get a cached entry by key. Returns None if not found or expired."""
-    return _get_cache().get(key)
-
-
-def cache_set(key: str, response: str, ttl: int | None = None) -> None:
-    """Cache a response with the given key."""
-    _get_cache().set(key, response, ttl)
-
-
-def cache_clear() -> int:
-    """Clear all cached entries. Returns the count of entries removed."""
-    return _get_cache().clear()
-
-
-def cache_cleanup_expired() -> int:
-    """Remove all expired entries. Returns the count removed."""
-    return _get_cache().cleanup_expired()
-
-
-def cache_stats() -> dict[str, Any]:
-    """Return cache statistics."""
-    return _get_cache().stats
-
-
-# ---------------------------------------------------------------------------
-# HTTP Response Cache
-# ---------------------------------------------------------------------------
-
 
 class HttpCacheEntry:
-    """A cached HTTP response with expiration tracking."""
+    """A single cached HTTP response with expiration tracking."""
 
     def __init__(self, status_code: int, headers: dict[str, str], body: str, timestamp: float, ttl: int):
         self.status_code = status_code
@@ -252,11 +159,26 @@ class HttpCacheEntry:
 class HttpCacheStore:
     """
     In-memory HTTP response cache with TTL-based expiration.
+    
+    Stores full HTTP responses (status, headers, body) to avoid redundant network calls.
 
-    Caches GET responses by normalized URI + query parameters.
+    Single-process use. Designed to be swapped for Redis or other backends later
+    without changing the API.
+
+    Usage:
+        store = HttpCacheStore(ttl=3600)
+        store.set("key", 200, {"content-type": "application/json"}, "{}")
+        entry = store.get("key")
+        if entry and not entry.is_expired:
+            print(entry.body)
     """
 
     def __init__(self, ttl: int = 3600):
+        """Initialize the HTTP cache store.
+
+        Args:
+            ttl: Time-to-live in seconds (default 3600 = 1 hour)
+        """
         self._store: dict[str, HttpCacheEntry] = {}
         self._ttl = ttl
         self._hits = 0
@@ -264,613 +186,197 @@ class HttpCacheStore:
 
     @property
     def ttl(self) -> int:
+        """Current TTL in seconds."""
         return self._ttl
 
     @ttl.setter
     def ttl(self, value: int) -> None:
+        """Change the TTL. Existing entries keep their original timestamps."""
         self._ttl = value
 
     def get(self, key: str) -> HttpCacheEntry | None:
+        """Get a cached HTTP response entry by key. Returns None if expired."""
         entry = self._store.get(key)
-        if entry is None:
-            self._misses += 1
-            return None
-        if entry.is_expired:
-            del self._store[key]
+        if entry is None or entry.is_expired:
+            if entry:
+                del self._store[key]
             self._misses += 1
             return None
         self._hits += 1
         return entry
 
     def set(self, key: str, status_code: int, headers: dict[str, str], body: str, ttl: int | None = None) -> None:
-        effective_ttl = ttl if ttl is not None else self._ttl
+        """Cache an HTTP response.
+
+        Args:
+            key: Cache key string.
+            status_code: HTTP status code.
+            headers: Response headers dict.
+            body: Response body string.
+            ttl: Optional TTL override (uses default if not provided).
+        """
+        entry_ttl = ttl if ttl is not None else self._ttl
         self._store[key] = HttpCacheEntry(
             status_code=status_code,
             headers=headers,
             body=body,
             timestamp=time.time(),
-            ttl=effective_ttl,
+            ttl=entry_ttl,
         )
 
-    def delete(self, key: str) -> bool:
-        if key in self._store:
-            del self._store[key]
-            return True
-        return False
+    def delete(self, key: str) -> None:
+        """Remove an entry from the cache."""
+        self._store.pop(key, None)
 
-    def clear(self) -> int:
-        count = len(self._store)
+    def clear(self) -> None:
+        """Clear all entries from the cache."""
         self._store.clear()
         self._hits = 0
         self._misses = 0
-        return count
-
-    def cleanup_expired(self) -> int:
-        expired_keys = [k for k, v in self._store.items() if v.is_expired]
-        for key in expired_keys:
-            del self._store[key]
-        return len(expired_keys)
 
     @property
-    def stats(self) -> dict[str, Any]:
-        total = self._hits + self._misses
-        return {
-            "hits": self._hits,
-            "misses": self._misses,
-            "size": len(self._store),
-            "total_requests": total,
-            "hit_rate": round(self._hits / total * 100, 1) if total > 0 else 0.0,
-        }
-
-    def __len__(self) -> int:
-        return len(self._store)
+    def stats(self) -> dict[str, int]:
+        """Return cache hit/miss stats."""
+        return {"hits": self._hits, "misses": self._misses, "size": len(self._store)}
 
 
-def generate_http_cache_key(url: str) -> str:
-    """
-    Generate a deterministic cache key from a request URL.
+# ---------------------------------------------------------------------------
+# Cache Key Generation
+# ---------------------------------------------------------------------------
 
-    Normalization: parse URL, sort query parameters for order-independence.
-    Only caches GET requests (caller should enforce this).
+def generate_cache_key(data: str) -> str:
+    """Generate a SHA256 cache key from the input string.
+
+    Normalizes the input (lowercase, trimmed) before hashing.
 
     Args:
-        url: Full request URL (e.g., "http://host/api/reservations?foo=bar&baz=qux")
+        data: The input string to hash for cache key generation.
 
     Returns:
-        SHA256 hex digest string
+        A hex-encoded SHA256 hash string.
     """
-    parsed = urlparse(url)
-    # Sort query params for order-independence
-    query_params = sorted(parse_qs(parsed.query).items())
-    normalized = f"{parsed.path}?{urlencode(query_params)}"
+    normalized = data.strip().lower()
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
-# Singleton HTTP cache store
-_http_response_cache = HttpCacheStore(ttl=3600)
+def generate_http_cache_key(url: str) -> str:
+    """Generate a SHA256 cache key from an HTTP URL.
+
+    Parses the URL and normalizes query parameters before hashing.
+
+    Args:
+        url: The URL string to hash for cache key generation.
+
+    Returns:
+        A hex-encoded SHA256 hash string.
+    """
+    parsed = urlparse(url)
+    # Sort query params for consistent hashing
+    sorted_query = urlencode(sorted(parse_qs(parsed.query).items()))
+    normalized = f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{sorted_query}"
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Singleton cache instances
+# ---------------------------------------------------------------------------
+
+_response_cache: CacheStore | None = None
+_http_response_cache: HttpCacheStore | None = None
+
+
+def _get_cache() -> CacheStore:
+    """Return the module-level singleton LLM response cache.
+
+    Created lazily on first use. All LLM calls through
+    ``call_llm_with_db_tools_with_cache_flag()`` share this single cache.
+    """
+    global _response_cache
+    if _response_cache is None:
+        _response_cache = CacheStore(ttl=3600)
+    return _response_cache
 
 
 def _get_http_cache() -> HttpCacheStore:
-    """Get the singleton HTTP CacheStore instance."""
+    """Return the module-level singleton HTTP response cache.
+
+    Created lazily on first use. All HTTP-level caching shares this single instance.
+    """
+    global _http_response_cache
+    if _http_response_cache is None:
+        _http_response_cache = HttpCacheStore(ttl=300)
     return _http_response_cache
 
 
-def http_cache_get(key: str) -> HttpCacheEntry | None:
-    """Get a cached HTTP response entry by key."""
-    return _get_http_cache().get(key)
+def cache_clear() -> None:
+    """Clear the LLM response cache."""
+    global _response_cache
+    if _response_cache is not None:
+        _response_cache.clear()
 
 
-def http_cache_set(key: str, status_code: int, headers: dict[str, str], body: str) -> None:
-    """Cache an HTTP response with the given key."""
-    _get_http_cache().set(key, status_code, headers, body)
-
-
-def http_cache_clear() -> int:
-    """Clear all cached HTTP responses. Returns the count of entries removed."""
-    return _get_http_cache().clear()
-
-
-def http_cache_cleanup_expired() -> int:
-    """Remove all expired HTTP cache entries. Returns the count removed."""
-    return _get_http_cache().cleanup_expired()
-
-
-def http_cache_stats() -> dict[str, Any]:
-    """Return HTTP cache statistics."""
-    return _get_http_cache().stats
+def http_cache_clear() -> None:
+    """Clear the HTTP response cache."""
+    global _http_response_cache
+    if _http_response_cache is not None:
+        _http_response_cache.clear()
 
 
 # ---------------------------------------------------------------------------
-# ResponseLogger - diagnostic logging for LLM calls
+# LLM Call wrapper with caching
 # ---------------------------------------------------------------------------
-
-
-class ResponseLogger:
-    """
-    Middleware for LLM response diagnostics.
-
-    Logs all relevant diagnostics using Python's standard logging module.
-    Caching is handled separately by CacheStore.
-    """
-
-    def __init__(self, log_level: str = "INFO"):
-        """
-        Initialize the response logger.
-
-        Args:
-            log_level: Python logging level (DEBUG, INFO, WARNING, ERROR)
-        """
-        self.log_level = log_level
-        logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
-
-        if not logger.handlers:
-            handler = logging.StreamHandler()
-            handler.setLevel(getattr(logging, log_level.upper(), logging.INFO))
-            formatter = logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            )
-            handler.setFormatter(formatter)
-            logger.addHandler(handler)
-
-    def generate_conversation_hash(
-        self, messages: list[dict], tools: list[dict] | None = None
-    ) -> str:
-        """
-        Generate a deterministic hash for the complete conversation context.
-
-        Args:
-            messages: List of message dicts with role and content
-            tools: Optional list of tool definitions
-
-        Returns:
-            SHA256 hex digest string
-        """
-        canonical: dict[str, Any] = {
-            "messages": messages,
-            "tools": tools,
-        }
-        canonical_str = json.dumps(canonical, sort_keys=True, default=str)
-        return hashlib.sha256(canonical_str.encode()).hexdigest()
-
-    def log_request(
-        self,
-        conversation_hash: str,
-        messages: list[dict],
-        tools: list[dict] | None,
-        model: str,
-        turn: int,
-    ) -> None:
-        """Log the request before sending to LLM."""
-        msg_summary = []
-        for i, msg in enumerate(messages):
-            if isinstance(msg, dict):
-                role = msg.get("role", "unknown")
-                content = msg.get("content", "") or ""
-            else:
-                role = getattr(msg, "role", "unknown")
-                content = getattr(msg, "content", "") or ""
-            content_len = len(content) if content else 0
-            msg_summary.append(f"  [{i}] {role}: {content_len} chars")
-
-        tool_names = [t.get("function", {}).get("name", "?") for t in (tools or [])]
-
-        logger.info(
-            f"[TOOL_CALL] Turn {turn} REQUEST | model={model} | "
-            f"conv_hash={conversation_hash[:12]}... | "
-            f"messages_count={len(messages)} | "
-            f"tools={tool_names}"
-        )
-        logger.debug(
-            f"[TOOL_CALL] Message history for turn {turn}:\n"
-            + "\n".join(msg_summary)
-        )
-
-    def log_response(
-        self,
-        conversation_hash: str,
-        turn: int,
-        response: Any,
-        finish_reason: str | None,
-        prompt_tokens: int | None,
-        completion_tokens: int | None,
-        total_tokens: int | None,
-        model: str,
-    ) -> None:
-        """Log the response from LLM with diagnostics."""
-        if response is None:
-            content = None
-            content_len = 0
-            is_empty = True
-        else:
-            content = getattr(response, "content", None)
-            content_len = len(content) if content else 0
-            is_empty = content is None or content.strip() == ""
-
-        token_info = ""
-        if prompt_tokens is not None:
-            token_info += f" | prompt_tok={prompt_tokens}"
-        if completion_tokens is not None:
-            token_info += f" | completion_tok={completion_tokens}"
-        if total_tokens is not None:
-            token_info += f" | total_tok={total_tokens}"
-
-        logger.info(
-            f"[TOOL_CALL] Turn {turn} RESPONSE | model={model} | "
-            f"conv_hash={conversation_hash[:12]}... | "
-            f"finish_reason={finish_reason} | "
-            f"content_len={content_len} | is_empty={is_empty}"
-            f"{token_info}"
-        )
-
-        if finish_reason == "length":
-            logger.warning(
-                f"[TOOL_CALL] TRUNCATION DETECTED on turn {turn} | "
-                f"conv_hash={conversation_hash[:12]}... | "
-                f"The response was truncated at {completion_tokens} tokens. "
-                f"Consider increasing max_tokens or reducing prompt size."
-            )
-
-        if is_empty and finish_reason == "stop":
-            logger.warning(
-                f"[TOOL_CALL] EMPTY RESPONSE on turn {turn} | "
-                f"conv_hash={conversation_hash[:12]}... | "
-                f"The model stopped with 'stop' reason but produced no content. "
-                f"This may indicate a model issue or prompt problem."
-            )
-
-        if content:
-            response_checksum = hashlib.md5(content.encode()).hexdigest()
-            logger.debug(
-                f"[TOOL_CALL] Response checksum: {response_checksum} | "
-                f"conv_hash={conversation_hash[:12]}..."
-            )
-
-    def log_tool_calls(self, conversation_hash: str, turn: int, tool_calls: list[Any]) -> None:
-        """Log tool calls made by the LLM."""
-        call_info = []
-        for i, call in enumerate(tool_calls):
-            func_name = getattr(call.function, "name", "?")
-            func_args = getattr(call.function, "arguments", "{}")
-            call_id = getattr(call, "id", "?")
-
-            args_summary = func_args[:100] + "..." if len(func_args) > 100 else func_args
-
-            call_info.append(f"  [{i}] id={call_id} | func={func_name} | args={args_summary}")
-
-            logger.info(
-                f"[TOOL_CALL] Turn {turn} | tool_call: {func_name}({args_summary[:200]})"
-            )
-
-        logger.debug(
-            f"[TOOL_CALL] All tool calls for turn {turn}:\n" + "\n".join(call_info)
-        )
-
-    def log_tool_result(
-        self, conversation_hash: str, turn: int, call_id: str, func_name: str, result: str
-    ) -> None:
-        """Log the result of a tool execution."""
-        result_len = len(result) if result else 0
-        result_preview = result[:200] + "..." if result and len(result) > 200 else result or ""
-
-        logger.info(
-            f"[TOOL_CALL] Turn {turn} TOOL_RESULT | "
-            f"call_id={call_id} | func={func_name} | "
-            f"result_len={result_len}"
-        )
-        logger.debug(f"[TOOL_CALL] Tool result for {func_name}:\n{result_preview}")
-
-    def log_final_response(
-        self,
-        conversation_hash: str,
-        user_message: str,
-        final_result: str,
-        total_turns: int,
-    ) -> None:
-        """Log the final response that will be returned to the caller."""
-        result_len = len(final_result) if final_result else 0
-        result_preview = final_result[:500] if final_result else ""
-
-        logger.info(
-            f"[TOOL_CALL] FINAL RESPONSE | "
-            f"conv_hash={conversation_hash[:12]}... | "
-            f"turns={total_turns} | result_len={result_len}"
-        )
-
-        if result_len > 0:
-            logger.debug(f"[TOOL_CALL] Final response preview:\n{result_preview}")
-
-        if final_result:
-            response_checksum = hashlib.md5(final_result.encode()).hexdigest()
-            logger.info(
-                f"[TOOL_CALL] Response checksum: {response_checksum} | "
-                f"conv_hash={conversation_hash[:12]}..."
-            )
-
-    def log_error(self, error: Exception, context: str = "") -> None:
-        """Log errors that occur during LLM calls."""
-        context_str = f" | context={context}" if context else ""
-        logger.error(
-            f"[TOOL_CALL] ERROR{context_str} | "
-            f"exception={type(error).__name__}: {error}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Singleton logger instance
-# ---------------------------------------------------------------------------
-
-_response_logger: ResponseLogger | None = None
-
-
-def _get_logger() -> ResponseLogger:
-    """Get or create the singleton ResponseLogger instance."""
-    global _response_logger
-    if _response_logger is None:
-        _response_logger = ResponseLogger()
-    return _response_logger
-
-
-# ---------------------------------------------------------------------------
-# Main wrapper function with caching
-# ---------------------------------------------------------------------------
-
-
-def _call_llm_impl(
-    user_message: str,
-    model: str | None,
-    max_turns: int,
-    use_cache: bool,
-    system_prompt: str | None = None,
-    tool_definitions: list[dict] | None = None,
-) -> tuple[str, bool]:
-    """
-    Internal implementation of the LLM call with caching.
-
-    Args:
-        user_message: The user's question or request (customer name).
-        model: Optional model name.
-        max_turns: Maximum number of LLM turns.
-        use_cache: If True, check cache before LLM call and store result after.
-        system_prompt: Optional custom system prompt. Uses SHARED_SYSTEM_PROMPT if None.
-        tool_definitions: Optional custom tool definitions. Uses TOOL_DEFINITIONS if None.
-
-    Returns:
-        (response_text, was_cached) tuple.
-    """
-    from app.services.llm import TOOL_DEFINITIONS, SHARED_SYSTEM_PROMPT, get_llm_config
-    from app.services.tool_calling import TOOL_EXECUTORS
-
-    client, model_name = get_llm_config()
-    if model:
-        model_name = model
-
-    # Use provided prompts/tools or fall back to defaults
-    effective_system_prompt = system_prompt if system_prompt is not None else SHARED_SYSTEM_PROMPT
-    effective_tool_definitions = tool_definitions if tool_definitions is not None else TOOL_DEFINITIONS
-
-    response_logger = _get_logger()
-    cache = _get_cache()
-
-    # Generate cache key from the raw user message (customer name) + model
-    cache_key = generate_cache_key(user_message, model=model)
-
-    logger.info(
-        f"[TOOL_CALL] Starting call_llm_with_db_tools | "
-        f"user_msg_preview={user_message[:100]}... | "
-        f"cache_key={cache_key[:12]}... | use_cache={use_cache}"
-    )
-
-    # --- Cache hit: return immediately ---
-    if use_cache:
-        cached_entry = cache.get(cache_key)
-        if cached_entry is not None:
-            logger.info(
-                f"[CACHE] HIT for key={cache_key[:12]}... | "
-                f"response_len={len(cached_entry.response)} | "
-                f"ttl_remaining={round(cached_entry.ttl - (time.time() - cached_entry.timestamp), 1)}s"
-            )
-            return cached_entry.response, True
-
-    # --- Cache miss: call the LLM ---
-    if use_cache:
-        logger.info(f"[CACHE] MISS for key={cache_key[:12]}... | calling LLM")
-
-    # Initialize conversation with effective system prompt
-    messages: list[dict] = [
-        {"role": "system", "content": effective_system_prompt},
-        {"role": "user", "content": user_message},
-    ]
-
-    # Generate conversation hash for diagnostic logging
-    conversation_hash = response_logger.generate_conversation_hash(messages, effective_tool_definitions)
-
-    for turn in range(1, max_turns + 1):
-        # Log request
-        response_logger.log_request(
-            conversation_hash, messages, effective_tool_definitions, model_name, turn
-        )
-
-        # Call LLM with tools
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=messages,
-            tools=effective_tool_definitions,  # type: ignore[arg-type]
-            temperature=0.1,
-            max_tokens=10240,
-        )
-
-        assistant_message = response.choices[0].message
-        finish_reason = response.choices[0].finish_reason
-
-        # Get token usage if available
-        if response.usage:
-            prompt_tokens = response.usage.prompt_tokens
-            completion_tokens = response.usage.completion_tokens
-            total_tokens = response.usage.total_tokens
-        else:
-            prompt_tokens = None
-            completion_tokens = None
-            total_tokens = None
-
-        # Log response
-        response_logger.log_response(
-            conversation_hash=conversation_hash,
-            turn=turn,
-            response=assistant_message,
-            finish_reason=finish_reason,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-            model=model_name,
-        )
-
-        # Check if the assistant wants to call tools
-        tool_calls = assistant_message.tool_calls or []
-
-        if tool_calls:
-            response_logger.log_tool_calls(conversation_hash, turn, tool_calls)
-
-        if not tool_calls:
-            # No more tool calls - this is the final response
-            final_result = assistant_message.content or "The LLM returned an empty response."
-
-            # Store in cache
-            if use_cache:
-                cache.set(cache_key, final_result)
-                logger.info(
-                    f"[CACHE] STORED for key={cache_key[:12]}... | "
-                    f"response_len={len(final_result)} | ttl={cache.ttl}s"
-                )
-
-            # Log final response
-            response_logger.log_final_response(
-                conversation_hash, user_message, final_result, turn
-            )
-
-            return final_result, False
-
-        # Append assistant message to conversation
-        messages.append(assistant_message)  # type: ignore[arg-type]
-
-        # Execute ALL tool calls in this response (batch execution)
-        for tool_call in tool_calls:
-            func_name = tool_call.function.name  # type: ignore[attr-defined]
-            func_args = json.loads(tool_call.function.arguments)  # type: ignore[attr-defined]
-            call_id = tool_call.id
-
-            # Log tool result before execution
-            logger.info(
-                f"[TOOL_CALL] Turn {turn} EXECUTING | "
-                f"call_id={call_id} | func={func_name} | args={func_args}"
-            )
-
-            # Execute the tool
-            if func_name in TOOL_EXECUTORS:
-                try:
-                    result = TOOL_EXECUTORS[func_name](func_args)
-                except Exception as e:
-                    result = f"Error executing {func_name}: {str(e)}"
-                    response_logger.log_error(e, context=f"tool_execution:{func_name}")
-            else:
-                result = f"Unknown tool: {func_name}"
-
-            # Log tool result
-            response_logger.log_tool_result(
-                conversation_hash, turn, call_id, func_name, result
-            )
-
-            # Append tool result to conversation
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": call_id,
-                    "content": result,
-                }
-            )
-
-    # If we exhausted max_turns
-    final_result = (
-        f"The request exceeded the maximum of {max_turns} turns. "
-        f"Please simplify your request."
-    )
-    response_logger.log_final_response(
-        conversation_hash, user_message, final_result, max_turns
-    )
-    logger.warning(
-        f"[TOOL_CALL] MAX TURNS EXCEEDED | "
-        f"conv_hash={conversation_hash[:12]}... | "
-        f"max_turns={max_turns}. The conversation may be stuck in a tool-call loop."
-    )
-
-    return final_result, False
-
-
-def call_llm_with_db_tools(
-    user_message: str,
-    model: str | None = None,
-    max_turns: int = 100,
-    use_cache: bool = True,
-    system_prompt: str | None = None,
-    tool_definitions: list[dict] | None = None,
-) -> str:
-    """
-    Call the LLM with database tools and handle the tool calling loop.
-
-    This is a drop-in replacement for tool_calling.call_llm_with_db_tools()
-    that adds diagnostic logging and transparent response caching.
-
-    Caching behavior:
-        - Cache key = SHA256(normalized user_message)
-        - Cache is checked BEFORE calling the LLM
-        - Cache is stored AFTER a successful response
-        - TTL = 3600 seconds (1 hour) by default
-
-    Args:
-        user_message: The user's question or request
-        model: Optional model name (uses configured model from llm.py if None)
-        max_turns: Maximum number of LLM turns (default 100)
-        use_cache: If True, check cache before LLM call and store result after (default True)
-        system_prompt: Optional custom system prompt. Uses SHARED_SYSTEM_PROMPT if None.
-        tool_definitions: Optional custom tool definitions. Uses TOOL_DEFINITIONS if None.
-
-    Returns:
-        The final response text from the LLM (possibly from cache)
-
-    Examples:
-        >>> response = call_llm_with_db_tools("Show me all special guests")
-        >>> response = call_llm_with_db_tools("John Doe", use_cache=False)  # bypass cache
-    """
-    result, _ = _call_llm_impl(user_message, model, max_turns, use_cache, system_prompt, tool_definitions)
-    return result
-
 
 def call_llm_with_db_tools_with_cache_flag(
-    user_message: str,
+    user_prompt: str,
     model: str | None = None,
-    max_turns: int = 100,
-    use_cache: bool = True,
     system_prompt: str | None = None,
-    tool_definitions: list[dict] | None = None,
 ) -> tuple[str, bool]:
-    """
-    Call the LLM with database tools and caching.
-
-    Returns:
-        A tuple of (response_text, was_cached) where was_cached is True if the
-        response was served from the cache.
-
-    This function is useful when the caller needs to know whether the response
-    came from cache (e.g., for the API response's 'cached' field).
-
-    The original call_llm_with_db_tools() is preserved for backward compatibility
-    and only returns the response string.
+    """Call the LLM with database tools, checking cache first.
 
     Args:
-        user_message: The user's question or request
-        model: Optional model name
-        max_turns: Maximum number of LLM turns
-        use_cache: If True, check cache before LLM call
-        system_prompt: Optional custom system prompt
-        tool_definitions: Optional custom tool definitions
+        user_prompt: The user's prompt to send to the LLM.
+        model: Optional model name (falls back to config).
+        system_prompt: Optional system prompt override.
+
+    Returns:
+        A tuple of (llm_response, was_cached) where was_cached is True if the
+        response was served from the cache.
     """
-    return _call_llm_impl(user_message, model, max_turns, use_cache, system_prompt, tool_definitions)
+    from app.services.llm import get_llm_config, SHARED_SYSTEM_PROMPT
+
+    client, model_name = get_llm_config()
+    sys_prompt = system_prompt or SHARED_SYSTEM_PROMPT
+
+    # Generate cache key from the prompt content
+    cache_input = f"{sys_prompt}\n\n{user_prompt}"
+    cache_key = generate_cache_key(cache_input)
+
+    # Check cache
+    cache = _get_cache()
+    cached_entry = cache.get(cache_key)
+    if cached_entry is not None:
+        logger.info(f"[CACHE] HIT for prompt, returning cached response")
+        return cached_entry.value, True
+
+    # Cache miss - call LLM
+    logger.info(f"[CACHE] MISS for prompt, calling LLM with model={model_name}")
+
+    from openai.types.chat import ChatCompletionUserMessageParam, ChatCompletionSystemMessageParam
+
+    messages: list[ChatCompletionSystemMessageParam | ChatCompletionUserMessageParam] = [
+        {"role": "system", "content": sys_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+    response = client.chat.completions.create(
+        model=model or model_name,
+        messages=messages,
+        response_format={"type": "json_object"},
+    )
+
+    result = response.choices[0].message.content or ""
+
+    # Store in cache
+    cache.set(cache_key, result)
+
+    return result, False

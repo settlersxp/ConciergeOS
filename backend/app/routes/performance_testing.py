@@ -34,6 +34,7 @@ from app.schemas import (
     ValidateGuestsResponse,
 )
 from app.services.response_cache import generate_http_cache_key, _get_http_cache
+from app.services.validation import validate_single_pair
 
 router = APIRouter()
 
@@ -609,7 +610,7 @@ async def api_get_guest_detail(guest_id: int) -> GuestDetailSchema:
 
 # ── Validation Helpers ───────────────────────────────────────────────────────
 
-def _validate_single_pair(
+def validate_single_pair(
     ground_truth_json: str,
     ground_truth_name: str,
     response_content: str | None,
@@ -818,7 +819,7 @@ async def api_validate_guests(
 
             ground_truth_json = json.dumps(ground_truth_obj, indent=2, default=str)
 
-            is_match, reasoning, was_cached = _validate_single_pair(
+            is_match, reasoning, was_cached = validate_single_pair(
                 ground_truth_json=ground_truth_json,
                 ground_truth_name=full_name,
                 response_content=matched_result.response_content if matched_result else None,

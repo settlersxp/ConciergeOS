@@ -30,7 +30,18 @@
 20. [Phase 16: Frontend Prompt Settings Panel](#20-phase-16-frontend-prompt-settings-panel)
 21. [Testing](#21-testing)
 22. [Migration Notes](#22-migration-notes)
-23. [Appendix A: Complete File List](#appendix-a-complete-file-list)
+23. [Implementation Extensions & Deviations](#23-implementation-extensions--deviations)
+    23.1 [LLMModel Table — Schema Deviations](#231-llmmodel-table--schema-deviations)
+    23.2 [Schema Extensions](#232-schema-extensions)
+    23.3 [Extended API Endpoints](#233-extended-api-endpoints)
+    23.4 [Shared HTTP Transport for Connection Pooling](#234-shared-http-transport-for-connection-pooling)
+    23.5 [Model Resolution Return Type Deviation](#235-model-resolution-return-type-deviation)
+    23.6 [get_available_models() — Additional Function](#236-get_available_models--additional-function)
+    23.7 [Response Cache — Model-Aware Caching & Diagnostics](#237-response-cache--model-aware-caching--diagnostics)
+    23.8 [Guest Extraction — Model ID Support](#238-guest-extraction--model-id-support)
+    23.9 [_get_base_client() URL Normalization](#239-_get_base_client-url-normalization)
+    23.10 [Prompt Version model_id — ondelete SET NULL Behavior](#2310-prompt-version-model_id--ondelete-set-null-behavior)
+24. [Appendix A: Complete File List](#appendix-a-complete-file-list)
 
 ---
 
@@ -322,6 +333,17 @@ class DeleteModelResponse(BaseModel):
 
     ok: bool = True
     model_id: int | None = None
+    message: str | None = None
+    error: str | None = None
+
+
+class ModelInfoResponse(BaseModel):
+    """Response from fetching live model info from the endpoint."""
+
+    ok: bool = True
+    model_name: str | None = None
+    vllm_version: str | None = None
+    thinking_enabled: bool | None = None
     error: str | None = None
 ```
 
@@ -420,10 +442,15 @@ async def api_get_model(model_id: int, db: Session = Depends(get_db)):
 @router.post("/api/models", response_model=LLMModelSchema, status_code=201)
 async def api_create_model(body: CreateModelRequest, db: Session = Depends(get_db)):
     """Create a new LLM model configuration."""
+    # Check for duplicate name
+    existing = db.query(LLMModel).filter(LLMModel.name == body.name).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Model with name '{body.name}' already exists.")
+
     model = LLMModel(
         name=body.name,
         endpoint=body.endpoint,
-        models_endpoint=body.models_endpoint,
+        models_endpoint=body.models_endpoint or "",
         model_name=body.model_name,
         model_type=body.model_type or "general",
         vllm_version=body.vllm_version,
@@ -443,6 +470,15 @@ async def api_update_model(
     model = db.query(LLMModel).filter(LLMModel.model_id == model_id).first()
     if not model:
         raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
+
+    # Check for duplicate name (excluding self)
+    if body.name is not None:
+        existing = db.query(LLMModel).filter(
+            LLMModel.name == body.name,
+            LLMModel.model_id != model_id,
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail=f"Model with name '{body.name}' already exists.")
 
     update_data = body.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -469,12 +505,20 @@ async def api_delete_model(model_id: int, db: Session = Depends(get_db)):
     if prompt_count > 0:
         raise HTTPException(
             status_code=409,
-            detail=f"Cannot delete model: {prompt_count} prompt version(s) reference this model. Remove references first.",
+            detail=(
+                f"Cannot delete model '{model.name}': it is referenced by "
+                f"{prompt_count} prompt version(s). Assign a different model to "
+                "those prompts first, or delete them."
+            ),
         )
 
     db.delete(model)
     db.commit()
-    return DeleteModelResponse(ok=True, model_id=model_id)
+    return DeleteModelResponse(
+        ok=True,
+        model_id=model_id,
+        message=f"Model '{model.name}' deleted successfully.",
+    )
 
 
 @router.post("/api/models/fetch-info")
@@ -550,70 +594,91 @@ Add import at top of file:
 from app.models import LLMModel
 ```
 
+### 8.1.1 `get_llm_config_by_model_id()`
+
 Add a new function after `get_available_models()`:
 
 ```python
-def get_llm_config_by_model_id(model_id: int) -> tuple[OpenAI, str, str]:
-    """Fetch LLM client and model info from the database by model ID.
+def get_llm_config_by_model_id(model_id: int | None) -> tuple[OpenAI, str]:
+    """Resolve model config from the LLMModels table.
 
-    Returns:
-        Tuple of (client, model_name, model_type).
+    Parameters
+    ----------
+    model_id : int or None
+        The LLMModel.model_id to look up.  If ``None`` or if the model
+        cannot be found, falls back to ``get_llm_config()``.
+
+    Returns
+    -------
+    tuple[OpenAI, str]
+        An OpenAI client and the resolved model name.
     """
+    if model_id is None:
+        return get_llm_config()
+
+    from app.db import SessionLocal
+    from app.models import LLMModel
+
     db = SessionLocal()
     try:
         model = db.query(LLMModel).filter(LLMModel.model_id == model_id).first()
-        if not model:
-            raise ValueError(f"Model {model_id} not found in registry")
+        if model is None:
+            logger.warning("LLMModel %s not found, falling back to default config", model_id)
+            return get_llm_config()
 
-        # Strip /v1/models or /v1 from the endpoint to get the base URL
-        endpoint = model.endpoint.rstrip('/')
-        if endpoint.endswith('/models'):
-            base_url = endpoint[:-len('/models')]
-        elif endpoint.endswith('/v1'):
-            base_url = endpoint
-        else:
-            base_url = endpoint
-
+        # Build client using shared transport
+        base_url = strip_to_base_url(model.endpoint)
+        shared_client = _get_shared_http_client()
         client = OpenAI(
+            http_client=shared_client,
             base_url=base_url,
             api_key="none",
         )
-        return client, model.model_name, model.model_type
+        return client, model.model_name
+    except Exception as e:
+        logger.warning("Failed to resolve model %s from DB: %s. Falling back.", model_id, e)
+        return get_llm_config()
     finally:
         db.close()
+```
 
+### 8.1.2 `get_llm_config_by_name()`
 
-def get_llm_config_by_name(model_name: str | None = None) -> tuple[OpenAI, str, str]:
-    """Fetch LLM client by looking up the first model with a matching model_name.
+```python
+def get_llm_config_by_name(name: str) -> tuple[OpenAI, str]:
+    """Resolve model config by the model's friendly name.
 
-    Returns:
-        Tuple of (client, model_name, model_type).
+    Parameters
+    ----------
+    name : str
+        The LLMModel.name to look up.
+
+    Returns
+    -------
+    tuple[OpenAI, str]
+        An OpenAI client and the resolved model name.
     """
-    if not model_name:
-        return get_llm_config_by_model_id(1)  # fall back to first model
+    from app.db import SessionLocal
+    from app.models import LLMModel
 
     db = SessionLocal()
     try:
-        model = db.query(LLMModel).filter(LLMModel.model_name == model_name).first()
-        if not model:
-            # Fallback to first model
-            model = db.query(LLMModel).order_by(LLMModel.model_id).first()
-            if not model:
-                raise ValueError("No models configured")
+        model = db.query(LLMModel).filter(LLMModel.name == name).first()
+        if model is None:
+            logger.warning("LLMModel '%s' not found, falling back to default config", name)
+            return get_llm_config()
 
-        endpoint = model.endpoint.rstrip('/')
-        if endpoint.endswith('/models'):
-            base_url = endpoint[:-len('/models')]
-        elif endpoint.endswith('/v1'):
-            base_url = endpoint
-        else:
-            base_url = endpoint
-
+        base_url = strip_to_base_url(model.endpoint)
+        shared_client = _get_shared_http_client()
         client = OpenAI(
+            http_client=shared_client,
             base_url=base_url,
             api_key="none",
         )
-        return client, model.model_name, model.model_type
+        return client, model.model_name
+    except Exception as e:
+        logger.warning("Failed to resolve model '%s' from DB: %s. Falling back.", name, e)
+        return get_llm_config()
     finally:
         db.close()
 ```
@@ -659,16 +724,17 @@ def query_guest_with_llm(
                 .first()
             )
             if pv and pv.model_id:
-                client, model_name, model_type = get_llm_config_by_model_id(pv.model_id)
+                client, model_name = get_llm_config_by_model_id(pv.model_id)
             else:
                 # Fall back to first configured model
-                client, model_name, model_type = get_llm_config_by_name()
+                client, model_name = get_llm_config_by_name("default")
         finally:
             db.close()
 
         # Use the resolved client for the LLM call
         result, was_cached = call_llm_with_db_tools_with_cache_flag(
             user_prompt,
+            model=model_name,
             system_prompt=final_system,
         )
         return result, was_cached
@@ -684,49 +750,30 @@ def query_guest_with_llm(
 
 ### 9.1 Update `backend/app/services/guest_extraction.py`
 
-Replace `_get_client_and_model()` to use DB-based lookup:
+The `_get_client_and_model()` function now accepts an optional `model_id`:
 
 ```python
-def _get_client_and_model(model_type: str = "image_audio") -> tuple[OpenAI, str]:
-    """Return client and model name for the given model_type.
-
-    Looks up the first model in the registry matching the specified type.
-    Falls back to any available model if none match.
+def _get_client_and_model(model_id: int | None = None) -> tuple[OpenAI, str]:
     """
-    db = SessionLocal()
-    try:
-        # Try exact type match first
-        model = (
-            db.query(LLMModel)
-            .filter(LLMModel.model_type == model_type)
-            .order_by(LLMModel.model_id)
-            .first()
-        )
-        # Fallback to any model
-        if not model:
-            model = (
-                db.query(LLMModel)
-                .order_by(LLMModel.model_id)
-                .first()
-            )
-        if not model:
-            raise ValueError("No LLM models configured")
+    Create an OpenAI client and return it along with the configured model name.
 
-        endpoint = model.endpoint.rstrip('/')
-        if endpoint.endswith('/models'):
-            base_url = endpoint[:-len('/models')]
-        elif endpoint.endswith('/v1'):
-            base_url = endpoint
-        else:
-            base_url = endpoint
+    If model_id is provided, looks up the model from the LLMModels table.
+    Otherwise falls back to the config.json settings.
+    """
+    if model_id is not None:
+        client, model_name = get_llm_config_by_model_id(model_id)
+        logger.info("Using model '%s' (DB model_id=%s) for extraction", model_name, model_id)
+        return client, model_name
 
-        client = OpenAI(
-            base_url=base_url,
-            api_key="none",
-        )
-        return client, model.model_name
-    finally:
-        db.close()
+    # Build a minimal model-like object for _build_client_from_model
+    class _ConfigModel:
+        endpoint: str = config_manager.test_settings.models_endpoint
+        model_name: str = config_manager.test_settings.model_name
+
+    config_model = _ConfigModel()
+    client, model_name = _build_client_from_model(config_model)
+    logger.info("Using model '%s' at base URL '%s' for extraction", model_name, config_model.endpoint)
+    return client, model_name
 ```
 
 ### 9.2 Update `backend/app/routes/guest_search.py`
@@ -741,178 +788,169 @@ async def api_extract_name(
     crop_y: float = Form(0.0),
     crop_w: float = Form(0.0),
     crop_h: float = Form(0.0),
-    model_id: int = Form(None),  # NEW: optional model reference
+    model_id: int | None = Form(None),  # NEW: optional model reference
 ) -> NameExtractionResponse:
     """Extract a guest name from a multimedia file.
 
     If model_id is provided, uses that specific model.
-    Otherwise, uses the first available model matching the media type.
+    Otherwise, falls back to the default configured model.
     """
     file_bytes = await file.read()
     content_type = file.content_type or ""
 
-    if model_id:
-        # Use the specific model
-        client, model_name = _get_client_and_model_by_id(model_id)
-        # ... dispatch to extraction function with model info
-    else:
-        # Auto-detect based on content type
-        if "audio" in content_type:
-            model_type = "image_audio"
-        else:
-            model_type = "image_audio"  # Both image and audio use this type
-        client, model_name = _get_client_and_model(model_type)
+    if "audio" in content_type:
+        extracted_name = extract_name_from_audio(
+            file_bytes, audio_format=ext or "webm", model_id=model_id
+        )
+        return NameExtractionResponse(extracted_name=extracted_name, source="audio")
 
-    # ... rest of existing extraction logic
+    elif "image" in content_type:
+        has_crop = crop_w > 0 and crop_h > 0
+        if has_crop:
+            image_bytes = crop_image(file_bytes, crop_x, crop_y, crop_w, crop_h)
+        else:
+            image_bytes = file_bytes
+
+        extracted_name = extract_name_from_image(
+            image_bytes, cropped=has_crop, model_id=model_id
+        )
+        return NameExtractionResponse(extracted_name=extracted_name, source="image")
 ```
 
 ---
 
 ## 10. Phase 6: Backend Response Cache
 
-### 10.1 Include Model in Cache Key
+### 10.1 Current Cache Implementation
 
 **File**: `backend/app/services/response_cache.py`
 
-Modify `generate_cache_key()` to include model information:
+The current cache uses a simple SHA256 hash of the input text as the cache key. Note: model-aware caching (including model name in the cache key) has **not** been implemented yet — this is a known limitation that could cause cross-model cache pollution.
 
 ```python
-def generate_cache_key(input: str, model_name: str = "") -> str:
-    """Generate a unique cache key from input and optional model name.
+def generate_cache_key(data: str) -> str:
+    """Generate a SHA256 cache key from the input string.
 
-    Including model_name prevents cross-model cache pollution:
-    a text model's response won't be returned for an image extraction request.
+    Normalizes the input (lowercase, trimmed) before hashing.
     """
-    if model_name:
-        key_input = f"{model_name}|{input}"
-    else:
-        key_input = input
-    return hashlib.sha256(key_input.encode()).hexdigest()
+    normalized = data.strip().lower()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 ```
 
-All callers of `generate_cache_key()` should pass the current model name:
+### 10.2 CacheStore with Statistics
+
+The `CacheStore` class includes hit/miss tracking:
 
 ```python
-# In call_llm_with_db_tools_with_cache_flag:
-cache_key = generate_cache_key(f"{system_prompt}\n\n{user_prompt}", model_name=model_name)
+class CacheStore:
+    def __init__(self, ttl: int = 3600):
+        self._store: dict[str, CacheEntry[str]] = {}
+        self._ttl = ttl
+        self._hits = 0
+        self._misses = 0
+
+    @property
+    def stats(self) -> dict[str, int]:
+        return {"hits": self._hits, "misses": self._misses, "size": len(self._store)}
+```
+
+### 10.3 HTTP Response Cache (Enhancement)
+
+An additional `HttpCacheStore` caches HTTP GET responses by URI:
+
+```python
+class HttpCacheStore:
+    """In-memory HTTP response cache with TTL-based expiration."""
 ```
 
 ---
 
 ## 11. Phase 7: Backend Prompt Chain
 
-### 11.1 Update `backend/app/services/prompt_chain.py`
+### 11.1 Model Resolution per Step
 
-In the `execute_chain()` function, resolve the model for each step:
+In `backend/app/services/prompt_chain.py`, each step in the chain resolves its own model:
 
 ```python
-# Inside the loop over items:
-from app.services.llm import get_llm_config_by_model_id
+for item in items:
+    # Resolve model_id for this prompt version
+    from app.models import PromptVersion as PV
+    pv = session_manager.query(PV).filter(
+        PV.prompt_id == item.prompt_id,
+        PV.version == item.prompt_version,
+    ).first()
+    model_id_val = pv.model_id if pv else None
 
-# Resolve model from the prompt item
-db = session_manager  # use the existing session
-pv = (
-    db.query(PromptVersion)
-    .filter(
-        PromptVersion.prompt_id == item.prompt_id,
-        PromptVersion.version == item.prompt_version,
+    # Call LLM with resolved model
+    from app.services.llm import get_llm_config_by_model_id
+    client, model_name = get_llm_config_by_model_id(model_id_val)
+    llm_response, was_cached = call_llm_with_db_tools_with_cache_flag(
+        user_message,
+        system_prompt=system_prompt,
     )
-    .first()
-)
-
-if pv and pv.model_id:
-    client, model_name, model_type = get_llm_config_by_model_id(pv.model_id)
-else:
-    client, model_name, model_type = get_llm_config_by_name()
-
-# ... rest of chain execution using model_name
 ```
 
 ---
 
 ## 12. Phase 8: Backend Performance Testing
 
-### 12.1 Update `backend/PerformanceTesting/settings.py`
+### 12.1 Model Resolution in Performance Testing
 
-The `TestSettings` dataclass should accept `model_id` instead of hardcoded model names:
-
-```python
-@dataclass
-class TestSettings:
-    # ... existing fields ...
-    # Model reference (optional - if set, overrides model_name)
-    model_id: int | None = None
-```
-
-### 12.2 Update `backend/app/routes/performance_testing.py`
-
-When resolving the prompt for performance testing, also resolve the model:
+In `backend/app/routes/performance_testing.py`, the prompt template and model are resolved from the database:
 
 ```python
-# After resolving prompt from DB:
-prompt_id = getattr(body, 'prompt_id', None) or ''
-prompt_version = getattr(body, 'prompt_version', None)
-
-# Resolve prompt + model
 if prompt_id and prompt_version:
     db = SessionLocal()
     try:
-        pv = db.query(PromptVersion).filter(
-            PromptVersion.prompt_id == prompt_id,
-            PromptVersion.version == prompt_version,
-        ).first()
+        pv = (
+            db.query(PromptVersion)
+            .filter(
+                PromptVersion.prompt_id == prompt_id,
+                PromptVersion.version == prompt_version,
+            )
+            .first()
+        )
         if pv:
             user_prompt = pv.user_prompt_template or user_prompt
             system_prompt = "\n\n".join(
                 part for part in (pv.intention, pv.restrictions, pv.output_structure) if part
             )
-            # Resolve model
+            # Resolve model from prompt version
             if pv.model_id:
                 from app.services.llm import get_llm_config_by_model_id
-                client, model_name, model_type = get_llm_config_by_model_id(pv.model_id)
-            else:
-                from app.services.llm import get_llm_config_by_name
-                client, model_name, model_type = get_llm_config_by_name()
-            settings = TestSettings(
-                # ... existing fields ...
-                model_id=pv.model_id,
-                model_name=model_name,
-            )
+                _, resolved_model_name = get_llm_config_by_model_id(pv.model_id)
     finally:
         db.close()
-else:
-    # No prompt specified — use first configured model
-    from app.services.llm import get_llm_config_by_name
-    client, model_name, model_type = get_llm_config_by_name()
-    settings = TestSettings(
-        # ... existing fields ...
-        model_name=model_name,
-    )
+
+model_name = resolved_model_name if resolved_model_name else body.model_name
+```
+
+The `_DATABASE_PATH` is resolved dynamically:
+
+```python
+_DATABASE_PATH = Path(__file__).resolve().parent.parent / "database.db"
 ```
 
 ---
 
 ## 13. Phase 9: Backend Config Deprecation
 
-### 13.1 Deprecate `backend/app/config.py`
+### 13.1 Current State of `backend/app/config.py`
 
-The `TestSettings` dataclass no longer needs single-model defaults. Keep it for backward compatibility but mark as deprecated:
+The `TestSettings` dataclass is **still in use** and serves as the fallback for models without a database entry. It is **not yet deprecated** — code paths that cannot find a model in the database fall back to `config_manager.test_settings`:
 
 ```python
 @dataclass
 class TestSettings:
-    """DEPRECATED: Use the LLM model registry (LLMModels table) instead.
-
-    These fields are retained for backward compatibility with legacy code paths.
-    New code should use get_llm_config_by_model_id() or get_llm_config_by_name().
-    """
-    # Keep existing fields but with deprecation notice
-    models_endpoint: str = ""
-    model_name: str = ""
+    """Configuration settings for LLM model configuration."""
+    models_endpoint: str = "http://localhost:8000/v1/models"
+    model_name: str = "facebook/opt-125m"
     vllm_version: str = ""
     thinking_enabled: bool = False
     expected_format: str = "auto"
 ```
+
+> **Note**: A deprecation notice and transition to fully DB-based configuration is planned for a future phase.
 
 ---
 
@@ -974,7 +1012,6 @@ export interface ModelInfoResponse {
 Add `model_id` to all prompt-related types. In `frontend/src/types/index.ts`, update the `PromptVersion` interface:
 
 ```typescript
-// Find the existing PromptVersion or similar type and add:
 model_id: number | null;
 ```
 
@@ -1283,7 +1320,6 @@ export default function ModelManager({ open, onClose, model, onSave }: ModelMana
     setFetching(true);
     setFetchStatus('Fetching model info...');
     try {
-      // modelsEndpoint is the /v1/models URL, but we need the raw endpoint for fetch-info
       const baseEndpoint = endpoint.replace(/\/v1\/models$/, '/v1');
       const info = await modelsApi.fetchInfo(baseEndpoint);
       setModelName(info.model_name);
@@ -1300,18 +1336,9 @@ export default function ModelManager({ open, onClose, model, onSave }: ModelMana
   };
 
   const handleSave = async () => {
-    if (!name.trim()) {
-      setError('Friendly name is required');
-      return;
-    }
-    if (!endpoint.trim()) {
-      setError('Endpoint is required');
-      return;
-    }
-    if (!modelName.trim()) {
-      setError('Model name is required');
-      return;
-    }
+    if (!name.trim()) { setError('Friendly name is required'); return; }
+    if (!endpoint.trim()) { setError('Endpoint is required'); return; }
+    if (!modelName.trim()) { setError('Model name is required'); return; }
 
     setSaving(true);
     setError('');
@@ -1348,26 +1375,13 @@ export default function ModelManager({ open, onClose, model, onSave }: ModelMana
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
         <Card title={isEditing ? `Edit: ${model?.name}` : 'Add New Model'} className="w-full max-w-lg max-h-[80vh] overflow-y-auto">
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 text-primary-500 hover:text-primary-700 dark:text-primary-400 dark:hover:text-white text-2xl leading-none"
-          >
-            &times;
-          </button>
+          <button onClick={onClose} className="absolute top-4 right-4 text-primary-500 hover:text-primary-700 text-2xl leading-none">&times;</button>
 
           <div className="space-y-4">
-            {/* Friendly Name */}
             <FormField label="Friendly Name" helperText="Human-readable name for this model">
-              <Input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., Production Text Model"
-                disabled={saving}
-              />
+              <Input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Production Text Model" disabled={saving} />
             </FormField>
 
-            {/* Model Type */}
             <FormField label="Model Type">
               <Select value={modelType} onChange={(e) => setModelType(e.target.value as 'text' | 'image_audio' | 'general')}>
                 {MODEL_TYPE_OPTIONS.map(opt => (
@@ -1376,62 +1390,20 @@ export default function ModelManager({ open, onClose, model, onSave }: ModelMana
               </Select>
             </FormField>
 
-            {/* Endpoint */}
-            <FormField
-              htmlFor="endpoint"
-              label="Endpoint"
-              helperText="Base URL of the vLLM endpoint (e.g. http://localhost:8000/v1)"
-            >
-              <Input
-                id="endpoint"
-                type="text"
-                value={endpoint}
-                onChange={(e) => setEndpoint(e.target.value)}
-                placeholder="http://localhost:8000/v1"
-                disabled={saving}
-              />
+            <FormField label="Endpoint" helperText="Base URL of the vLLM endpoint">
+              <Input id="endpoint" type="text" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder="http://localhost:8000/v1" disabled={saving} />
             </FormField>
 
-            {/* Models Endpoint */}
-            <FormField
-              htmlFor="models_endpoint"
-              label="Models Endpoint"
-              helperText="Full models endpoint URL (e.g. http://localhost:8000/v1/models)"
-            >
-              <Input
-                id="models_endpoint"
-                type="text"
-                value={modelsEndpoint}
-                onChange={(e) => setModelsEndpoint(e.target.value)}
-                placeholder="http://localhost:8000/v1/models"
-                disabled={saving}
-              />
+            <FormField label="Models Endpoint" helperText="Full models endpoint URL">
+              <Input id="models_endpoint" type="text" value={modelsEndpoint} onChange={(e) => setModelsEndpoint(e.target.value)} placeholder="http://localhost:8000/v1/models" disabled={saving} />
             </FormField>
 
-            {/* Model Name */}
-            <FormField
-              htmlFor="model_name"
-              label="Model Name"
-              helperText="The actual model identifier (e.g. facebook/opt-125m)"
-            >
-              <Input
-                id="model_name"
-                type="text"
-                value={modelName}
-                onChange={(e) => setModelName(e.target.value)}
-                placeholder="facebook/opt-125m"
-                disabled={saving}
-              />
+            <FormField label="Model Name" helperText="The actual model identifier">
+              <Input id="model_name" type="text" value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder="facebook/opt-125m" disabled={saving} />
             </FormField>
 
-            {/* Fetch Model Info */}
             <div className="flex items-center gap-3">
-              <Button
-                variant="secondary"
-                loading={fetching}
-                onClick={handleFetchInfo}
-                disabled={!endpoint.trim()}
-              >
+              <Button variant="secondary" loading={fetching} onClick={handleFetchInfo} disabled={!endpoint.trim()}>
                 Fetch Model Info
               </Button>
               {fetchStatus && (
@@ -1441,29 +1413,13 @@ export default function ModelManager({ open, onClose, model, onSave }: ModelMana
               )}
             </div>
 
-            {/* vLLM Version */}
             <FormField label="vLLM Version">
-              <Input
-                type="text"
-                value={vllmVersion}
-                onChange={(e) => setVllmVersion(e.target.value)}
-                placeholder="e.g., 0.6.0"
-                disabled={saving}
-              />
+              <Input type="text" value={vllmVersion} onChange={(e) => setVllmVersion(e.target.value)} placeholder="e.g., 0.6.0" disabled={saving} />
             </FormField>
 
-            {/* Thinking Enabled */}
             <div className="flex items-center gap-2">
-              <input
-                id="thinking_enabled"
-                type="checkbox"
-                checked={thinkingEnabled}
-                onChange={(e) => setThinkingEnabled(e.target.checked)}
-                className="h-4 w-4 rounded border-surface-300 text-secondary-400 focus:ring-secondary-400 dark:border-primary-600"
-              />
-              <label htmlFor="thinking_enabled" className="text-sm text-primary-700 dark:text-primary-300">
-                Thinking Enabled
-              </label>
+              <input id="thinking_enabled" type="checkbox" checked={thinkingEnabled} onChange={(e) => setThinkingEnabled(e.target.checked)} className="h-4 w-4 rounded" />
+              <label htmlFor="thinking_enabled" className="text-sm text-primary-700 dark:text-primary-300">Thinking Enabled</label>
             </div>
           </div>
 
@@ -1474,9 +1430,7 @@ export default function ModelManager({ open, onClose, model, onSave }: ModelMana
           )}
 
           <div className="flex justify-end gap-2 mt-6">
-            <Button onClick={onClose} disabled={saving} variant="ghost">
-              Cancel
-            </Button>
+            <Button onClick={onClose} disabled={saving} variant="ghost">Cancel</Button>
             <Button onClick={handleSave} disabled={saving} variant="primary" loading={saving}>
               {isEditing ? 'Save Changes' : 'Add Model'}
             </Button>
@@ -1521,54 +1475,24 @@ Add a model selector dropdown. Import the models API and add state for available
 import { modelsApi } from '../../services/api';
 import type { LLMModel } from '../../types';
 
-// ... inside component:
-
 const [availableModels, setAvailableModels] = useState<LLMModel[]>([]);
 const [selectedModelId, setSelectedModelId] = useState<number | undefined>(undefined);
 
 useEffect(() => {
   if (open) {
-    // Load models when modal opens
     modelsApi.getAll().then(setAvailableModels).catch(() => {});
-    // Reset state
-    setPromptId('');
-    setName('');
-    setError('');
-    setSelectedModelId(undefined);
   }
 }, [open]);
-
-const handleCreate = async () => {
-  // ... existing validation ...
-
-  try {
-    await promptsApi.create(promptId, {
-      name: name.trim(),
-      intention: '',
-      restrictions: '',
-      output_structure: '',
-      user_prompt_template: '',
-      model_id: selectedModelId || null,
-    });
-    onCreate(promptId);
-    onClose();
-  } catch (err) {
-    // ... existing error handling
-  }
-};
 ```
 
-Add the model selector in the form (between the name field and the error):
+Add the model selector in the form:
 
 ```tsx
 <div>
   <label className="block text-sm font-medium text-primary-700 dark:text-primary-300 mb-1">
     LLM Model (optional)
   </label>
-  <Select
-    value={String(selectedModelId ?? '')}
-    onChange={(e) => setSelectedModelId(e.target.value ? Number(e.target.value) : undefined)}
-  >
+  <Select value={String(selectedModelId ?? '')} onChange={(e) => setSelectedModelId(e.target.value ? Number(e.target.value) : undefined)}>
     <option value="">Default (no model assignment)</option>
     {availableModels.map(m => (
       <option key={m.model_id} value={m.model_id}>
@@ -1591,33 +1515,24 @@ Add the model selector in the form (between the name field and the error):
 Pass `model_id` from the selected prompt to the name extraction call:
 
 ```typescript
-// In handleExtractName:
 const handleExtractName = async () => {
-  // ... existing file handling ...
-
-  try {
-    // Pass model_id if selected prompt has one
-    const formData = new FormData();
-    formData.append('file', imageFile);
-    if (cropRegion) {
-      formData.append('crop_x', String(cropRegion.x));
-      // ... other crop params
-    }
-    if (selectedPrompt.model_id) {
-      formData.append('model_id', String(selectedPrompt.model_id));
-    }
-
-    const resp = await fetch('/api/guest-search/extract-name', {
-      method: 'POST',
-      body: formData,
-    });
-
-    const data = await resp.json() as NameExtractionResponse;
-    setQuery(data.extracted_name);
-    // ...
-  } catch (e) {
-    // ...
+  const formData = new FormData();
+  formData.append('file', imageFile);
+  if (cropRegion) {
+    formData.append('crop_x', String(cropRegion.x));
+    // ... other crop params
   }
+  if (selectedPrompt.model_id) {
+    formData.append('model_id', String(selectedPrompt.model_id));
+  }
+
+  const resp = await fetch('/api/guest-search/extract-name', {
+    method: 'POST',
+    body: formData,
+  });
+
+  const data = await resp.json() as NameExtractionResponse;
+  setQuery(data.extracted_name);
 };
 ```
 
@@ -1645,24 +1560,22 @@ Replace the existing model configuration (if any) with a model selector dropdown
 import { modelsApi } from '../../services/api';
 import type { LLMModel } from '../../types';
 
-// Inside component, add:
 const [availableModels, setAvailableModels] = useState<LLMModel[]>([]);
 
 useEffect(() => {
   modelsApi.getAll().then(setAvailableModels).catch(() => {});
 }, []);
+```
 
-// In the render, add a model selector section:
+In the render, add a model selector section:
+
+```tsx
 <div className="mt-4">
   <FormField label="LLM Model">
-    <Select
-      value={String(promptData.model_id ?? '')}
-      onChange={(e) => {
-        const id = e.target.value ? Number(e.target.value) : null;
-        // Update prompt data with new model_id
-        // (call the parent's onChange handler)
-      }}
-    >
+    <Select value={String(promptData.model_id ?? '')} onChange={(e) => {
+      const id = e.target.value ? Number(e.target.value) : null;
+      // Update prompt data with new model_id
+    }}>
       <option value="">Default (system model)</option>
       {availableModels.map(m => (
         <option key={m.model_id} value={m.model_id}>
@@ -1747,7 +1660,7 @@ npx tsc --noEmit
 ### Existing Data
 
 - **No migration needed for existing prompts** — they get `model_id = NULL`, which causes the system to fall back to the first available model. This preserves existing behavior.
-- **Existing config.json** — the `TestSettings` dataclass is retained but deprecated. New code paths read from the database.
+- **Existing config.json** — the `TestSettings` dataclass is retained for backward compatibility. New code paths read from the database.
 
 ### Backward Compatibility
 
@@ -1755,7 +1668,225 @@ npx tsc --noEmit
 |------|----------|
 | Prompt with `model_id = NULL` | Falls back to first configured model in DB |
 | No models in DB | Falls back to first model returned by `/v1/models` endpoint |
-| Config.json with old fields | Ignored; new configs go through the API |
+| Config.json with old fields | Used as fallback when no model found in DB |
+
+---
+
+## 23. Implementation Extensions & Deviations
+
+> This section documents features, enhancements, and deviations that were added during implementation beyond the original specification. These reflect the actual production implementation.
+
+---
+
+### 23.1 `LLMModel` Table — Schema Deviations
+
+The actual `LLMModel` table in `backend/app/models.py` differs from the specification in the following ways:
+
+| Column | Specification | Implementation | Notes |
+|--------|--------------|----------------|-------|
+| `name` | `String(200), nullable=False` | `String(200), nullable=False, **unique=True**` | **Added unique constraint** to prevent duplicate model names at the database level |
+| `model_type` | `nullable=False, server_default="general"` | `nullable=True` | **No NOT NULL constraint, no server default** — model_type is truly optional |
+| `thinking_enabled` | `Boolean, default=False` | `Boolean, default=False, **server_default="0"**` | **Added server default** for SQLite compatibility |
+| `prompt_versions` | Not specified | `relationship(back_populates="llm_model", lazy="selectin")` | **Added relationship** with eager loading for convenient access from LLMModel side |
+
+#### Rationale
+
+- The **unique constraint** on `name` is a practical enhancement: it prevents two models from sharing the same display name, which would confuse the UI.
+- Making `model_type` optional allows users to register models without declaring their capability (the field can be filled in later).
+- The `server_default="0"` ensures SQLite creates proper `FALSE` defaults even before any INSERT.
+- The `prompt_versions` relationship enables reverse lookups (e.g., "which prompts use this model?") and is used by the cascade deletion logic.
+
+---
+
+### 23.2 Schema Extensions
+
+#### 23.2.1 `DeleteModelResponse` — Added `message` Field
+
+**Implementation:**
+```python
+class DeleteModelResponse(BaseModel):
+    ok: bool = True
+    model_id: int | None = None
+    message: str | None = None  # ← ADDED
+    error: str | None = None
+```
+
+The `message` field carries a human-readable confirmation like `"Model 'X' deleted successfully."`.
+
+#### 23.2.2 `ModelInfoResponse` — New Schema
+
+Added for live model info fetching:
+
+```python
+class ModelInfoResponse(BaseModel):
+    ok: bool = True
+    model_name: str | None = None
+    vllm_version: str | None = None
+    thinking_enabled: bool | None = None
+    error: str | None = None
+```
+
+This is returned by both `/api/models/fetch-info` and `/api/models/{model_id}/info`.
+
+---
+
+### 23.3 Extended API Endpoints
+
+#### 23.3.1 `/api/models/{model_id}/info` — Live Info for Saved Model
+
+A new GET endpoint fetches live model info from a saved model's endpoint. Uses the model's `endpoint` and `models_endpoint` to hit the upstream vLLM server, returning the actual model name and vLLM version reported by the server.
+
+#### 23.3.2 `/api/models/fetch-info` — JSON Body with Normalization
+
+Uses a JSON body and adds automatic URL normalization:
+
+- If the URL ends with `/v1/models` → use as-is
+- If the URL ends with `/v1` → append `/models`
+- Otherwise → append `/v1/models`
+
+#### 23.3.3 Duplicate Name Checking
+
+The create and update endpoints check for duplicate model names. For updates, the check excludes the current model.
+
+#### 23.3.4 Detailed Delete Error Messages
+
+The delete endpoint includes the model name in the conflict error:
+
+```python
+detail=(
+    f"Cannot delete model '{model.name}': it is referenced by "
+    f"{ref_count} prompt version(s). Assign a different model to "
+    "those prompts first, or delete them."
+),
+```
+
+---
+
+### 23.4 Shared HTTP Transport for Connection Pooling
+
+The LLM service uses a module-level singleton `httpx.Client` with connection pooling that is shared across all `OpenAI` client instances:
+
+```python
+_SHARED_TRANSPORT: httpx.HTTPTransport | None = None
+_SHARED_HTTP_CLIENT: httpx.Client | None = None
+
+def _get_shared_http_client() -> httpx.Client:
+    """Return a module-level singleton httpx.Client with connection pooling."""
+    ...
+
+def _get_base_client() -> tuple[OpenAI, str]:
+    """Every OpenAI client passes the same underlying httpx.Client."""
+    shared_client = _get_shared_http_client()
+    client = OpenAI(
+        http_client=shared_client,
+        base_url=base_url,
+        api_key="none",
+    )
+    return client, base_url
+```
+
+This is critical for performance: without shared transport, each `OpenAI` client gets its own isolated connection pool, preventing TCP connection reuse across concurrent requests.
+
+---
+
+### 23.5 Model Resolution Return Type Deviation
+
+The specification defines `get_llm_config_by_model_id()` as returning `(OpenAI, str, str)` — client, model_name, **model_type**. The implementation returns only `(OpenAI, str)` — client and model_name.
+
+**Implementation:**
+```python
+def get_llm_config_by_model_id(model_id: int | None) -> tuple[OpenAI, str]:
+    return client, model.model_name  # model_type not returned
+```
+
+**Additional deviations:**
+1. The function accepts `model_id: int | None` (not just `int`) and falls back to `get_llm_config()` when `None`.
+2. There is no `model_type` in the return value, so downstream code cannot auto-route based on capability.
+
+---
+
+### 23.6 `get_available_models()` — Additional Function
+
+A function to list all available models from the upstream vLLM endpoint:
+
+```python
+def get_available_models() -> list[LLMModelInfo]:
+    """Fetch all available models from the configured LLM endpoint."""
+    client, _ = _get_base_client()
+    try:
+        models = client.models.list()
+        return [LLMModelInfo(id=m.id, object=m.object, created=m.created, owned_by=m.owned_by) for m in models.data]
+    except Exception as e:
+        logger.warning("Failed to fetch available models: %s", e)
+        return []
+```
+
+---
+
+### 23.7 Response Cache — Model-Aware Caching & Diagnostics
+
+**Partially implemented.** The specification mentioned including model name in the cache key but this was **not implemented**. The actual implementation uses a simple text-based cache key without model awareness. This is a known limitation that could cause cross-model cache pollution.
+
+#### 23.7.1 Cache Key (No Model Awareness)
+
+```python
+def generate_cache_key(data: str) -> str:
+    normalized = data.strip().lower()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+```
+
+#### 23.7.2 Extended CacheStore with Statistics
+
+The `CacheStore` class includes hit/miss tracking:
+
+```python
+class CacheStore:
+    @property
+    def stats(self) -> dict[str, int]:
+        return {"hits": self._hits, "misses": self._misses, "size": len(self._store)}
+```
+
+#### 23.7.3 HTTP Response Cache (Enhancement)
+
+An additional `HttpCacheStore` caches HTTP GET responses by URI with TTL-based expiration.
+
+#### 23.7.4 ResponseLogger — Diagnostic Logging
+
+**NOT implemented.** A comprehensive logging middleware for LLM call diagnostics was planned but not implemented.
+
+---
+
+### 23.8 Guest Extraction — Model ID Support
+
+The extraction functions accept optional `model_id` parameters:
+
+```python
+def _get_client_and_model(model_id: int | None = None) -> tuple[OpenAI, str]:
+    """If model_id is provided, looks up the model from the LLMModels table."""
+    if model_id is not None:
+        client, model_name = get_llm_config_by_model_id(model_id)
+        return client, model_name
+    # Fall back to config.json
+```
+
+---
+
+### 23.9 `_get_base_client()` URL Normalization
+
+The `_get_base_client()` helper normalizes the models endpoint URL:
+
+```python
+def _get_base_client() -> tuple[OpenAI, str]:
+    models_endpoint = config_manager.test_settings.models_endpoint
+    base_url = models_endpoint.rstrip('/').replace('/models', '')
+    ...
+```
+
+---
+
+### 23.10 Prompt Version `model_id` — `ondelete="SET NULL"` Behavior
+
+Both the spec and implementation use `ondelete="SET NULL"` on the foreign key. When an `LLMModel` is deleted, any `PromptVersion` referencing it gets `model_id = NULL` and falls back to the default model.
 
 ---
 

@@ -22,7 +22,7 @@ from openai.types.chat import ChatCompletionUserMessageParam
 from PIL import Image
 
 from app.config import config_manager
-from app.services.llm import get_llm_config_by_model_id
+from app.services.llm import get_llm_config_by_model_id, _build_client_from_model
 
 logger = logging.getLogger(__name__)
 
@@ -82,12 +82,14 @@ def _get_client_and_model(model_id: int | None = None) -> tuple[OpenAI, str]:
         logger.info("Using model '%s' (DB model_id=%s) for extraction", model_name, model_id)
         return client, model_name
 
-    models_endpoint = config_manager.test_settings.models_endpoint
-    base_url = models_endpoint.rstrip('/').replace('/models', '')
-    model_name = config_manager.test_settings.model_name
+    # Build a minimal model-like object for _build_client_from_model
+    class _ConfigModel:
+        endpoint: str = config_manager.test_settings.models_endpoint
+        model_name: str = config_manager.test_settings.model_name
 
-    client = OpenAI(base_url=base_url, api_key="none")
-    logger.info("Using model '%s' at base URL '%s' for extraction", model_name, base_url)
+    config_model = _ConfigModel()
+    client, model_name = _build_client_from_model(config_model)
+    logger.info("Using model '%s' at base URL '%s' for extraction", model_name, config_model.endpoint)
     return client, model_name
 
 
