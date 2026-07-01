@@ -13,9 +13,15 @@ from app.enums import BookingChannel, BookingSource, ReservationStatus
 
 
 class Room(Base):
-    """Maps to the Rooms table."""
+    """Maps to the Rooms table.
+
+    Set __expose_in_prompt__ = True to include this table in the
+    {DATABASE_TABLES} placeholder resolver.  Only tables with this
+    attribute are introspected and exposed to LLM prompts.
+    """
 
     __tablename__ = "Rooms"
+    __expose_in_prompt__ = True  # noqa: PLCR001
 
     room_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
@@ -29,9 +35,15 @@ class Room(Base):
 
 
 class Guest(Base):
-    """Maps to the Guests table."""
+    """Maps to the Guests table.
+
+    Set __expose_in_prompt__ = True to include this table in the
+    {DATABASE_TABLES} placeholder resolver.  Only tables with this
+    attribute are introspected and exposed to LLM prompts.
+    """
 
     __tablename__ = "Guests"
+    __expose_in_prompt__ = True  # noqa: PLCR001
 
     guest_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     first_name: Mapped[str] = mapped_column(String, nullable=False)
@@ -44,9 +56,15 @@ class Guest(Base):
 
 
 class Reservation(Base):
-    """Maps to the Reservations table."""
+    """Maps to the Reservations table.
+
+    Set __expose_in_prompt__ = True to include this table in the
+    {DATABASE_TABLES} placeholder resolver.  Only tables with this
+    attribute are introspected and exposed to LLM prompts.
+    """
 
     __tablename__ = "Reservations"
+    __expose_in_prompt__ = True  # noqa: PLCR001
 
     reservation_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     room_id: Mapped[int] = mapped_column(

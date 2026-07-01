@@ -18,12 +18,7 @@ import json
 from typing import Any
 
 from app.services.llm import TOOL_DEFINITIONS, SHARED_SYSTEM_PROMPT, get_llm_config
-from app.services.tool_logic import (
-    execute_query_guests,
-    execute_query_rooms,
-    execute_query_reservations,
-    execute_get_hotel_summary,
-)
+from app.services.tool_logic import execute_query_guest_with_reservations
 
 
 # ---------------------------------------------------------------------------
@@ -43,11 +38,10 @@ from app.services.tool_logic import (
 # ---------------------------------------------------------------------------
 
 # Map tool names to their execution functions
+# Only query_guest_with_reservations is registered — it handles all guest/reservation queries
+# in a single tool call, eliminating the multi-turn workflow that was causing latency.
 TOOL_EXECUTORS = {
-    "query_guests": execute_query_guests,
-    "query_rooms": execute_query_rooms,
-    "query_reservations": execute_query_reservations,
-    "get_hotel_summary": execute_get_hotel_summary,
+    "query_guest_with_reservations": execute_query_guest_with_reservations,
 }
 
 

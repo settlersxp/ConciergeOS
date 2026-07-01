@@ -5,6 +5,7 @@ import { aiImprove } from '../../services/promptsApi';
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  summary?: string;
 }
 
 interface PromptImprovementChatProps {
@@ -32,7 +33,7 @@ export default function PromptImprovementChat({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-  const [lastAssistantReply, setLastAssistantReply] = useState<string | null>(null);
+  const [lastImprovedText, setLastImprovedText] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -43,7 +44,7 @@ export default function PromptImprovementChat({
     if (open) {
       setMessages([]);
       setInput('');
-      setLastAssistantReply(null);
+      setLastImprovedText(null);
       // Initial assistant message showing current text
       setMessages([
         {
@@ -72,7 +73,7 @@ ${currentText}
     setMessages(updatedMessages);
     setInput('');
     setSending(true);
-    setLastAssistantReply(null);
+    setLastImprovedText(null);
 
     try {
       // Build conversation history without the initial assistant message
@@ -85,9 +86,10 @@ ${currentText}
       const assistantMessage: ChatMessage = {
         role: 'assistant',
         content: response.improved_text,
+        summary: response.summary,
       };
       setMessages([...updatedMessages, assistantMessage]);
-      setLastAssistantReply(response.improved_text);
+      setLastImprovedText(response.improved_text);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setMessages([
@@ -100,8 +102,8 @@ ${currentText}
   };
 
   const handleApply = () => {
-    if (lastAssistantReply) {
-      onApply(lastAssistantReply);
+    if (lastImprovedText) {
+      onApply(lastImprovedText);
     }
     onClose();
   };
@@ -140,6 +142,12 @@ ${currentText}
                     : 'bg-surface-200 dark:bg-primary-700 text-primary-900 dark:text-white'
                 }`}
               >
+                {/* Show summary above the content for assistant messages (if available) */}
+                {msg.role === 'assistant' && msg.summary && (
+                  <div className="mb-2 text-xs italic text-primary-600 dark:text-primary-300 border-b border-primary-400/30 pb-2">
+                    {msg.summary}
+                  </div>
+                )}
                 {msg.content}
               </div>
             </div>
@@ -173,7 +181,7 @@ ${currentText}
           </div>
           <div className="flex justify-end gap-2">
             <Button onClick={onClose} variant="ghost">Cancel</Button>
-            <Button onClick={handleApply} disabled={!lastAssistantReply} variant="primary">
+            <Button onClick={handleApply} disabled={!lastImprovedText} variant="primary">
               Apply Improvement
             </Button>
           </div>

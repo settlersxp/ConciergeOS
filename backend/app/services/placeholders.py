@@ -5,7 +5,7 @@ import logging
 import re
 from datetime import datetime
 
-from app.db import engine
+from app.db import Base, engine
 from app.models import Guest, Reservation, Room
 
 logger = logging.getLogger(__name__)
@@ -82,9 +82,47 @@ def _get_db_schema() -> dict:
     return schema
 
 
+def _get_exposed_tables() -> set[str]:
+    """Return the set of table names that opt into prompt exposure.
+
+    Scans all known SQLAlchemy model classes for the
+    ``__expose_in_prompt__`` attribute.  Only models with this attribute
+    set to True are included in the {DATABASE_TABLES} output.
+
+    Returns an empty set when no models declare the attribute, which
+    signals a fallback to *all* tables for backward compatibility.
+    """
+    import app.models as models_module
+    exposed: set[str] = set()
+    for name in dir(models_module):
+        obj = getattr(models_module, name)
+        if (
+            isinstance(obj, type)
+            and issubclass(obj, Base)
+            and obj is not Base
+            and getattr(obj, "__expose_in_prompt__", False)
+            and hasattr(obj, "__tablename__")
+        ):
+            exposed.add(obj.__tablename__)
+    return exposed
+
+
 def _resolve_database_tables() -> str:
-    """Generate a schema description by introspecting the actual database tables."""
+    """Generate a schema description by introspecting exposed database tables.
+
+    Only tables whose corresponding model class has
+    ``__expose_in_prompt__ = True`` are included in the output.
+    """
     schema = _get_db_schema()
+    exposed_tables = _get_exposed_tables()
+
+    # Backward-compat: if no models declare __expose_in_prompt__, expose all.
+    if not exposed_tables:
+        logger.info("No models with __expose_in_prompt__ found — exposing all tables")
+    else:
+        logger.info("Filtering DATABASE_TABLES to exposed models: %s", sorted(exposed_tables))
+        schema = {t: c for t, c in schema.items() if t in exposed_tables}
+
     lines = ["## Database Schema", "", "You have access to a SQLite database with the following tables:", ""]
     for table_name, columns in schema.items():
         lines.append(f"### {table_name}")
