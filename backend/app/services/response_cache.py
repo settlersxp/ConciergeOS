@@ -171,20 +171,24 @@ class CacheStore:
 # ---------------------------------------------------------------------------
 
 
-def generate_cache_key(text: str) -> str:
+def generate_cache_key(text: str, model: str | None = None) -> str:
     """
-    Generate a deterministic cache key from normalized text.
+    Generate a deterministic cache key from normalized text + optional model.
 
     Normalization: strip whitespace, lowercase.
+    Model-aware: includes model in the key so different models don't share cache.
 
     Args:
         text: Raw input text (e.g., customer name)
+        model: Optional model name/id. If different, produces different cache keys.
 
     Returns:
         SHA256 hex digest string
     """
     normalized = text.strip().lower()
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    # Include model in the key to prevent cross-model cache pollution
+    key_input = normalized if model is None else f"{normalized}|model:{model}"
+    return hashlib.sha256(key_input.encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -647,8 +651,8 @@ def _call_llm_impl(
     response_logger = _get_logger()
     cache = _get_cache()
 
-    # Generate cache key from the raw user message (customer name)
-    cache_key = generate_cache_key(user_message)
+    # Generate cache key from the raw user message (customer name) + model
+    cache_key = generate_cache_key(user_message, model=model)
 
     logger.info(
         f"[TOOL_CALL] Starting call_llm_with_db_tools | "
@@ -692,7 +696,7 @@ def _call_llm_impl(
             messages=messages,
             tools=effective_tool_definitions,  # type: ignore[arg-type]
             temperature=0.1,
-            max_tokens=102400,
+            max_tokens=10240,
         )
 
         assistant_message = response.choices[0].message

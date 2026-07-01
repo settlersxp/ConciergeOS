@@ -127,6 +127,35 @@ class PerformanceTestResult(Base):
 
 
 # ---------------------------------------------------------------------------
+# LLM Model Management model (stored in hotel.db)
+# ---------------------------------------------------------------------------
+
+class LLMModel(Base):
+    """Maps to the LLMModels table.
+
+    A dynamic registry of LLM models that can be assigned to prompts.
+    Each model entry stores the connection details and capabilities
+    needed to route LLM calls to the correct endpoint.
+    """
+
+    __tablename__ = "LLMModels"
+
+    model_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    endpoint: Mapped[str] = mapped_column(String(500), nullable=False)
+    models_endpoint: Mapped[str] = mapped_column(String(500), nullable=False, server_default="")
+    model_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    model_type: Mapped[str | None] = mapped_column(String(20), nullable=True, comment='"text", "image_audio", or "general"')
+    vllm_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    thinking_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship: one model can serve many prompts
+    prompt_versions: Mapped[list["PromptVersion"]] = relationship(back_populates="llm_model", lazy="selectin")
+
+
+# ---------------------------------------------------------------------------
 # Prompt versioning model (stored in hotel.db)
 # ---------------------------------------------------------------------------
 
@@ -149,8 +178,14 @@ class PromptVersion(Base):
     user_prompt_template: Mapped[str] = mapped_column(Text, nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     meta_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("LLMModels.model_id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    llm_model: Mapped["LLMModel | None"] = relationship(back_populates="prompt_versions", lazy="selectin")
 
     __table_args__ = (
         UniqueConstraint("prompt_id", "version", name="uq_prompt_version"),

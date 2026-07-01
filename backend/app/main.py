@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes import (
     guest_search_router,
+    models_router,
     performance_testing_router,
     prompts_router,
     reservations_router,
@@ -50,5 +51,6 @@ app.include_router(guest_search_router)
 app.include_router(settings_router)
 app.include_router(performance_testing_router)
 app.include_router(prompts_router)
+app.include_router(models_router)
 app.include_router(prompt_groups_router)
 app.include_router(debug_router, prefix="/api")

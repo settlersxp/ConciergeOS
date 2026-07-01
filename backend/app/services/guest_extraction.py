@@ -22,6 +22,7 @@ from openai.types.chat import ChatCompletionUserMessageParam
 from PIL import Image
 
 from app.config import config_manager
+from app.services.llm import get_llm_config_by_model_id
 
 logger = logging.getLogger(__name__)
 
@@ -69,12 +70,18 @@ def crop_image(image_bytes: bytes, x: float, y: float, width: float, height: flo
 # LLM Client
 # ---------------------------------------------------------------------------
 
-def _get_client_and_model() -> tuple[OpenAI, str]:
+def _get_client_and_model(model_id: int | None = None) -> tuple[OpenAI, str]:
     """
     Create an OpenAI client and return it along with the configured model name.
 
-    Uses test_settings from config.json for both the endpoint URL and model name.
+    If model_id is provided, looks up the model from the LLMModels table.
+    Otherwise falls back to the config.json settings.
     """
+    if model_id is not None:
+        client, model_name = get_llm_config_by_model_id(model_id)
+        logger.info("Using model '%s' (DB model_id=%s) for extraction", model_name, model_id)
+        return client, model_name
+
     models_endpoint = config_manager.test_settings.models_endpoint
     base_url = models_endpoint.rstrip('/').replace('/models', '')
     model_name = config_manager.test_settings.model_name
@@ -114,18 +121,19 @@ VISION_SYSTEM_PROMPT = (
 )
 
 
-def extract_name_from_image(image_bytes: bytes, cropped: bool = False) -> str:
+def extract_name_from_image(image_bytes: bytes, cropped: bool = False, model_id: int | None = None) -> str:
     """
     Send an image to the configured LLM and extract the guest name.
 
     Args:
         image_bytes: Raw image data (already cropped if cropped=True).
         cropped: Whether the image was pre-cropped.
+        model_id: Optional LLM model ID to use for extraction.
 
     Returns:
         Extracted name string.
     """
-    client, model = _get_client_and_model()
+    client, model = _get_client_and_model(model_id)
 
     ext = _detect_image_ext(image_bytes)
     b64 = base64.b64encode(image_bytes).decode("utf-8")
@@ -227,7 +235,7 @@ def _save_debug_wav(wav_bytes: bytes):
         logger.error("Failed to save debug WAV file: %s", str(e))
 
 
-def extract_name_from_audio(audio_bytes: bytes, audio_format: str = "webm") -> str:
+def extract_name_from_audio(audio_bytes: bytes, audio_format: str = "webm", model_id: int | None = None) -> str:
     """
     Send an audio recording to the configured LLM and extract the guest name.
 
@@ -237,11 +245,12 @@ def extract_name_from_audio(audio_bytes: bytes, audio_format: str = "webm") -> s
     Args:
         audio_bytes: Raw audio data (any supported format).
         audio_format: Source file format extension (e.g., "webm", "mp3", "wav").
+        model_id: Optional LLM model ID to use for extraction.
 
     Returns:
         Extracted name string.
     """
-    client, model = _get_client_and_model()
+    client, model = _get_client_and_model(model_id)
 
     # Convert any audio format to WAV for reliable LLM processing
     wav_bytes = convert_to_wav(audio_bytes, audio_format)

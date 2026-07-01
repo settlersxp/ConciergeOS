@@ -112,11 +112,19 @@ def execute_chain(
                 else:
                     user_message = user_template
 
+                # Resolve model_id for this prompt version
+                from app.models import PromptVersion as PV
+                pv = session_manager.query(PV).filter(
+                    PV.prompt_id == item.prompt_id,
+                    PV.version == item.prompt_version,
+                ).first()
+                model_id_val = pv.model_id if pv else None
+
                 # Call LLM
-                from app.services.llm import get_llm_config
+                from app.services.llm import get_llm_config_by_model_id
                 from app.services.response_cache import call_llm_with_db_tools_with_cache_flag
 
-                client, model_name = get_llm_config()
+                client, model_name = get_llm_config_by_model_id(model_id_val)
                 llm_response, was_cached = call_llm_with_db_tools_with_cache_flag(
                     user_message,
                     system_prompt=system_prompt,

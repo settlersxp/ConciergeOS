@@ -6,6 +6,8 @@ export interface UsePromptDataOptions {
   showPreview?: boolean;
   onUserPromptChange?: (userPrompt: string) => void;
   refetchRef?: { current?: () => void };
+  /** When the user has explicitly overridden the model, use this instead of the version's stored model */
+  pendingModel?: number | null | undefined;
 }
 
 export interface UsePromptDataResult {
@@ -24,10 +26,10 @@ export interface UsePromptDataResult {
 export default function usePromptData(
   initialPromptId: string,
   initialVersion: number | undefined,
-  onChange: (value: { prompt_id: string; version?: number }) => void,
+  onChange: (value: { prompt_id: string; version?: number; model_id?: number | null }) => void,
   options: UsePromptDataOptions = {}
 ): UsePromptDataResult {
-  const { showPreview = false, onUserPromptChange, refetchRef } = options;
+  const { showPreview = false, onUserPromptChange, refetchRef, pendingModel } = options;
 
   const [allPrompts, setAllPrompts] = useState<PromptSummary[]>([]);
   const [selectedPromptId, setSelectedPromptId] = useState(initialPromptId);
@@ -51,8 +53,13 @@ export default function usePromptData(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Track if we should override model from pendingModel in this fetch cycle
+  const [overrideModel, setOverrideModel] = useState<number | null | undefined>(undefined);
+
   // Fetch versions when selectedPromptId changes
   useEffect(() => {
+    // Reset the override when the prompt changes
+    setOverrideModel(undefined);
     if (selectedPromptId) {
       fetchVersions(selectedPromptId, initialVersion);
     } else {
@@ -100,7 +107,7 @@ export default function usePromptData(
       // 3. initialVersion prop (from parent on mount)
       // 4. highest version (default)
       let targetVersion: number | undefined;
-      
+
       if (explicitVersion !== undefined) {
         targetVersion = explicitVersion;
         userSelectedVersionRef.current = explicitVersion;
@@ -131,7 +138,11 @@ export default function usePromptData(
 
       if (targetVersion) {
         setSelectedVersion(targetVersion);
-        onChange({ prompt_id: promptId, version: targetVersion });
+        // Find the model_id for the selected version
+        const targetVersionObj = versionsList.find((v) => v.version === targetVersion);
+        // Use overrideModel (user's explicit selection) if set, then fall back to pendingModel, then version's stored model
+        const modelId = overrideModel !== undefined ? overrideModel : (pendingModel !== undefined ? pendingModel : (targetVersionObj?.model_id ?? null));
+        onChange({ prompt_id: promptId, version: targetVersion, model_id: modelId });
 
         if (showPreview) {
           await resolveAndSetPreview(promptId, targetVersion);
@@ -144,17 +155,13 @@ export default function usePromptData(
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onChange, showPreview, initialVersion]);
+  }, [onChange, showPreview, initialVersion, pendingModel, overrideModel]);
 
   // Expose refetch callback to parent
   useEffect(() => {
     if (refetchRef) {
       refetchRef.current = async () => {
         if (selectedPromptId) {
-          // Fetch the latest versions to find the highest version number,
-          // then pass it as explicitVersion so fetchVersions selects it
-          // instead of falling back to userSelectedVersionRef (which would
-          // select an old version that may still be marked as default).
           try {
             const versionsList = await listVersions(selectedPromptId);
             const sorted = [...versionsList].sort((a: { version: number }, b: { version: number }) => b.version - a.version);
@@ -177,8 +184,9 @@ export default function usePromptData(
     userSelectedVersionRef.current = undefined;
     setVersions([]);
     setResolvedPreview(null);
+    onChange({ prompt_id: newPromptId, model_id: null });
     fetchVersions(newPromptId);
-  }, [fetchVersions]);
+  }, [fetchVersions, onChange]);
 
   const handleVersionChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const v = e.target.value ? Number(e.target.value) : undefined;
@@ -186,7 +194,10 @@ export default function usePromptData(
     userSelectedVersionRef.current = v;
     setResolvedPreview(null);
     if (selectedPromptId) {
-      onChange({ prompt_id: selectedPromptId, version: v });
+      const versionObj = versions.find((ver) => ver.version === v);
+      // Use overrideModel first, then pendingModel, then version's stored model
+      const modelId = overrideModel !== undefined ? overrideModel : (pendingModel !== undefined ? pendingModel : (versionObj?.model_id ?? null));
+      onChange({ prompt_id: selectedPromptId, version: v, model_id: modelId });
 
       if (showPreview && v) {
         getByVersion(selectedPromptId, v)
@@ -209,7 +220,7 @@ export default function usePromptData(
           .catch(() => {});
       }
     }
-  }, [selectedPromptId, onChange, showPreview, onUserPromptChange]);
+  }, [selectedPromptId, onChange, showPreview, onUserPromptChange, versions, pendingModel]);
 
   return {
     allPrompts,

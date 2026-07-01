@@ -92,6 +92,7 @@ async def api_run_performance_testing(body: PerformanceTestRequest) -> dict[str,
     # Resolve prompt template from DB if both prompt_id and prompt_version are provided
     user_prompt = body.user_prompt
     system_prompt = SHARED_SYSTEM_PROMPT
+    resolved_model_name: str | None = None
 
     if prompt_id and prompt_version:
         db = SessionLocal()
@@ -110,9 +111,13 @@ async def api_run_performance_testing(body: PerformanceTestRequest) -> dict[str,
                     part for part in (pv.intention, pv.restrictions, pv.output_structure) if part
                 )
                 logger.info(
-                    "[PROMPT RESOLVED] prompt_id=%s | version=%d | name=%s",
-                    prompt_id, prompt_version, pv.name,
+                    "[PROMPT RESOLVED] prompt_id=%s | version=%d | name=%s | model_id=%s",
+                    prompt_id, prompt_version, pv.name, pv.model_id,
                 )
+                # Resolve model from prompt version if available
+                if pv.model_id:
+                    from app.services.llm import get_llm_config_by_model_id
+                    _, resolved_model_name = get_llm_config_by_model_id(pv.model_id)
             else:
                 logger.warning(
                     "[PROMPT NOT FOUND] prompt_id=%s | version=%d - using defaults",
@@ -126,6 +131,9 @@ async def api_run_performance_testing(body: PerformanceTestRequest) -> dict[str,
             prompt_id,
         )
 
+    # Use resolved model name if available, otherwise fall back to body's model_name
+    model_name = resolved_model_name if resolved_model_name else body.model_name
+
     settings = TestSettings(
         customer_name=body.customer_name,
         vllm_url=body.vllm_url,
@@ -137,7 +145,7 @@ async def api_run_performance_testing(body: PerformanceTestRequest) -> dict[str,
         guest_names=guest_names,
         batch_uuid=body.batch_uuid,
         friendly_name=body.friendly_name,
-        model_name=body.model_name,
+        model_name=model_name,
         vllm_version=body.vllm_version,
         thinking_enabled=body.thinking_enabled,
         system_prompt=system_prompt,
@@ -147,8 +155,8 @@ async def api_run_performance_testing(body: PerformanceTestRequest) -> dict[str,
         use_tool_calling=use_tool_calling,
         tool_definitions=TOOL_DEFINITIONS if use_tool_calling else [],
         runtime_variables=body.runtime_variables,
-        prompt_id=getattr(body, 'prompt_id', "") or "",
-        prompt_version=getattr(body, 'prompt_version', None),
+        prompt_id=prompt_id,
+        prompt_version=prompt_version,
     )
 
     # Generate a UUID if not provided

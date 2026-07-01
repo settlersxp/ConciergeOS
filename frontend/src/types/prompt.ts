@@ -9,6 +9,7 @@ export interface PromptVersion {
   restrictions: string;
   output_structure: string;
   user_prompt_template: string;
+  model_id: number | null;
   is_default: boolean;
   metadata: Record<string, unknown> | null;
   created_at: string;
@@ -28,6 +29,7 @@ export interface CreatePromptRequest {
   restrictions: string;
   output_structure: string;
   user_prompt_template: string;
+  model_id?: number | null;
   metadata?: Record<string, unknown>;
 }
 
@@ -37,6 +39,7 @@ export interface UpdatePromptRequest {
   restrictions?: string;
   output_structure?: string;
   user_prompt_template?: string;
+  model_id?: number | null;
   metadata?: Record<string, unknown>;
 }
 

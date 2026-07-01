@@ -35,6 +35,9 @@ export default function PromptManagement() {
   // Create Prompt Modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
 
+  // LLM Model state
+  const [selectedModelId, setSelectedModelId] = useState<number | null>(null);
+
   // AI Improvement Chat state
   const [showImprovementChat, setShowImprovementChat] = useState(false);
   const [improvingSection, setImprovingSection] = useState<string>("");
@@ -80,6 +83,7 @@ export default function PromptManagement() {
     if (!selectedPromptId) {
       setVersions([]);
       setEditingVersion(null);
+      setSelectedModelId(null);
       setEditForm({
         prompt_id: "", version: 1, name: "", intention: "", restrictions: "", output_structure: "", user_prompt_template: "", is_default: false, metadata: undefined,
       });
@@ -95,6 +99,7 @@ export default function PromptManagement() {
 
         if (selected) {
           setEditingVersion(selected.version);
+          setSelectedModelId(selected.model_id ?? null);
           setEditForm({
             prompt_id: selected.prompt_id,
             version: selected.version,
@@ -108,18 +113,27 @@ export default function PromptManagement() {
           });
         } else {
           setEditingVersion(null);
+          setSelectedModelId(null);
         }
       })
       .catch(() => showNotification("Failed to load versions", "error"))
       .finally(() => setLoading(false));
   }, [selectedPromptId]);
 
-  const handlePromptSelectorChange = (selection: { prompt_id: string; version?: number }) => {
+  const handlePromptSelectorChange = (selection: { prompt_id: string; version?: number; model_id?: number | null }) => {
+    // CRITICAL: Order matters because all setState calls in a handler are
+    // batched. setSelectedVersion internally calls setSelectedModelId
+    // (from version's stored model), which would overwrite the user's
+    // selection. We MUST call setSelectedModelId LAST in the batch so
+    // it wins the race.
+    if (selection.version !== undefined) {
+      setSelectedVersion(selection.version);
+    }
     if (selection.prompt_id) {
       setSelectedPromptId(selection.prompt_id);
     }
-    if (selection.version !== undefined) {
-      setSelectedVersion(selection.version);
+    if (selection.model_id !== undefined) {
+      setSelectedModelId(selection.model_id);
     }
   };
 
@@ -148,6 +162,7 @@ export default function PromptManagement() {
     setEditingVersion(version);
     const ver = versions.find((v: PromptVersion) => v.version === version);
     if (ver) {
+      setSelectedModelId(ver.model_id ?? null);
       setEditForm({
         prompt_id: ver.prompt_id,
         version: ver.version,
@@ -174,6 +189,7 @@ export default function PromptManagement() {
     // Also update editForm from the versions array (called by handlePromptSelectorChange)
     const ver = versions.find((v: PromptVersion) => v.version === version);
     if (ver) {
+      setSelectedModelId(ver.model_id ?? null);
       setEditForm({
         prompt_id: ver.prompt_id,
         version: ver.version,
@@ -211,6 +227,7 @@ export default function PromptManagement() {
           restrictions: editForm.restrictions,
           output_structure: editForm.output_structure,
           user_prompt_template: editForm.user_prompt_template,
+          model_id: selectedModelId,
           metadata: metadataWithRuntimeVars,
         });
       } else {
@@ -220,6 +237,7 @@ export default function PromptManagement() {
           restrictions: editForm.restrictions,
           output_structure: editForm.output_structure,
           user_prompt_template: editForm.user_prompt_template,
+          model_id: selectedModelId,
           metadata: metadataWithRuntimeVars,
         });
         const updatedVersions = await listVersions(selectedPromptId);
@@ -329,7 +347,7 @@ export default function PromptManagement() {
             }}
           />
           <PromptSelector
-            value={editingVersion !== null ? { prompt_id: selectedPromptId, version: editingVersion } : undefined}
+            value={editingVersion !== null ? { prompt_id: selectedPromptId, version: editingVersion, model_id: selectedModelId } : undefined}
             onChange={handlePromptSelectorChange}
             refetchRef={selectorRefetchRef}
           />

@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Guest search routes."""
 
+import logging
+
 from fastapi import APIRouter, Form, HTTPException, UploadFile
 
 from app.schemas import GuestSearchRequest, GuestSearchResponse, NameExtractionResponse
 from app.services import query_guest_with_llm
 from app.services.guest_extraction import crop_image, extract_name_from_audio, extract_name_from_image
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -33,6 +37,7 @@ async def api_extract_name(
     crop_y: float = Form(0.0),
     crop_w: float = Form(0.0),
     crop_h: float = Form(0.0),
+    model_id: int | None = Form(None),
 ) -> NameExtractionResponse:
     """
     Extract a guest name from a multimedia file (image or audio).
@@ -42,9 +47,16 @@ async def api_extract_name(
 
     For audio:
     - The entire file is sent to the audio-capable LLM.
+
+    If model_id is provided, uses that specific model for extraction.
+    Otherwise, falls back to the default configured model.
     """
     file_bytes = await file.read()
     content_type = file.content_type or ""
+
+    # Log the model being used for extraction
+    if model_id is not None:
+        logger.info("Using model_id %s for extraction", model_id)
 
     # Detect audio vs image based on Content-Type header
     if "audio" in content_type:
@@ -55,7 +67,9 @@ async def api_extract_name(
             # Fallback: try to guess from content_type
             ext = content_type.split("/")[-1].split(";")[0].strip()
 
-        extracted_name = extract_name_from_audio(file_bytes, audio_format=ext or "webm")
+        extracted_name = extract_name_from_audio(
+            file_bytes, audio_format=ext or "webm", model_id=model_id
+        )
         return NameExtractionResponse(extracted_name=extracted_name, source="audio")
 
     elif "image" in content_type:
@@ -66,7 +80,9 @@ async def api_extract_name(
         else:
             image_bytes = file_bytes
 
-        extracted_name = extract_name_from_image(image_bytes, cropped=has_crop)
+        extracted_name = extract_name_from_image(
+            image_bytes, cropped=has_crop, model_id=model_id
+        )
         return NameExtractionResponse(extracted_name=extracted_name, source="image")
 
     else:
