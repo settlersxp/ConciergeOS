@@ -57,12 +57,16 @@ export interface PromptGroupItem {
   position: number;
   prompt_id: string;
   prompt_version: number;
+  alias?: string;
+  is_input_step?: boolean;
 }
 
 export interface PromptGroupItemCreate {
   position: number;
   prompt_id: string;
   prompt_version: number;
+  alias?: string;
+  is_input_step?: boolean;
 }
 
 export interface PromptGroupSchedule {
@@ -94,9 +98,47 @@ export interface PromptGroup {
   name: string;
   description: string | null;
   is_active: boolean;
+  is_chain_page?: boolean;
+  page_route?: string | null;
   created_at: string;
   updated_at: string;
   items: PromptGroupItem[];
   schedules: PromptGroupSchedule[];
   results: PromptGroupResult[];
+}
+
+// ---------------------------------------------------------------------------
+// Chain page types
+// ---------------------------------------------------------------------------
+
+export interface ChainExecutionRequest {
+  inputs: Record<number, Record<string, string>>;
+  initial_input?: string;
+}
+
+export interface ChainStepResult {
+  position: number;
+  prompt_id: string;
+  prompt_version: number;
+  alias?: string;
+  status: "running" | "success" | "failed";
+  response: string | null;
+  cached: boolean;
+  error: string | null;
+  user_message: string | null;
+  system_prompt?: string | null;
+  references?: string[];
+}
+
+export interface ChainExecutionResult {
+  group_id: number;
+  group_name: string;
+  executed_at: string;
+  scheduled: boolean;
+  success: boolean;
+  steps_count: number;
+  steps: ChainStepResult[];
+  final_output: string | null;
+  result_file: string;
+  result_id: number;
 }

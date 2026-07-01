@@ -239,8 +239,18 @@ RESOLVERS: dict[str, callable] = {
 }
 
 
-def resolve_placeholders(text: str) -> str:
-    """Replace all {PLACEHOLDER_NAME} occurrences with their resolved content."""
+def resolve_placeholders(
+    text: str,
+    chain_results: dict[int, str] | None = None,
+    aliases: dict[str, int] | None = None,
+) -> str:
+    """Replace all {PLACEHOLDER_NAME} occurrences with their resolved content.
+
+    Resolution order:
+    1. Static placeholders (DATABASE_TABLES, GUEST_INFORMATION, etc.)
+    2. Chain result references ({step_N}, {step_N.result})
+    3. Alias references ({alias_name} — only matches lowercase+underscore+digits patterns)
+    """
     def replacer(match: re.Match) -> str:
         name = match.group(1).upper()
         meta = AVAILABLE_PLACEHOLDERS.get(name)
@@ -251,7 +261,36 @@ def resolve_placeholders(text: str) -> str:
                 logger.warning(f"Failed to resolve placeholder '{{{name}}}': {e}")
                 return match.group(0)
         return match.group(0)
-    return re.sub(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", replacer, text)
+
+    # Phase 1: Static placeholders (existing behavior)
+    text = re.sub(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", replacer, text)
+
+    # Phase 2: Chain result references ({step_N} and {step_N.result})
+    if chain_results:
+        def step_resolver(match: re.Match) -> str:
+            pos = int(match.group(1))
+            return chain_results.get(pos, match.group(0))
+        text = re.sub(r"\{step_(\d+)(?:\.result)?\}", step_resolver, text)
+
+        # Phase 3: Alias references ({alias_name})
+        # Only match patterns that look like aliases (lowercase, underscores, digits)
+        # but not static placeholders (which are uppercase) or step references (already resolved)
+        if aliases:
+            def alias_resolver(match: re.Match) -> str:
+                alias_name = match.group(1)
+                if alias_name in aliases:
+                    return chain_results.get(aliases[alias_name], match.group(0))
+                return match.group(0)
+            # Match identifier patterns, but skip those that start with uppercase (static placeholders)
+            def alias_replacer(match: re.Match) -> str:
+                name = match.group(1)
+                # Skip if looks like a static placeholder (contains uppercase)
+                if name != name.lower():
+                    return match.group(0)
+                return alias_resolver(match)
+            text = re.sub(r"\{([a-z_][a-z0-9_]*)\}", alias_replacer, text)
+
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -262,31 +301,34 @@ def resolve_placeholders(text: str) -> str:
 def resolve_all_placeholders(
     text: str,
     runtime_variables: dict[str, str] | None = None,
+    chain_results: dict[int, str] | None = None,
+    aliases: dict[str, int] | None = None,
 ) -> str:
-    """Replace ALL placeholders: static (DB-resolved) + runtime (user-provided).
+    """Replace ALL placeholders: static (DB-resolved) + runtime (user-provided) + chain results.
 
     Phase 1 — Static placeholders (DATABASE_TABLES, GUEST_INFORMATION, etc.)
       Resolved from database schema, current date, tool definitions, etc.
-      These are the same for every query.
 
     Phase 2 — Runtime variables ({table.field} → user-provided value)
       Resolved from a key-value map supplied at call time.
-      Examples: {"customers.first_name": "عائشة", "rooms.room_id": "42"}
 
-    Order matters: static placeholders are resolved first so their content
-    never gets partially mangled by runtime-variable replacement.
+    Phase 3 — Chain results ({step_N}, {alias})
+      Resolved from outputs of prior chain steps.
+
+    Order matters: static placeholders first, then runtime, then chain results,
+    so content from earlier phases is never mangled by later phases.
 
     Args:
-        text: The template string containing placeholders like {DATABASE_TABLES}
-              and/or {table.field}.
-        runtime_variables: Optional dict mapping runtime variable keys (e.g.
-              "customers.first_name") to their runtime values.
+        text: The template string containing placeholders.
+        runtime_variables: Optional dict mapping runtime variable keys to values.
+        chain_results: Optional dict mapping step positions to their output strings.
+        aliases: Optional dict mapping alias names to step positions.
 
     Returns:
         The fully resolved string with all placeholders replaced.
     """
-    # Phase 1: Static placeholders (DATABASE_TABLES, GUEST_INFORMATION, etc.)
-    text = resolve_placeholders(text)
+    # Phase 1+3: Static placeholders + chain results (single call to handle interaction)
+    text = resolve_placeholders(text, chain_results=chain_results, aliases=aliases)
 
     # Phase 2: Runtime variables ({table.field} → user-provided value)
     if runtime_variables:

@@ -22,6 +22,7 @@ from app.models import (
 from app.schemas import (
     CreateGroupRequest,
     UpdateGroupRequest,
+    ChainExecutionRequest,
     PromptGroupScheduleCreate,
     PromptGroupSchema,
     PromptGroupItemSchema,
@@ -52,6 +53,8 @@ def _group_to_schema(group: PromptGroup) -> PromptGroupSchema:
         name=group.name,
         description=group.description,
         is_active=group.is_active,
+        is_chain_page=group.is_chain_page,
+        page_route=group.page_route,
         created_at=group.created_at.isoformat() if group.created_at else "",
         updated_at=group.updated_at.isoformat() if group.updated_at else "",
         items=[
@@ -61,6 +64,8 @@ def _group_to_schema(group: PromptGroup) -> PromptGroupSchema:
                 position=item.position,
                 prompt_id=item.prompt_id,
                 prompt_version=item.prompt_version,
+                alias=item.alias,
+                is_input_step=item.is_input_step,
             )
             for item in group.items
         ],
@@ -131,6 +136,8 @@ def create_group(req: CreateGroupRequest):
                     position=item_req.position,
                     prompt_id=item_req.prompt_id,
                     prompt_version=item_req.prompt_version,
+                    alias=item_req.alias,
+                    is_input_step=item_req.is_input_step,
                 ))
             db.commit()
 
@@ -186,6 +193,11 @@ def update_group(group_id: int, req: UpdateGroupRequest):
         if req.is_active is not None:
             group.is_active = req.is_active
 
+        if req.is_chain_page is not None:
+            group.is_chain_page = req.is_chain_page
+        if req.page_route is not None:
+            group.page_route = req.page_route
+
         if req.items is not None:
             # Replace all items
             db.query(PromptGroupItem).filter(PromptGroupItem.group_id == group_id).delete()
@@ -195,6 +207,8 @@ def update_group(group_id: int, req: UpdateGroupRequest):
                     position=item_req.position,
                     prompt_id=item_req.prompt_id,
                     prompt_version=item_req.prompt_version,
+                    alias=item_req.alias,
+                    is_input_step=item_req.is_input_step,
                 ))
 
         db.commit()
@@ -316,6 +330,28 @@ def execute_group(group_id: int, initial_input: str = ""):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error("Execution failed for group %d: %s", group_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{group_id}/execute-chain")
+def execute_chain_page(group_id: int, req: ChainExecutionRequest):
+    """Execute chain with user inputs (page mode).
+
+    The first step receives user_inputs as template variables.
+    Subsequent steps receive the output of their predecessor via chain results.
+    """
+    try:
+        result = execute_chain(
+            group_id,
+            initial_input=req.initial_input,
+            page_mode=True,
+            user_inputs=req.inputs,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error("Chain execution failed for group %d: %s", group_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

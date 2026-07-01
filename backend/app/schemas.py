@@ -3,8 +3,8 @@
 Pydantic schemas for API request/response validation.
 """
 
-from datetime import date
-from typing import TYPE_CHECKING, Any, Dict, List
+from datetime import date, datetime
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, Field
 
@@ -224,10 +224,12 @@ class LLMModelSchema(BaseModel):
     model_type: str | None = None
     vllm_version: str | None = None
     thinking_enabled: bool = False
-    created_at: str
-    updated_at: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+    model_dump_mode: ClassVar[str] = "json"
 
 
 class CreateModelRequest(BaseModel):
@@ -513,6 +515,9 @@ class PromptGroupItemSchema(BaseModel):
     position: int
     prompt_id: str
     prompt_version: int
+    # NEW: Chain page fields
+    alias: str | None = None
+    is_input_step: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -523,6 +528,9 @@ class PromptGroupItemCreate(BaseModel):
     position: int
     prompt_id: str
     prompt_version: int
+    # NEW: Chain page fields
+    alias: str | None = None
+    is_input_step: bool = False
 
 
 class PromptGroupScheduleSchema(BaseModel):
@@ -568,6 +576,9 @@ class PromptGroupSchema(BaseModel):
     is_active: bool = True
     created_at: str
     updated_at: str
+    # NEW: Chain page fields
+    is_chain_page: bool = False
+    page_route: str | None = None
     items: List[PromptGroupItemSchema] = []
     schedules: List[PromptGroupScheduleSchema] = []
     results: List[PromptGroupResultSchema] = []
@@ -589,4 +600,45 @@ class UpdateGroupRequest(BaseModel):
     name: str | None = None
     description: str | None = None
     is_active: bool | None = None
+    is_chain_page: bool | None = None
+    page_route: str | None = None
     items: List[PromptGroupItemCreate] | None = None
+
+
+class ChainExecutionRequest(BaseModel):
+    """Request body for page-mode chain execution.
+
+    The first step receives user_inputs as template variables.
+    Subsequent steps receive the output of their predecessor.
+    """
+    inputs: dict[int, dict[str, str]] = {}
+    """{step_position: {field_name: value}} for user-provided inputs"""
+    initial_input: str = ""
+    """Raw text passed to the first step before template resolution"""
+
+
+class ChainStepResultSchema(BaseModel):
+    """Per-step response from chain execution."""
+    position: int
+    prompt_id: str
+    prompt_version: int
+    alias: str | None = None
+    system_prompt: str | None = None
+    user_message: str | None = None
+    response: str | None = None
+    cached: bool = False
+    error: str | None = None
+
+
+class ChainExecutionResultSchema(BaseModel):
+    """Response from chain execution with per-step details."""
+    group_id: int
+    group_name: str
+    executed_at: str
+    scheduled: bool = False
+    success: bool = False
+    steps_count: int = 0
+    steps: List[ChainStepResultSchema] = []
+    final_output: str | None = None
+    result_file: str = ""
+    result_id: int = 0

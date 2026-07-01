@@ -2,7 +2,7 @@
  * API client for Prompt Group CRUD, execution, and scheduling.
  */
 
-import type { PromptGroup, PromptGroupItemCreate, PromptGroupResult, PromptGroupScheduleCreate } from '../types/prompt';
+import type { ChainExecutionRequest, ChainExecutionResult, PromptGroup, PromptGroupItemCreate, PromptGroupResult, PromptGroupScheduleCreate } from '../types/prompt';
 
 /** Generic fetch helper that parses JSON responses */
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
@@ -29,7 +29,7 @@ export function getGroup(groupId: number): Promise<PromptGroup> {
 }
 
 /** Create a new prompt group */
-export function createGroup(data: { name: string; description?: string | null; items?: PromptGroupItemCreate[] }): Promise<PromptGroup> {
+export function createGroup(data: { name: string; description?: string | null; items?: PromptGroupItemCreate[]; is_chain_page?: boolean; page_route?: string | null }): Promise<PromptGroup> {
   return request<PromptGroup>('/api/prompt-groups', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -37,7 +37,7 @@ export function createGroup(data: { name: string; description?: string | null; i
 }
 
 /** Update a prompt group */
-export function updateGroup(groupId: number, data: { name?: string | null; description?: string | null; is_active?: boolean | null; items?: PromptGroupItemCreate[] | null }): Promise<PromptGroup> {
+export function updateGroup(groupId: number, data: { name?: string | null; description?: string | null; is_active?: boolean | null; is_chain_page?: boolean | null; page_route?: string | null; items?: PromptGroupItemCreate[] | null }): Promise<PromptGroup> {
   return request<PromptGroup>(`/api/prompt-groups/${groupId}`, {
     method: 'PUT',
     body: JSON.stringify(data),
@@ -64,6 +64,33 @@ export function executeGroup(groupId: number, initialInput?: string): Promise<Re
   return request<Record<string, unknown>>(`/api/prompt-groups/${groupId}/execute${query}`, {
     method: 'POST',
   });
+}
+
+/**
+ * Execute chain with user inputs (page mode).
+ *
+ * @param groupId The PromptGroup ID
+ * @param inputs {step_position: {field: value}} for user-provided inputs
+ * @param initialInput Optional initial text for the first step
+ * @returns ChainExecutionResult with per-step details
+ */
+export function executeChain(
+  groupId: number,
+  inputs: Record<number, Record<string, string>>,
+  initialInput?: string,
+): Promise<ChainExecutionResult> {
+  const body: ChainExecutionRequest = {
+    inputs,
+    initial_input: initialInput || "",
+  };
+  return request<ChainExecutionResult>(
+    `/api/prompt-groups/${groupId}/execute-chain`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 /** Schedule a prompt chain execution */
@@ -105,6 +132,7 @@ export const promptGroupsApi = {
   toggle: toggleGroup,
   remove: deleteGroup,
   execute: executeGroup,
+  executeChain,
   schedule: scheduleGroup,
   cancelSchedule,
   results: getResults,

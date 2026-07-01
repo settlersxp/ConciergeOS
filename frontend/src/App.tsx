@@ -7,6 +7,7 @@ import Settings from './pages/Settings';
 import PromptManagement from './pages/PromptManagement';
 import PromptGroups from './pages/PromptGroups';
 import PerformanceDashboard from './pages/PerformanceDashboard';
+import PromptChainPage from './pages/PromptChainPage';
 import { SettingsProvider } from './context/SettingsContext';
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
           <Route path="/prompt-groups" element={<PromptGroups />} />
           <Route path="/performance-dashboard" element={<PerformanceDashboard />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/prompt-chains/:route" element={<PromptChainPage />} />
         </Routes>
       </SettingsProvider>
     </BrowserRouter>

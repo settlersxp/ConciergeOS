@@ -308,20 +308,6 @@ def _get_http_cache() -> HttpCacheStore:
     return _http_response_cache
 
 
-def cache_clear() -> None:
-    """Clear the LLM response cache."""
-    global _response_cache
-    if _response_cache is not None:
-        _response_cache.clear()
-
-
-def http_cache_clear() -> None:
-    """Clear the HTTP response cache."""
-    global _http_response_cache
-    if _http_response_cache is not None:
-        _http_response_cache.clear()
-
-
 # ---------------------------------------------------------------------------
 # LLM Call wrapper with caching
 # ---------------------------------------------------------------------------
@@ -380,3 +366,53 @@ def call_llm_with_db_tools_with_cache_flag(
     cache.set(cache_key, result)
 
     return result, False
+
+
+# ---------------------------------------------------------------------------
+# Debug-friendly public API (referenced by debug.py)
+# ---------------------------------------------------------------------------
+
+def cache_stats() -> dict[str, int]:
+    """Return LLM cache statistics for debug endpoints."""
+    return _get_cache().stats
+
+
+def http_cache_stats() -> dict[str, int]:
+    """Return HTTP cache statistics for debug endpoints."""
+    return _get_http_cache().stats
+
+
+def cache_clear() -> int:
+    """Clear the LLM response cache and return the number of cleared entries."""
+    cache = _get_cache()
+    count = len(cache._store)
+    cache.clear()
+    return count
+
+
+def http_cache_clear() -> int:
+    """Clear the HTTP response cache and return the number of cleared entries."""
+    cache = _get_http_cache()
+    count = len(cache._store)
+    cache.clear()
+    return count
+
+
+def call_llm_with_db_tools(user_prompt: str, system_prompt: str | None = None) -> str:
+    """Convenience wrapper used by debug endpoints.
+
+    Returns only the LLM response string (no cache flag).
+    """
+    response, _ = call_llm_with_db_tools_with_cache_flag(
+        user_prompt, system_prompt=system_prompt
+    )
+    return response
+
+
+def http_cache_cleanup_expired() -> int:
+    """Remove all expired HTTP cache entries. Returns count of removed entries."""
+    cache = _get_http_cache()
+    expired_keys = [k for k, v in cache._store.items() if v.is_expired]
+    for key in expired_keys:
+        cache.delete(key)
+    return len(expired_keys)

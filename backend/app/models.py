@@ -205,6 +205,13 @@ class PromptGroup(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+
+    # NEW: Chain page fields
+    is_chain_page: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0",
+        comment="If True, this group renders as a full page")
+    page_route: Mapped[str | None] = mapped_column(String(200), nullable=True,
+        comment="URL route for chain page (e.g., /guest-intel)")
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -223,6 +230,12 @@ class PromptGroupItem(Base):
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     prompt_id: Mapped[str] = mapped_column(String(100), nullable=False)
     prompt_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # NEW: Chain page fields
+    alias: Mapped[str | None] = mapped_column(String(50), nullable=True,
+        comment="Human-readable alias for cross-step referencing")
+    is_input_step: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0",
+        comment="Mark this step as the user-input entry point for page mode")
 
     group: Mapped["PromptGroup"] = relationship(back_populates="items")
 

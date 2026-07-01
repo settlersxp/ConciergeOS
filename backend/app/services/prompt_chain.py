@@ -46,16 +46,21 @@ def execute_chain(
     initial_input: str = "",
     scheduled: bool = False,
     db: Session | None = None,
+    page_mode: bool = False,
+    user_inputs: dict[int, dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Execute all prompts in a group sequentially.
 
     Each prompt's LLM output is fed as context to the next prompt in the chain.
+    In page_mode, user_inputs provide template variables for the first step(s).
 
     Args:
         group_id: ID of the PromptGroup to execute.
         initial_input: Optional initial text passed to the first prompt's user message.
         scheduled: Whether this execution was triggered by the scheduler.
         db: Optional existing database session. If None, a new session is created.
+        page_mode: If True, treat first step as user-input step (uses user_inputs as template vars).
+        user_inputs: {step_position: {field: value}} mapping for page mode execution.
 
     Returns:
         Dictionary with execution details including per-step results.
@@ -84,6 +89,14 @@ def execute_chain(
         if not items:
             raise ValueError(f"PromptGroup {group_id} has no items")
 
+        # --- Build alias map: alias_name -> step_position ---
+        # Also maps "step_{N}" -> N for built-in step references
+        aliases: dict[str, int] = {}
+        for item in items:
+            aliases[f"step_{item.position}"] = item.position
+            if item.alias:
+                aliases[item.alias] = item.position
+
         # --- Create result record ---
         result_record = PromptGroupResult(
             group_id=group_id,
@@ -95,6 +108,7 @@ def execute_chain(
         session_manager.refresh(result_record)
 
         chain_steps: list[dict[str, Any]] = []
+        chain_results: dict[int, str] = {}
         accumulated_context = initial_input
 
         prompt_store = PromptStore()
@@ -106,11 +120,27 @@ def execute_chain(
                     item.prompt_id, item.prompt_version
                 )
 
+                # Resolve system prompt (static placeholders only)
+                system_prompt_resolved = _resolve_static(system_prompt)
+
+                # --- Determine runtime variables for this step ---
+                runtime_vars: dict[str, str] = {}
+                if page_mode and user_inputs and item.position in user_inputs:
+                    runtime_vars = user_inputs[item.position]
+
+                # --- Resolve user message: static + runtime + chain results ---
+                user_message = _resolve_all_with_chain(
+                    user_template,
+                    runtime_vars=runtime_vars,
+                    chain_results=chain_results,
+                    aliases=aliases,
+                )
+
                 # Build user message: combine accumulated context + template
                 if accumulated_context:
-                    user_message = f"{accumulated_context}\n\n---\n\n{user_template}"
+                    user_message = f"{accumulated_context}\n\n---\n\n{user_message}"
                 else:
-                    user_message = user_template
+                    user_message = user_message
 
                 # Resolve model_id for this prompt version
                 from app.models import PromptVersion as PV
@@ -127,14 +157,18 @@ def execute_chain(
                 client, model_name = get_llm_config_by_model_id(model_id_val)
                 llm_response, was_cached = call_llm_with_db_tools_with_cache_flag(
                     user_message,
-                    system_prompt=system_prompt,
+                    system_prompt=system_prompt_resolved,
                 )
+
+                # Store in chain_results for subsequent steps
+                chain_results[item.position] = llm_response
 
                 chain_steps.append({
                     "position": item.position,
                     "prompt_id": item.prompt_id,
                     "prompt_version": item.prompt_version,
-                    "system_prompt": system_prompt,
+                    "alias": item.alias,
+                    "system_prompt": system_prompt_resolved,
                     "user_message": user_message,
                     "response": llm_response,
                     "cached": was_cached,
@@ -146,17 +180,20 @@ def execute_chain(
 
             except Exception as step_err:
                 logger.error("Error executing step %s (%s:v%s): %s", item.position, item.prompt_id, item.prompt_version, step_err, exc_info=True)
+                # Store error in chain_results for subsequent steps
+                chain_results[item.position] = f"[ERROR in step {item.position}]: {step_err}"
                 chain_steps.append({
                     "position": item.position,
                     "prompt_id": item.prompt_id,
                     "prompt_version": item.prompt_version,
+                    "alias": item.alias,
                     "system_prompt": None,
                     "user_message": None,
                     "response": None,
                     "cached": False,
                     "error": str(step_err),
                 })
-                # Continue chain even if a step fails (pass empty context)
+                # Continue chain even if a step fails
                 accumulated_context = f"[ERROR in step {item.position}]: {step_err}"
 
         # --- Build final result payload ---
@@ -191,3 +228,29 @@ def execute_chain(
     finally:
         if should_close:
             session_manager.__exit__(*sys.exc_info())
+
+
+# ---------------------------------------------------------------------------
+# Helper functions for placeholder resolution
+# ---------------------------------------------------------------------------
+
+def _resolve_static(text: str) -> str:
+    """Resolve static placeholders (DATABASE_TABLES, GUEST_INFORMATION, etc.)."""
+    from app.services.placeholders import resolve_placeholders
+    return resolve_placeholders(text)
+
+
+def _resolve_all_with_chain(
+    text: str,
+    runtime_vars: dict[str, str],
+    chain_results: dict[int, str],
+    aliases: dict[str, int],
+) -> str:
+    """Resolve all placeholder types: static + runtime + chain results."""
+    from app.services.placeholders import resolve_all_placeholders
+    return resolve_all_placeholders(
+        text,
+        runtime_variables=runtime_vars,
+        chain_results=chain_results,
+        aliases=aliases,
+    )

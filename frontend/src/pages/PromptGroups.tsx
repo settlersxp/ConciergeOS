@@ -293,16 +293,20 @@ function GroupFormModal({
   onCancel,
 }: {
   initial?: PromptGroup | null;
-  onSave: (data: { name: string; description: string | null; items: PromptGroupItemCreate[] }) => void;
+  onSave: (data: { name: string; description: string | null; items: PromptGroupItemCreate[]; is_chain_page?: boolean; page_route?: string | null }) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
+  const [isChainPage, setIsChainPage] = useState(initial?.is_chain_page ?? false);
+  const [pageRoute, setPageRoute] = useState(initial?.page_route ?? '');
   const [items, setItems] = useState<PromptGroupItemCreate[]>(
     initial?.items.map((i) => ({
       position: i.position,
       prompt_id: i.prompt_id,
       prompt_version: i.prompt_version,
+      alias: i.alias,
+      is_input_step: i.is_input_step,
     })) ?? [],
   );
 
@@ -343,7 +347,8 @@ function GroupFormModal({
 
   const handleSave = () => {
     if (!name.trim()) return;
-    onSave({ name: name.trim(), description: description.trim() || null, items });
+    const route = isChainPage ? (pageRoute.startsWith('/') ? pageRoute : '/' + pageRoute) : null;
+    onSave({ name: name.trim(), description: description.trim() || null, items, is_chain_page: isChainPage, page_route: route });
   };
 
   const canAdd = selectorValue.prompt_id && selectorValue.version != null;
@@ -368,17 +373,54 @@ function GroupFormModal({
               placeholder="My Prompt Chain"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-primary-700 dark:text-primary-300 mb-1">
-              Description
-            </label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description…"
-              rows={2}
-            />
-          </div>
+           <div>
+             <label className="block text-sm font-medium text-primary-700 dark:text-primary-300 mb-1">
+               Description
+             </label>
+             <Textarea
+               value={description}
+               onChange={(e) => setDescription(e.target.value)}
+               placeholder="Optional description…"
+               rows={2}
+             />
+           </div>
+
+           {/* Is Chain Page toggle */}
+           <div className="flex items-center gap-3">
+             <ToggleSwitch
+               checked={isChainPage}
+               onChange={() => setIsChainPage(!isChainPage)}
+             />
+             <div>
+               <label className="text-sm font-medium text-primary-700 dark:text-primary-300">
+                 Is Chain Page
+               </label>
+               <p className="text-xs text-primary-500 dark:text-primary-400">
+                 Enable to create a page accessible at /prompt-chains/{'...'}
+               </p>
+             </div>
+           </div>
+
+           {/* Page Route (only shown when Is Chain Page is enabled) */}
+           {isChainPage && (
+             <div>
+               <label className="block text-sm font-medium text-primary-700 dark:text-primary-300 mb-1">
+                 Page Route
+               </label>
+               <input
+                 className="w-full rounded-md border border-surface-300 bg-white px-3 py-2 text-sm text-primary-800 placeholder:text-primary-400 focus:border-secondary-400 focus:outline-none focus:ring-2 focus:ring-secondary-400/20 dark:border-primary-600 dark:bg-primary-700 dark:text-white dark:placeholder:text-primary-500"
+                 value={pageRoute}
+                 onChange={(e) => setPageRoute(e.target.value)}
+                 placeholder={`e.g., ${name.toLowerCase().replace(/\s+/g, '-') || 'my-page'}`}
+                 disabled={!isChainPage}
+               />
+               {pageRoute && (
+                 <p className="mt-1 text-xs text-secondary-500">
+                   URL: <code>/prompt-chains{pageRoute.startsWith('/') ? pageRoute : '/' + pageRoute}</code>
+                 </p>
+               )}
+             </div>
+           )}
 
           {/* Prompt Selector */}
           <div>
