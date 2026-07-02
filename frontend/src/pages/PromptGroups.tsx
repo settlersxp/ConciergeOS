@@ -353,9 +353,13 @@ function GroupFormModal({
     });
   };
 
+  const toggleInputStep = (index: number) => {
+    setItems((prev) => prev.map((item, i) => (i === index ? { ...item, is_input_step: !item.is_input_step } : item)));
+  };
+
   const handleSave = () => {
     if (!name.trim()) return;
-    const route = isChainPage ? (pageRoute.startsWith('/') ? pageRoute : '/' + pageRoute) : null;
+    const route = isChainPage ? (pageRoute.replace(/^\//, '') || null) : null;
     onSave({ name: name.trim(), description: description.trim() || null, items, is_chain_page: isChainPage, page_route: route });
   };
 
@@ -422,11 +426,11 @@ function GroupFormModal({
                  placeholder={`e.g., ${name.toLowerCase().replace(/\s+/g, '-') || 'my-page'}`}
                  disabled={!isChainPage}
                />
-               {pageRoute && (
-                 <p className="mt-1 text-xs text-secondary-500">
-                   URL: <code>/prompt-chains{pageRoute.startsWith('/') ? pageRoute : '/' + pageRoute}</code>
-                 </p>
-               )}
+                {pageRoute && (
+                  <p className="mt-1 text-xs text-secondary-500">
+                    URL: <code>/prompt-chains/{pageRoute.replace(/^\//, '')}</code>
+                  </p>
+                )}
              </div>
            )}
 
@@ -456,22 +460,34 @@ function GroupFormModal({
               <p className="text-sm text-primary-500 dark:text-primary-400 mb-2">No prompts added yet.</p>
             )}
             {items.map((item, idx) => (
-              <div key={idx} className="flex items-center gap-2 mb-2">
-                <Badge variant="info">#{item.position}</Badge>
-                <span className="text-sm flex-1 text-primary-800 dark:text-primary-200">
-                  {item.prompt_id}:v{item.prompt_version}
-                </span>
-                <Button size="sm" onClick={() => movePrompt(idx, 'up')} disabled={idx === 0}>
-                  ↑
-                </Button>
-                <Button size="sm" onClick={() => movePrompt(idx, 'down')} disabled={idx === items.length - 1}>
-                  ↓
-                </Button>
-                <Button size="sm" variant="danger" onClick={() => removePrompt(idx)}>
-                  ✕
-                </Button>
-              </div>
-            ))}
+               <div key={idx} className="flex items-center gap-2 mb-2">
+                 <Badge variant="info">#{item.position}</Badge>
+                 <span className="text-sm flex-1 text-primary-800 dark:text-primary-200">
+                   {item.prompt_id}:v{item.prompt_version}
+                 </span>
+                 <button
+                   type="button"
+                   onClick={() => toggleInputStep(idx)}
+                   className={`text-xs px-2 py-1 rounded border transition-colors ${
+                     item.is_input_step
+                       ? 'bg-secondary-100 border-secondary-400 text-secondary-700 dark:bg-secondary-900 dark:border-secondary-600 dark:text-secondary-300'
+                       : 'bg-white border-surface-300 text-primary-500 hover:border-secondary-400 dark:bg-primary-700 dark:border-primary-600 dark:text-primary-400'
+                   }`}
+                   title="Mark as input step (user provides input on chain page)"
+                 >
+                   Input Step
+                 </button>
+                 <Button size="sm" onClick={() => movePrompt(idx, 'up')} disabled={idx === 0}>
+                   ↑
+                 </Button>
+                 <Button size="sm" onClick={() => movePrompt(idx, 'down')} disabled={idx === items.length - 1}>
+                   ↓
+                 </Button>
+                 <Button size="sm" variant="danger" onClick={() => removePrompt(idx)}>
+                   ✕
+                 </Button>
+               </div>
+             ))}
           </div>
 
           <div className="flex gap-2 justify-end mt-4">

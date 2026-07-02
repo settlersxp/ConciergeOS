@@ -6,6 +6,10 @@ import { promptsApi } from "../services/promptsApi";
 import ChainInputSection, { type InputField } from "../components/ui/ChainInputSection";
 import ChainStepStatus from "../components/ui/ChainStepStatus";
 import ChainOutputSection from "../components/ui/ChainOutputSection";
+import PageHeader from "../components/ui/PageHeader";
+import Card from "../components/ui/Card";
+import Badge from "../components/ui/Badge";
+import Button from "../components/ui/Button";
 
 /**
  * Fetches the default prompt version for a step to get the user_prompt_template.
@@ -172,9 +176,9 @@ export default function PromptChainPage() {
   if (loading) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-8">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-gray-500">Loading...</div>
-        </div>
+        <Card className="flex items-center justify-center h-64">
+          <div className="text-primary-500 dark:text-primary-400">Loading...</div>
+        </Card>
       </div>
     );
   }
@@ -182,14 +186,14 @@ export default function PromptChainPage() {
   if (!group) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-8">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-          <h1 className="text-xl font-semibold text-yellow-800 mb-2">
+        <Card className="border-surface-300 bg-surface-100 dark:border-surface-700 dark:bg-surface-900/30">
+          <h1 className="text-xl font-semibold text-surface-700 dark:text-surface-300 mb-2">
             Chain Page Not Found
           </h1>
-          <p className="text-yellow-700">
+          <p className="text-surface-600 dark:text-surface-400">
             No chain page was found for route <code>/prompt-chains/{route}</code>.
           </p>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -197,10 +201,10 @@ export default function PromptChainPage() {
   if (error) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-8">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <h1 className="text-xl font-semibold text-red-800">Error</h1>
-          <p className="text-red-700 mt-2">{error}</p>
-        </div>
+        <Card className="border-accent-200 bg-accent-50 dark:border-accent-800 dark:bg-accent-900/30">
+          <h1 className="text-xl font-semibold text-accent-800 dark:text-accent-300">Error</h1>
+          <p className="text-accent-700 dark:text-accent-400 mt-2">{error}</p>
+        </Card>
       </div>
     );
   }
@@ -212,27 +216,23 @@ export default function PromptChainPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
       {/* Header */}
-      <div className="border-b border-gray-200 pb-4">
-        <h1 className="text-3xl font-bold text-gray-900">{group.name}</h1>
-        {group.description && (
-          <p className="mt-1 text-gray-600">{group.description}</p>
-        )}
-        {hasAnyOutputs && (
-          <div className="mt-3 flex items-center gap-3">
-            <span className="text-sm text-gray-500">
-              {stepOutputs.length} of {stepDefinitions.length} steps completed
-            </span>
-            {!allStepsDone && (
-              <button
-                onClick={handleRerun}
-                className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
-              >
-                Start Over
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      <PageHeader
+        title={group.name}
+        description={group.description || undefined}
+        className={hasAnyOutputs ? "mb-6" : ""}
+      />
+      {hasAnyOutputs && (
+        <div className="flex items-center gap-3 mb-6">
+          <span className="text-sm text-primary-500 dark:text-primary-400">
+            {stepOutputs.length} of {stepDefinitions.length} steps completed
+          </span>
+          {!allStepsDone && (
+            <Button variant="ghost" onClick={handleRerun} size="sm">
+              Start Over
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Chain Steps */}
       {stepDefinitions.map((def, index) => {
@@ -246,14 +246,13 @@ export default function PromptChainPage() {
           <div key={def.item.item_id} id={`step-${index}`} className="space-y-4">
             {/* Step Header */}
             <div className="flex items-center gap-2">
-              <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
-                isFailed ? "bg-red-100 text-red-700" :
-                isStepDone ? "bg-green-100 text-green-700" :
-                "bg-gray-100 text-gray-600"
-              }`}>
+              <Badge
+                variant={isFailed ? "danger" : isStepDone ? "success" : "neutral"}
+                className="w-8 h-8 inline-flex items-center justify-center rounded-full"
+              >
                 {def.item.position}
-              </span>
-              <h2 className="text-lg font-semibold text-gray-900">
+              </Badge>
+              <h2 className="text-lg font-semibold text-primary-900 dark:text-white">
                 Step {def.item.position}: {def.item.alias || def.item.prompt_id}
               </h2>
             </div>
@@ -289,18 +288,20 @@ export default function PromptChainPage() {
 
             {/* Show next step's input if current step is done and there are more steps */}
             {isStepDone && index < stepDefinitions.length - 1 && !stepDefinitions[index + 1].item.is_input_step && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-700">
+              <Card className="border-primary-200 bg-primary-50 dark:border-primary-700 dark:bg-primary-900/30">
+                <p className="text-sm text-primary-700 dark:text-primary-300">
                   Click below to execute the next step.
                 </p>
-                <button
+                <Button
+                  variant="primary"
                   onClick={() => runStep(index + 1)}
                   disabled={executing}
-                  className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                  className="mt-2"
+                  loading={executing}
                 >
-                  {executing ? "Running..." : "Execute Next Step"}
-                </button>
-              </div>
+                  Execute Next Step
+                </Button>
+              </Card>
             )}
           </div>
         );
@@ -308,15 +309,16 @@ export default function PromptChainPage() {
 
       {/* All steps completed */}
       {allStepsDone && hasAnyOutputs && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-          <p className="text-green-800 font-medium">All steps completed successfully!</p>
-          <button
+        <Card className="border-secondary-200 bg-secondary-50 dark:border-secondary-700 dark:bg-secondary-900/30 text-center">
+          <p className="text-secondary-800 dark:text-secondary-300 font-medium">All steps completed successfully!</p>
+          <Button
+            variant="success"
             onClick={handleRerun}
-            className="mt-3 px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700"
+            className="mt-3"
           >
             Start Over
-          </button>
-        </div>
+          </Button>
+        </Card>
       )}
     </div>
   );

@@ -281,9 +281,17 @@ async def preview_prompt(prompt_id: str, version: int):
     prompt = store.get_prompt(prompt_id, version)
     if prompt is None:
         raise HTTPException(status_code=404, detail="Prompt not found")
-    system_prompt = "\n\n".join(p for p in [prompt.intention, prompt.restrictions, prompt.output_structure] if p)
+    system_sections = []
+    if prompt.intention:
+        system_sections.append(f"Intention:\n{prompt.intention}")
+    if prompt.restrictions:
+        system_sections.append(f"Restrictions:\n{prompt.restrictions}")
+    if prompt.output_structure:
+        system_sections.append(f"Output Structure:\n{prompt.output_structure}")
+    system_prompt = "\n\n".join(system_sections)
     resolved_system = resolve_placeholders(system_prompt)
     resolved_user = prompt.user_prompt_template.replace("{customer_name}", "John Doe")
+    resolved_user = f"User Prompt Template:\n{resolved_user}"
     return {"resolved_system_prompt": resolved_system, "resolved_user_template": resolved_user}
 
 

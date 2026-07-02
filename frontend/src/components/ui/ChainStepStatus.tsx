@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import type { ChainStepResult } from "../../types/prompt";
+import Badge from "./Badge";
 
 interface ChainStepStatusProps {
   step: ChainStepResult;
@@ -34,48 +35,46 @@ export default function ChainStepStatus({
   const status = statusConfig[step.status] || statusConfig.failed;
 
   return (
-    <div className="bg-white shadow rounded-lg overflow-hidden">
+    <div className="rounded-lg border border-surface-200 bg-surface-50 dark:border-primary-700 dark:bg-primary-800 overflow-hidden shadow-sm">
       {/* Collapsible header */}
       <button
         onClick={toggleExpanded}
-        className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+        className="w-full px-6 py-4 flex items-center justify-between hover:bg-surface-100 dark:hover:bg-primary-700 transition-colors"
       >
         <div className="flex items-center gap-3">
           <span className="text-lg">{status.icon}</span>
           <div>
-            <span className="text-sm font-medium text-gray-900">
+            <span className="text-sm font-medium text-primary-900 dark:text-white">
               {step.prompt_id}
               {step.prompt_version > 0 && (
-                <span className="ml-1 text-gray-500">v{step.prompt_version}</span>
+                <span className="ml-1 text-primary-500 dark:text-primary-400">v{step.prompt_version}</span>
               )}
             </span>
             {step.alias && (
-              <span className="ml-2 px-2 py-0.5 text-xs font-medium text-indigo-600 bg-indigo-100 rounded-full">
+              <Badge variant="info" className="ml-2">
                 {step.alias}
-              </span>
+              </Badge>
             )}
           </div>
         </div>
         <div className="flex items-center gap-2">
           {step.cached && (
-            <span className="px-2 py-0.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-full">
-              Cached
-            </span>
+            <Badge variant="neutral">Cached</Badge>
           )}
           <span className={`text-sm font-medium ${status.color}`}>
             {status.label}
           </span>
-          <span className="text-gray-400">{isExpanded ? "▼" : "▶"}</span>
+          <span className="text-primary-400 dark:text-primary-500">{isExpanded ? "▼" : "▶"}</span>
         </div>
       </button>
 
       {/* Expanded details */}
       {isExpanded && (
-        <div className="px-6 pb-4 border-t border-gray-100">
+        <div className="px-6 pb-4 border-t border-surface-200 dark:border-primary-700">
           {/* References */}
           <div className="mt-3">
-            <h4 className="text-sm font-medium text-gray-700">References</h4>
-            <p className="mt-1 text-sm text-gray-600 font-mono bg-gray-50 p-2 rounded">
+            <h4 className="text-sm font-medium text-primary-700 dark:text-primary-300">References</h4>
+            <p className="mt-1 text-sm text-primary-600 dark:text-primary-400 font-mono bg-surface-100 dark:bg-primary-900/50 p-2 rounded border border-surface-200 dark:border-primary-700">
               {step.user_message || "No references"}
             </p>
           </div>
@@ -83,8 +82,8 @@ export default function ChainStepStatus({
           {/* Error message */}
           {step.error && (
             <div className="mt-3">
-              <h4 className="text-sm font-medium text-red-700">Error</h4>
-              <p className="mt-1 text-sm text-red-600 font-mono bg-red-50 p-2 rounded">
+              <h4 className="text-sm font-medium text-accent-700 dark:text-accent-400">Error</h4>
+              <p className="mt-1 text-sm text-accent-600 dark:text-accent-400 font-mono bg-accent-50 dark:bg-accent-900/30 p-2 rounded border border-accent-200 dark:border-accent-800">
                 {step.error}
               </p>
             </div>
@@ -93,8 +92,8 @@ export default function ChainStepStatus({
           {/* Response preview */}
           {step.response && step.status === "success" && (
             <div className="mt-3">
-              <h4 className="text-sm font-medium text-gray-700">Response Preview</h4>
-              <p className="mt-1 text-sm text-gray-600 font-mono bg-gray-50 p-2 rounded max-h-48 overflow-y-auto">
+              <h4 className="text-sm font-medium text-primary-700 dark:text-primary-300">Response Preview</h4>
+              <p className="mt-1 text-sm text-primary-600 dark:text-primary-400 font-mono bg-surface-100 dark:bg-primary-900/50 p-2 rounded max-h-48 overflow-y-auto border border-surface-200 dark:border-primary-700">
                 {step.response}
               </p>
             </div>

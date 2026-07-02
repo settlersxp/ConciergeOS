@@ -1,6 +1,8 @@
-import React, { useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import type { ChainStepResult } from "../../types/prompt";
 import Button from "./Button";
+import Card from "./Card";
+import Badge from "./Badge";
 
 interface ChainOutputSectionProps {
   step: ChainStepResult;
@@ -34,18 +36,15 @@ export default function ChainOutputSection({
 
   if (!output) {
     return (
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          Final Output
-        </h2>
+      <Card title="Final Output" titleClassName="text-xl">
         {step.error ? (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-md">
-            <p className="text-sm font-medium text-red-800">Step failed: {step.error}</p>
+          <div className="p-4 bg-accent-50 border border-accent-200 rounded-md dark:bg-accent-900/30 dark:border-accent-800">
+            <p className="text-sm font-medium text-accent-800 dark:text-accent-300">Step failed: {step.error}</p>
           </div>
         ) : (
-          <p className="text-gray-500">No output available.</p>
+          <p className="text-primary-500 dark:text-primary-400">No output available.</p>
         )}
-      </div>
+      </Card>
     );
   }
 
@@ -55,55 +54,44 @@ export default function ChainOutputSection({
   const displayContent = isExpanded || !isLong ? output : output.slice(0, maxLength) + "...";
 
   return (
-    <div className="bg-white shadow rounded-lg overflow-hidden">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-gray-900">
-          Final Output
-          {step.alias && (
-            <span className="ml-2 px-2 py-0.5 text-xs font-medium text-indigo-600 bg-indigo-100 rounded-full">
-              {step.alias}
-            </span>
-          )}
-        </h2>
-        <div className="flex items-center gap-2">
-          {step.cached && (
-            <span className="px-2 py-0.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-full">
-              Cached
-            </span>
-          )}
-          {isLong && (
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="text-sm text-indigo-600 hover:text-indigo-800"
-            >
-              {isExpanded ? "Show less" : "Show more"}
-            </button>
-          )}
-        </div>
+    <Card title="Final Output" titleClassName="text-xl flex items-center gap-2">
+      {/* Header badges */}
+      <div className="flex items-center gap-2 mb-4">
+        {step.alias && (
+          <Badge variant="info">{step.alias}</Badge>
+        )}
+        {step.cached && (
+          <Badge variant="neutral">Cached</Badge>
+        )}
+        {isLong && (
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="text-sm text-secondary-600 hover:text-secondary-700 dark:text-secondary-400 dark:hover:text-secondary-300 ml-auto"
+          >
+            {isExpanded ? "Show less" : "Show more"}
+          </button>
+        )}
       </div>
 
       {/* Output content */}
-      <div className="p-6">
-        <div className="prose prose-sm max-w-none text-gray-800 whitespace-pre-wrap break-words font-mono bg-gray-50 p-4 rounded-md max-h-96 overflow-y-auto">
-          {displayContent}
-        </div>
-
-        {/* Action buttons */}
-        <div className="mt-4 flex items-center gap-3">
-          <Button variant="secondary" onClick={handleCopy}>
-            {copied ? "Copied!" : "Copy"}
-          </Button>
-          {onRerun && (
-            <Button variant="secondary" onClick={onRerun}>
-              Re-run Chain
-            </Button>
-          )}
-          <span className="text-sm text-gray-400 ml-auto">
-            {output.length.toLocaleString()} characters
-          </span>
-        </div>
+      <div className="prose prose-sm max-w-none text-primary-900 dark:text-primary-100 whitespace-pre-wrap break-words font-mono bg-surface-100 dark:bg-primary-900/50 p-4 rounded-md max-h-96 overflow-y-auto border border-surface-200 dark:border-primary-700">
+        {displayContent}
       </div>
-    </div>
+
+      {/* Action buttons */}
+      <div className="mt-4 flex items-center gap-3">
+        <Button variant="secondary" onClick={handleCopy}>
+          {copied ? "Copied!" : "Copy"}
+        </Button>
+        {onRerun && (
+          <Button variant="secondary" onClick={onRerun}>
+            Re-run Chain
+          </Button>
+        )}
+        <span className="text-sm text-primary-400 dark:text-primary-500 ml-auto">
+          {output.length.toLocaleString()} characters
+        </span>
+      </div>
+    </Card>
   );
 }

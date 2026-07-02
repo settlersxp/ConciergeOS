@@ -390,7 +390,7 @@ export default function PromptManagement() {
                 <Button variant="primary" onClick={handleCreateNew}>+ New Version</Button>
                 <Button variant="accent" onClick={() => setShowCreateModal(true)}>+ New Prompt</Button>
               </div>
-              {showPreview && resolvedPreview && <PreviewPanel before={combined} after={resolvedPreview.system} />}
+              {showPreview && resolvedPreview && <PreviewPanel before={combined} after={resolvedPreview.system} afterUser={resolvedPreview.user} />}
             </div>
           </Card>
         </div>
