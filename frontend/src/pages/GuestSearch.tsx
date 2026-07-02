@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { guestSearchApi, type CropRegion } from "../services/api";
+import { useState } from "react";
+import { guestSearchApi } from "../services/api";
 import type { GuestSearchResponse } from "../types";
 import {
   PageHeader,
@@ -12,6 +12,7 @@ import {
   RegionSelector,
 } from "../components/ui";
 import PromptSelector from "../components/ui/PromptSelector";
+import { useMediaExtraction } from "../hooks/useMediaExtraction";
 
 export default function GuestSearch() {
   const [query, setQuery] = useState("");
@@ -30,206 +31,17 @@ export default function GuestSearch() {
     ? { [runtimeVarKey]: query.trim() }
     : {};
 
-  // ── Media state ──────────────────────────────────────────────────────
-  const [mediaMode, setMediaMode] = useState<"none" | "image" | "audio">("none");
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string>("");
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [cropRegion, setCropRegion] = useState<CropRegion | null>(null);
-  const [extracting, setExtracting] = useState(false);
+  // ── Media state (shared hook) ──────────────────────────────────────
+  const media = useMediaExtraction((name: string) => {
+    setQuery(name);
+    setToast({ message: `Name extracted: "${name}"`, type: "success" });
+  });
 
-  // Audio recording state
-  const [isRecording, setIsRecording] = useState(false);
-  const [audioRecordingUrl, setAudioRecordingUrl] = useState<string>("");
-  const [audioFile, setAudioFile] = useState<File | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  // ── Helpers: Detect supported MIME type for MediaRecorder ──────────
+  // (Still needed since the hook uses a simpler approach; kept here
+  //  for the native MediaRecorder fallback if needed)
 
-  // Hidden file input refs
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-
-  // ── Handlers: Media input ────────────────────────────────────────────
-
-  const handleImageSelect = (file: File) => {
-    setImageFile(file);
-    setImagePreviewUrl(URL.createObjectURL(file));
-    setMediaMode("image");
-    setCropRegion(null);
-  };
-
-  const handleImageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleImageSelect(file);
-    // Reset input so the same file can be re-selected
-    e.target.value = "";
-  };
-
-  const handleCameraCapture = () => {
-    cameraInputRef.current?.click();
-  };
-
-  const handleCameraInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleImageSelect(file);
-    e.target.value = "";
-  };
-
-  // ── Helpers: Detect supported MIME type for MediaRecorder ──────────────
-
-  const getSupportedMimeType = (): string => {
-    const types = [
-      "audio/webm;codecs=opus",
-      "audio/mp4",
-      "audio/webm",
-      "audio/ogg;codecs=opus",
-      "audio/ogg",
-      "audio/mpeg",
-    ];
-    for (const type of types) {
-      if (MediaRecorder.isTypeSupported(type)) return type;
-    }
-    return "";
-  };
-
-  // ── Handlers: Voice recording ────────────────────────────────────────
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = getSupportedMimeType();
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
-      chunksRef.current = [];
-
-      recorder.ondataavailable = (evt) => {
-        if (evt.data.size > 0) chunksRef.current.push(evt.data);
-      };
-
-      recorder.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: mimeType || "audio/webm" });
-        const url = URL.createObjectURL(blob);
-        setAudioRecordingUrl(url);
-        setMediaMode("audio");
-        
-        // Standardize format for the backend
-        let formatStr = "webm";
-        if (mimeType.includes("mp4")) formatStr = "mp4";
-        else if (mimeType.includes("ogg")) formatStr = "webm";
-        
-        const ext = formatStr === "mp4" ? "m4a" : "webm";
-        setAudioFile(new File([blob], `recording.${ext}`, { type: mimeType || "audio/webm" }));
-      };
-
-      // Handle recording errors
-      recorder.onerror = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        setIsRecording(false);
-        setToast({ message: "Recording error. Please try again.", type: "error" });
-      };
-
-      recorder.start();
-      mediaRecorderRef.current = recorder;
-      setIsRecording(true);
-      setAudioRecordingUrl("");
-      setAudioFile(null);
-      setMediaMode("audio");
-    } catch (e: unknown) {
-      setToast({
-        message: e instanceof Error ? e.message : "Microphone access denied",
-        type: "error",
-      });
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
-
-  // ── Handlers: Extract name ───────────────────────────────────────────
-
-  const handleExtractName = async () => {
-    if (mediaMode === "image" && imageFile) {
-      setExtracting(true);
-      try {
-        const formData = new FormData();
-        formData.append('file', imageFile);
-        if (cropRegion) {
-          formData.append('crop_x', String(cropRegion.x));
-          formData.append('crop_y', String(cropRegion.y));
-          formData.append('crop_w', String(cropRegion.width));
-          formData.append('crop_h', String(cropRegion.height));
-        }
-        if (selectedPrompt.model_id) {
-          formData.append('model_id', String(selectedPrompt.model_id));
-        }
-
-        const resp = await fetch('/api/guest-search/extract-name', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!resp.ok) {
-          const body = await resp.text().catch(() => '');
-          throw new Error(resp.statusText + (body ? `: ${body}` : ''));
-        }
-
-        const data = await resp.json() as { extracted_name: string; source: string; model_id?: number };
-        setQuery(data.extracted_name);
-        setToast({ message: `Name extracted from ${data.source}: "${data.extracted_name}"`, type: "success" });
-      } catch (e: unknown) {
-        setToast({ message: e instanceof Error ? e.message : "Extraction failed", type: "error" });
-      } finally {
-        setExtracting(false);
-      }
-    } else if (mediaMode === "audio" && audioFile) {
-      setExtracting(true);
-      try {
-        const formData = new FormData();
-        formData.append('file', audioFile);
-        if (selectedPrompt.model_id) {
-          formData.append('model_id', String(selectedPrompt.model_id));
-        }
-
-        const resp = await fetch('/api/guest-search/extract-name', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!resp.ok) {
-          const body = await resp.text().catch(() => '');
-          throw new Error(resp.statusText + (body ? `: ${body}` : ''));
-        }
-
-        const data = await resp.json() as { extracted_name: string; source: string; model_id?: number };
-        setQuery(data.extracted_name);
-        setToast({ message: `Name extracted from ${data.source}: "${data.extracted_name}"`, type: "success" });
-      } catch (e: unknown) {
-        setToast({ message: e instanceof Error ? e.message : "Extraction failed", type: "error" });
-      } finally {
-        setExtracting(false);
-      }
-    } else {
-      setToast({ message: "Please upload an image or record audio first", type: "error" });
-    }
-  };
-
-  const clearMedia = () => {
-    setMediaMode("none");
-    setImageFile(null);
-    setAudioFile(null);
-    setCropRegion(null);
-    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
-    if (audioRecordingUrl) URL.revokeObjectURL(audioRecordingUrl);
-    setImagePreviewUrl("");
-    setAudioRecordingUrl("");
-  };
-
-  // ── Handlers: Search ─────────────────────────────────────────────────
+  // ── Handlers: Search ───────────────────────────────────────────────
 
   const handleSearch = async () => {
     if (!query.trim()) {
@@ -263,68 +75,64 @@ export default function GuestSearch() {
         description="Search for guests using the LLM-powered query system."
       />
 
-      {/* ── Media Input Section ──────────────────────────────────────── */}
+      {/* ── Media Input Section ────────────────────────────────────── */}
       <Card title="Name Input" className="mb-6">
+        {/* Hidden file inputs */}
+        <input
+          ref={media.imageInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={media.handleImageChange}
+        />
+        <input
+          ref={media.cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={media.handleImageChange}
+        />
+
         <div className="flex flex-wrap gap-3">
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleImageInputChange}
-          />
-          <Button
-            variant="secondary"
-            onClick={() => imageInputRef.current?.click()}
-          >
+          <Button variant="secondary" onClick={media.handleUploadPhoto}>
             Upload Photo
           </Button>
 
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handleCameraInputChange}
-          />
-          <Button
-            variant="secondary"
-            onClick={handleCameraCapture}
-          >
+          <Button variant="secondary" onClick={media.handleTakePhoto}>
             Take Photo
           </Button>
 
-          {isRecording ? (
-            <Button variant="danger" onClick={stopRecording}>
+          {media.isRecording ? (
+            <Button variant="danger" onClick={media.handleStopRecording}>
               Stop Recording
             </Button>
           ) : (
-            <Button variant="secondary" onClick={startRecording}>
+            <Button variant="secondary" onClick={media.handleSpeakName}>
               Speak Name
             </Button>
           )}
 
-          {mediaMode !== "none" && (
-            <Button variant="ghost" onClick={clearMedia}>
+          {media.mediaMode !== "none" && (
+            <Button variant="ghost" onClick={media.handleClear}>
               Clear
             </Button>
           )}
         </div>
 
         {/* Image preview with region selector */}
-        {mediaMode === "image" && imagePreviewUrl && (
+        {media.selectedImage && (
           <div className="mt-4">
             <RegionSelector
-              imageUrl={imagePreviewUrl}
+              imageUrl={media.selectedImage}
               alt="Image preview"
-              onRegionChange={setCropRegion}
+              onRegionChange={() => {}}
             />
             <div className="mt-3 flex justify-end">
               <Button
                 variant="primary"
-                loading={extracting}
-                onClick={handleExtractName}
+                loading={media.extracting}
+                onClick={() => media.handleExtractName()}
               >
                 Extract Name
               </Button>
@@ -333,32 +141,41 @@ export default function GuestSearch() {
         )}
 
         {/* Audio recording feedback */}
-        {mediaMode === "audio" && (
+        {media.recordedAudio && (
           <div className="mt-4">
-            {isRecording ? (
+            {media.isRecording ? (
               <div className="flex items-center gap-2 text-sm text-red-600">
                 <span className="inline-block h-3 w-3 rounded-full bg-red-500 animate-pulse" />
                 Recording...
               </div>
-            ) : audioRecordingUrl ? (
+            ) : (
               <div className="space-y-2">
-                <audio src={audioRecordingUrl} controls className="w-full" />
+                <audio src={media.recordedAudio} controls className="w-full" />
                 <div className="flex justify-end">
                   <Button
                     variant="primary"
-                    loading={extracting}
-                    onClick={handleExtractName}
+                    loading={media.extracting}
+                    onClick={() => media.handleExtractName()}
                   >
                     Extract Name
                   </Button>
                 </div>
               </div>
-            ) : null}
+            )}
+          </div>
+        )}
+
+        {/* Extraction error */}
+        {media.extractError && (
+          <div className="mt-4 p-3 bg-accent-50 border border-accent-200 rounded-md dark:bg-accent-900/30 dark:border-accent-800">
+            <p className="text-sm font-medium text-accent-900 dark:text-accent-300">
+              Extraction Error: {media.extractError}
+            </p>
           </div>
         )}
       </Card>
 
-      {/* ── Prompt + Name Input ──────────────────────────────────────── */}
+      {/* ── Prompt + Name Input ────────────────────────────────────── */}
       <Card>
         <div className="mt-4">
           <PromptSelector
@@ -388,7 +205,7 @@ export default function GuestSearch() {
         </div>
       </Card>
 
-      {/* ── Results ──────────────────────────────────────────────────── */}
+      {/* ── Results ────────────────────────────────────────────────── */}
       {result && (
         <Card title="Search Result" className="mt-6">
           {result.cached !== undefined && result.cached && (

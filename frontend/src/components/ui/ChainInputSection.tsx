@@ -1,55 +1,12 @@
-import React, { useState, useCallback, useRef } from "react";
+import React from "react";
 import type { PromptGroupItem } from "../../types/prompt";
 import Button from "./Button";
 import Input from "./Input";
 import Card from "./Card";
 import FormField from "./FormField";
 import { RegionSelector } from "./RegionSelector";
-import { guestSearchApi, type CropRegion } from "../../services/api";
-
-// Known static placeholders that should not be turned into input fields
-const KNOWN_PLACEHOLDERS = new Set([
-  "DATABASE_TABLES",
-  "GUEST_INFORMATION",
-  "ROOM_INFORMATION",
-  "CURRENT_DATE",
-  "AVAILABLE_TOOLS",
-]);
-
-/**
- * Infer field names from a prompt template string.
- * Filters out chain result placeholders ({step_N}), static placeholders, and table.field patterns.
- */
-export function inferInputFields(template: string): InputField[] {
-  const patterns: InputField[] = [];
-  const regex = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = regex.exec(template)) !== null) {
-    const name = match[1];
-    if (name.startsWith("step_")) continue;
-    if (KNOWN_PLACEHOLDERS.has(name.toUpperCase())) continue;
-    if (name.includes(".")) continue;
-    patterns.push({
-      name,
-      label: name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-      type: inferFieldType(name),
-    });
-  }
-  return patterns;
-}
-
-function inferFieldType(name: string): "text" | "date" | "select" {
-  if (name.includes("date") || name.includes("time")) return "date";
-  if (name.includes("filter") || name.includes("status") || name.includes("type")) return "select";
-  return "text";
-}
-
-export interface InputField {
-  name: string;
-  label: string;
-  type: "text" | "date" | "select";
-}
+import { useMediaExtraction } from "../../hooks/useMediaExtraction";
+import { inferInputFields } from "../../utils/inputFields";
 
 export interface ChainInputSectionProps {
   step: PromptGroupItem;
@@ -61,189 +18,51 @@ export interface ChainInputSectionProps {
 }
 
 /**
- * ChainInputSection renders the input fields for the first step of a PromptChainPage.
- * It parses the step's user_prompt_template for {placeholder} patterns, generates
- * appropriate input fields, and includes media input (photo/voice) from GuestSearch.
+ * ChainInputSection renders the input fields for a chain step.
+ * It parses the step's user_prompt_template for {placeholder} patterns,
+ * generates appropriate input fields, and includes media input for name extraction.
+ *
+ * Uses:
+ * - inferInputFields() from shared utilities for template parsing
+ * - useMediaExtraction() hook for photo/voice/recording/extraction logic
  */
 export default function ChainInputSection({
-  step,
+  step: _step,
   template,
   inputs,
   onInputChange,
   onRun,
   loading,
 }: ChainInputSectionProps) {
-  const [extractedName, setExtractedName] = useState<string>("");
-  const [extracting, setExtracting] = useState(false);
-  const [extractError, setExtractError] = useState<string | null>(null);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordedAudio, setRecordedAudio] = useState<string | null>(null);
-  const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [cropRegion, setCropRegion] = useState<CropRegion | null>(null);
-
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-
-  // Parse template for placeholder fields
+  // Parse template for placeholder fields (shared utility)
   const fields = inferInputFields(template);
 
-  // --- Photo Upload ---
-  const handleUploadPhoto = useCallback(() => {
-    imageInputRef.current?.click();
-  }, []);
-
-  const handleTakePhoto = useCallback(() => {
-    cameraInputRef.current?.click();
-  }, []);
-
-  const handleImageChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      setImageFile(file);
-      setAudioFile(null);
-      setRecordedAudio(null);
-      setCropRegion(null);
-      setExtractedName("");
-      setExtractError(null);
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setSelectedImage(ev.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    },
-    [],
-  );
-
-  const handleClearImage = useCallback(() => {
-    setSelectedImage(null);
-    setImageFile(null);
-    setCropRegion(null);
-    setExtractedName("");
-    setExtractError(null);
-    if (imageInputRef.current) imageInputRef.current.value = "";
-    if (cameraInputRef.current) cameraInputRef.current.value = "";
-  }, []);
-
-  // --- Voice Recording ---
-  const handleSpeakName = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioChunksRef.current = [];
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-
-      mediaRecorder.ondataavailable = (e) => {
-        audioChunksRef.current.push(e.data);
-      };
-
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        // Determine file extension from MIME type
-        let ext = "webm";
-        if (mediaRecorder.mimeType.includes("mp4")) ext = "m4a";
-        setAudioFile(new File([audioBlob], `recording.${ext}`, { type: mediaRecorder.mimeType || "audio/webm" }));
-        setImageFile(null);
-        setSelectedImage(null);
-        setCropRegion(null);
-        setExtractedName("");
-        setExtractError(null);
-        const reader = new FileReader();
-        reader.onload = () => {
-          setRecordedAudio(reader.result as string);
-        };
-        reader.readAsDataURL(audioBlob);
-        stream.getTracks().forEach((t) => t.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (err) {
-      console.error("Microphone access denied:", err);
-    }
-  }, []);
-
-  const handleStopRecording = useCallback(() => {
-    if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
-    }
-    setIsRecording(false);
-  }, []);
-
-  // --- Name Extraction ---
-  const handleExtractName = useCallback(async () => {
-    setExtractError(null);
-
-    if (imageFile) {
-      setExtracting(true);
-      try {
-        const data = await guestSearchApi.extractName(imageFile, cropRegion || undefined);
-        setExtractedName(data.extracted_name);
-        onInputChange("customer_name", data.extracted_name);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Extraction failed";
-        setExtractError(msg);
-      } finally {
-        setExtracting(false);
-      }
-    } else if (audioFile) {
-      setExtracting(true);
-      try {
-        const data = await guestSearchApi.extractName(audioFile);
-        setExtractedName(data.extracted_name);
-        onInputChange("customer_name", data.extracted_name);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Extraction failed";
-        setExtractError(msg);
-      } finally {
-        setExtracting(false);
-      }
-    } else {
-      setExtractError("Please upload an image or record audio first");
-    }
-  }, [imageFile, audioFile, cropRegion, onInputChange]);
-
-  const handleClear = useCallback(() => {
-    setExtractedName("");
-    setExtractError(null);
-    setSelectedImage(null);
-    setImageFile(null);
-    setRecordedAudio(null);
-    setAudioFile(null);
-    setCropRegion(null);
-    if (imageInputRef.current) imageInputRef.current.value = "";
-    if (cameraInputRef.current) cameraInputRef.current.value = "";
-    onInputChange("customer_name", "");
-  }, [onInputChange]);
-
-  // Collect all current inputs for step 1
-  const step1Inputs: Record<string, string> = { ...inputs };
+  // Media extraction (shared hook)
+  const media = useMediaExtraction((name: string) => {
+    onInputChange("customer_name", name);
+  });
 
   const handleSubmit = () => {
-    onRun({ 1: step1Inputs }, step1Inputs.customer_name);
+    onRun({ 1: { ...inputs } }, inputs.customer_name);
   };
 
   return (
     <Card title="Step 1: Input" titleClassName="text-xl">
       {/* Hidden file inputs for photo upload and camera capture */}
       <input
-        ref={imageInputRef}
+        ref={media.imageInputRef}
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={handleImageChange}
+        onChange={media.handleImageChange}
       />
       <input
-        ref={cameraInputRef}
+        ref={media.cameraInputRef}
         type="file"
         accept="image/*"
         capture="environment"
         className="hidden"
-        onChange={handleImageChange}
+        onChange={media.handleImageChange}
       />
 
       {/* Template-derived input fields */}
@@ -294,23 +113,23 @@ export default function ChainInputSection({
       <div className="mt-6 border-t border-surface-200 dark:border-primary-700 pt-4">
         <h3 className="text-sm font-medium text-primary-700 dark:text-primary-300 mb-2">Media Input</h3>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={handleUploadPhoto}>
-            📷 Upload Photo
+          <Button variant="secondary" onClick={media.handleUploadPhoto}>
+            Upload Photo
           </Button>
-          <Button variant="secondary" onClick={handleTakePhoto}>
-            📸 Take Photo
+          <Button variant="secondary" onClick={media.handleTakePhoto}>
+            Take Photo
           </Button>
-          {isRecording ? (
-            <Button variant="primary" onClick={handleStopRecording}>
-              ⏹ Stop Recording
+          {media.isRecording ? (
+            <Button variant="primary" onClick={media.handleStopRecording}>
+              Stop Recording
             </Button>
           ) : (
-            <Button variant="secondary" onClick={handleSpeakName}>
-              🎤 Speak Name
+            <Button variant="secondary" onClick={media.handleSpeakName}>
+              Speak Name
             </Button>
           )}
-          {(imageFile || audioFile) && (
-            <Button variant="ghost" onClick={handleClear}>
+          {media.mediaMode !== "none" && (
+            <Button variant="ghost" onClick={() => media.handleClear(() => onInputChange("customer_name", ""))}>
               Clear
             </Button>
           )}
@@ -318,19 +137,19 @@ export default function ChainInputSection({
       </div>
 
       {/* Image preview with region selector */}
-      {selectedImage && (
+      {media.selectedImage && (
         <div className="mt-4">
           <RegionSelector
-            imageUrl={selectedImage}
+            imageUrl={media.selectedImage}
             alt="Image preview"
-            onRegionChange={setCropRegion}
+            onRegionChange={() => {}}
           />
-          {cropRegion && (
+          {media.cropRegion && (
             <div className="mt-2 flex justify-end">
               <Button
                 variant="primary"
-                loading={extracting}
-                onClick={handleExtractName}
+                loading={media.extracting}
+                onClick={() => media.handleExtractName()}
               >
                 Extract Name
               </Button>
@@ -343,15 +162,15 @@ export default function ChainInputSection({
       )}
 
       {/* Audio playback */}
-      {recordedAudio && (
+      {media.recordedAudio && (
         <div className="mt-4">
           <p className="text-sm text-primary-600 dark:text-primary-400 mb-1">Recorded audio:</p>
-          <audio controls src={recordedAudio} className="w-full" />
+          <audio controls src={media.recordedAudio} className="w-full" />
           <div className="mt-2 flex justify-end">
             <Button
               variant="primary"
-              loading={extracting}
-              onClick={handleExtractName}
+              loading={media.extracting}
+              onClick={() => media.handleExtractName()}
             >
               Extract Name
             </Button>
@@ -360,19 +179,19 @@ export default function ChainInputSection({
       )}
 
       {/* Extraction error */}
-      {extractError && (
+      {media.extractError && (
         <div className="mt-4 p-3 bg-accent-50 border border-accent-200 rounded-md dark:bg-accent-900/30 dark:border-accent-800">
           <p className="text-sm font-medium text-accent-900 dark:text-accent-300">
-            Extraction Error: {extractError}
+            Extraction Error: {media.extractError}
           </p>
         </div>
       )}
 
       {/* Extracted name display */}
-      {extractedName && (
+      {media.extractedName && (
         <div className="mt-4 p-3 bg-primary-50 border border-primary-200 rounded-md dark:bg-primary-900/30 dark:border-primary-700">
           <p className="text-sm font-medium text-primary-900 dark:text-primary-200">
-            Extracted Name: {extractedName}
+            Extracted Name: {media.extractedName}
           </p>
         </div>
       )}
@@ -387,8 +206,8 @@ export default function ChainInputSection({
         >
           Search
         </Button>
-        <Button variant="ghost" onClick={handleExtractName} disabled={loading}>
-          🔍 Extract Name
+        <Button variant="ghost" onClick={() => media.handleExtractName()} disabled={loading}>
+          Extract Name
         </Button>
       </div>
     </Card>

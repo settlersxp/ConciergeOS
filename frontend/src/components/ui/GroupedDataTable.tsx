@@ -9,7 +9,7 @@ export interface GroupedColumn<TRow> {
   cellClassName?: (row: TRow) => string;
 }
 
-interface GroupedRow<TGroup, TRow> {
+interface GroupedRow<_TGroup, TRow> {
   groupKey: string;
   groupLabel: string;
   subRows: TRow[];

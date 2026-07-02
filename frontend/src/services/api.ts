@@ -214,7 +214,7 @@ export const performanceApi = {
   // ── Duplicate Check ───────────────────────────────────────────────────
 
   checkDuplicates: () =>
-    request<CheckDuplicatesResult>('/api/performance-testing/check-duplicates'),
+    request<unknown>('/api/performance-testing/check-duplicates'),
 
   // ── Validation ────────────────────────────────────────────────────────
 

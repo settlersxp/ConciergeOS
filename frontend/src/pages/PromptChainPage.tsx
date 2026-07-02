@@ -1,183 +1,56 @@
-import { useEffect, useState, useCallback } from "react";
-import { useParams } from "react-router-dom";
-import type { PromptGroup, PromptGroupItem, ChainStepResult } from "../types/prompt";
-import { promptGroupsApi } from "../services/promptGroupsApi";
-import { promptsApi } from "../services/promptsApi";
-import ChainInputSection, { type InputField } from "../components/ui/ChainInputSection";
-import ChainStepStatus from "../components/ui/ChainStepStatus";
-import ChainOutputSection from "../components/ui/ChainOutputSection";
-import PageHeader from "../components/ui/PageHeader";
-import Card from "../components/ui/Card";
-import Badge from "../components/ui/Badge";
-import Button from "../components/ui/Button";
+import { useEffect, useState } from "react";
+import { PageHeader, Card, Button, ChainInputSection, ChainStepStatus, ChainOutputSection } from "../components/ui";
+import { useChainPageData } from "../hooks/useChainPageData";
+import { useChainExecution } from "../hooks/useChainExecution";
 
 /**
- * Fetches the default prompt version for a step to get the user_prompt_template.
+ * PromptChainPage renders a prompt group as a full page.
+ *
+ * Uses:
+ * - useChainPageData() for data loading (group resolution, step definitions)
+ * - useChainExecution() for step-by-step chain execution logic
+ * - Shared ChainInputSection, ChainStepStatus, ChainOutputSection components
+ *
+ * This component is now a thin presenter (~120 lines) since all business
+ * logic is extracted into custom hooks.
  */
-async function fetchStepTemplate(item: PromptGroupItem): Promise<string | null> {
-  try {
-    const version = await promptsApi.getByVersion(item.prompt_id, item.prompt_version);
-    return version?.user_prompt_template || null;
-  } catch (err) {
-    console.warn(`Failed to fetch template for ${item.prompt_id}:${item.prompt_version}`, err);
-    return null;
-  }
-}
-
-/**
- * Infer field names from a prompt template string.
- */
-function inferInputFields(template: string): InputField[] {
-  // Use the same logic from ChainInputSection
-  const patterns: InputField[] = [];
-  const regex = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
-  let match: RegExpExecArray | null;
-  const KNOWN_PLACEHOLDERS = new Set([
-    "DATABASE_TABLES", "GUEST_INFORMATION", "ROOM_INFORMATION",
-    "CURRENT_DATE", "AVAILABLE_TOOLS",
-  ]);
-
-  while ((match = regex.exec(template)) !== null) {
-    const name = match[1];
-    if (name.startsWith("step_")) continue;
-    if (KNOWN_PLACEHOLDERS.has(name.toUpperCase())) continue;
-    if (name.includes(".")) continue;
-    const isDate = name.includes("date") || name.includes("time");
-    const isSelect = name.includes("filter") || name.includes("status") || name.includes("type");
-    patterns.push({
-      name,
-      label: name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-      type: isDate ? "date" : isSelect ? "select" : "text",
-    });
-  }
-  return patterns;
-}
-
-interface StepDefinition {
-  item: PromptGroupItem;
-  template: string | null;
-  inputFields: InputField[];
-}
-
 export default function PromptChainPage() {
-  const { route } = useParams<{ route: string }>();
-  const [group, setGroup] = useState<PromptGroup | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [stepDefinitions, setStepDefinitions] = useState<StepDefinition[]>([]);
-  // Per-step accumulated context (each step's LLM output)
-  const [stepOutputs, setStepOutputs] = useState<ChainStepResult[]>([]);
-  // Per-step input values: { field_name: value } for each step
-  const [stepInputs, setStepInputs] = useState<Record<number, Record<string, string>>>({});
-  const [executing, setExecuting] = useState(false);
+  // Data loading (group resolution + step definitions with templates)
+  const { group, loading, error, stepDefinitions } = useChainPageData();
 
+  // Chain execution logic (step inputs/outputs, runStep, etc.)
+  const execution = useChainExecution({ group, stepDefinitions });
+
+  // Track which step is currently executing (for UI feedback)
+  const [executingStep, setExecutingStep] = useState<number | null>(null);
+
+  // Scroll to top when chain completes
   useEffect(() => {
-    const loadChainPage = async () => {
-      try {
-        const groups = await promptGroupsApi.list();
-        const page = groups.find((g) => g.page_route === route);
-        if (!page) {
-          setGroup(null);
-          return;
-        }
-        setGroup(page);
-
-        // Fetch template for each step
-        const definitions: StepDefinition[] = [];
-        for (const item of page.items) {
-          const template = await fetchStepTemplate(item);
-          const fields = template ? inferInputFields(template) : [];
-          definitions.push({ item, template, inputFields: fields });
-        }
-        setStepDefinitions(definitions);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load chain page");
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadChainPage();
-  }, [route]);
-
-  const handleInputChange = useCallback((stepPosition: number, name: string, value: string) => {
-    setStepInputs((prev) => ({
-      ...prev,
-      [stepPosition]: { ...(prev[stepPosition] || {}), [name]: value },
-    }));
-  }, []);
-
-  const runStep = useCallback(async (stepIndex: number) => {
-    if (!group || stepIndex >= stepDefinitions.length) return;
-
-    const def = stepDefinitions[stepIndex];
-    const position = def.item.position;
-
-    // Gather accumulated context: join all previous step outputs
-    const previousOutputs = stepOutputs.slice(0, stepIndex);
-    const accumulatedContext = previousOutputs
-      .map((o) => o.response || `[Step ${o.position} failed: ${o.error || "unknown error"}]`)
-      .join("\n\n");
-
-    setExecuting(true);
-    try {
-      const result = await promptGroupsApi.executeChainStep(
-        group.group_id,
-        position,
-        stepInputs[position] || {},
-        position === 1 ? (stepInputs[1]?.customer_name || "") : undefined,
-        accumulatedContext,
-      );
-
-      setStepOutputs((prev) => {
-        const filtered = prev.filter((o) => o.position !== position);
-        return [...filtered, result];
-      });
-
-      // If this is not the last step, show the next step's inputs
-      if (stepIndex < stepDefinitions.length - 1) {
-        // Auto-scroll to next step
-        const nextEl = document.getElementById(`step-${stepIndex + 1}`);
-        nextEl?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Unknown error";
-      const failedResult: ChainStepResult = {
-        position,
-        prompt_id: def.item.prompt_id,
-        prompt_version: def.item.prompt_version,
-        status: "failed",
-        response: null,
-        cached: false,
-        error: errorMsg,
-        user_message: null,
-        system_prompt: null,
-      };
-      setStepOutputs((prev) => {
-        const filtered = prev.filter((o) => o.position !== position);
-        return [...filtered, failedResult];
-      });
-    } finally {
-      setExecuting(false);
+    if (execution.allStepsDone) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
-  }, [group, stepDefinitions, stepOutputs, stepInputs]);
+  }, [execution.allStepsDone]);
 
-  const handleRun = useCallback((inputs: Record<number, Record<string, string>>, _initialInput?: string) => {
-    // When the "Search" button is clicked on step 1, start executing from step 0
-    setStepInputs(inputs);
-    runStep(0);
-  }, [runStep]);
-
-  const handleRerun = useCallback(() => {
-    // Clear all outputs and start over
-    setStepOutputs([]);
-    runStep(0);
-  }, [runStep]);
+  // ── Loading / Error / NotFound States ────────────────────────────
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-8">
-        <Card className="flex items-center justify-center h-64">
-          <div className="text-primary-500 dark:text-primary-400">Loading...</div>
+      <div className="mx-auto max-w-4xl px-4 py-8">
+        <PageHeader title="Loading..." description="Finding your chain page." />
+        <Card><div className="py-8 text-center text-primary-500">⏳ Loading chain page...</div></Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-8">
+        <PageHeader title="Error" description="Something went wrong." />
+        <Card>
+          <div className="py-8 text-center text-accent-600">
+            <p className="text-lg font-medium">Failed to load chain page</p>
+            <p className="mt-2 text-sm">{error}</p>
+          </div>
         </Card>
       </div>
     );
@@ -185,141 +58,141 @@ export default function PromptChainPage() {
 
   if (!group) {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-8">
-        <Card className="border-surface-300 bg-surface-100 dark:border-surface-700 dark:bg-surface-900/30">
-          <h1 className="text-xl font-semibold text-surface-700 dark:text-surface-300 mb-2">
-            Chain Page Not Found
-          </h1>
-          <p className="text-surface-600 dark:text-surface-400">
-            No chain page was found for route <code>/prompt-chains/{route}</code>.
-          </p>
+      <div className="mx-auto max-w-4xl px-4 py-8">
+        <PageHeader title="Page Not Found" description="The requested chain page does not exist." />
+        <Card>
+          <div className="py-8 text-center text-primary-500">
+            <p className="text-lg font-medium">Chain page not found</p>
+            <p className="mt-2 text-sm">This prompt group is not configured as a chain page.</p>
+          </div>
         </Card>
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div className="mx-auto max-w-7xl px-4 py-8">
-        <Card className="border-accent-200 bg-accent-50 dark:border-accent-800 dark:bg-accent-900/30">
-          <h1 className="text-xl font-semibold text-accent-800 dark:text-accent-300">Error</h1>
-          <p className="text-accent-700 dark:text-accent-400 mt-2">{error}</p>
-        </Card>
-      </div>
-    );
-  }
+  // ── Render Chain Page ─────────────────────────────────────────────
 
-  // Execute the last step if there are outputs and not all steps are done
-  const allStepsDone = stepOutputs.length === stepDefinitions.length;
-  const hasAnyOutputs = stepOutputs.length > 0;
+  const handleStepInputChange = (stepIndex: number) => (name: string, value: string) => {
+    execution.handleInputChange(stepDefinitions[stepIndex].item.position, name, value);
+  };
+
+  // Wrap runStep to track which step is executing
+  const runStepWithTracking = async (stepIndex: number) => {
+    setExecutingStep(stepIndex);
+    try {
+      await execution.runStep(stepIndex);
+    } finally {
+      setExecutingStep(null);
+    }
+  };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
-      {/* Header */}
-      <PageHeader
-        title={group.name}
-        description={group.description || undefined}
-        className={hasAnyOutputs ? "mb-6" : ""}
-      />
-      {hasAnyOutputs && (
-        <div className="flex items-center gap-3 mb-6">
-          <span className="text-sm text-primary-500 dark:text-primary-400">
-            {stepOutputs.length} of {stepDefinitions.length} steps completed
-          </span>
-          {!allStepsDone && (
-            <Button variant="ghost" onClick={handleRerun} size="sm">
+    <div className="mx-auto max-w-4xl px-4 py-8">
+      {/* Page Header */}
+      <PageHeader title={group.name} description={group.description || ""} />
+
+      {/* Completion Banner */}
+      {execution.allStepsDone && (
+        <Card className="mb-6 border-l-4 border-l-green-500 bg-green-50 dark:bg-green-900/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-green-900 dark:text-green-200">
+                All {stepDefinitions.length} steps completed
+              </p>
+              <p className="text-sm text-green-700 dark:text-green-300">
+                Chain execution finished successfully.
+              </p>
+            </div>
+            <Button variant="primary" onClick={execution.handleRerun}>
               Start Over
             </Button>
-          )}
-        </div>
+          </div>
+        </Card>
       )}
 
-      {/* Chain Steps */}
+      {/* Progress Indicator */}
+      {execution.hasAnyOutputs && !execution.allStepsDone && (
+        <Card className="mb-6">
+          <div className="flex items-center gap-3">
+            <div className="flex-1 bg-surface-200 dark:bg-primary-700 rounded-full h-2.5">
+              <div
+                className="bg-secondary-500 h-2.5 rounded-full transition-all duration-300"
+                style={{ width: `${(execution.stepOutputs.length / stepDefinitions.length) * 100}%` }}
+              />
+            </div>
+            <span className="text-sm font-medium text-primary-600 dark:text-primary-400">
+              {execution.stepOutputs.length} of {stepDefinitions.length} steps
+            </span>
+          </div>
+        </Card>
+      )}
+
+      {/* Render Each Step */}
       {stepDefinitions.map((def, index) => {
-        const isInputStep = def.item.is_input_step || index === 0;
-        const existingOutput = stepOutputs.find((o) => o.position === def.item.position);
-        const isFirstStep = index === 0;
-        const isStepDone = !!existingOutput;
-        const isFailed = existingOutput?.status === "failed";
+        const position = def.item.position;
+        const isInputStep = def.item.is_input_step;
+        const stepOutput = execution.stepOutputs.find((o) => o.position === position);
+        const isLastStep = index === stepDefinitions.length - 1;
+        const isNextExecutable =
+          !execution.executing &&
+          index === execution.stepOutputs.length &&
+          !stepOutput;
 
         return (
-          <div key={def.item.item_id} id={`step-${index}`} className="space-y-4">
-            {/* Step Header */}
-            <div className="flex items-center gap-2">
-              <Badge
-                variant={isFailed ? "danger" : isStepDone ? "success" : "neutral"}
-                className="w-8 h-8 inline-flex items-center justify-center rounded-full"
-              >
-                {def.item.position}
-              </Badge>
-              <h2 className="text-lg font-semibold text-primary-900 dark:text-white">
-                Step {def.item.position}: {def.item.alias || def.item.prompt_id}
-              </h2>
-            </div>
-
-            {isInputStep && !isStepDone && (
-              /* Input Section */
+          <div key={position} id={`step-${index}`} className="mb-6">
+            {/* Input Section for Input Steps */}
+            {isInputStep && !stepOutput && (
               <ChainInputSection
                 step={def.item}
                 template={def.template || ""}
-                inputs={stepInputs[def.item.position] || {}}
-                onInputChange={(name, value) => handleInputChange(def.item.position, name, value)}
-                onRun={isFirstStep ? handleRun : () => runStep(index)}
-                loading={executing}
+                inputs={execution.stepInputs[position] || {}}
+                onInputChange={handleStepInputChange(index)}
+                onRun={(inputs: Record<number, Record<string, string>>, initialInput?: string) => {
+                  execution.handleRun(inputs, initialInput);
+                }}
+                loading={executingStep === index}
               />
             )}
 
-            {isStepDone && (
-              /* Output Section */
-              isFailed ? (
-                <ChainStepStatus step={existingOutput} />
-              ) : index === stepDefinitions.length - 1 ? (
-                /* Last step: show as final output */
-                <ChainOutputSection
-                  step={existingOutput}
-                  output={existingOutput.response}
-                  onRerun={handleRerun}
-                />
-              ) : (
-                /* Intermediate step: show as step status */
-                <ChainStepStatus step={existingOutput} />
-              )
+            {/* Execute Next Step Button (intermediate) */}
+            {!isInputStep && isNextExecutable && (
+              <Card className="mb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium text-primary-900 dark:text-white">
+                      Step {index + 1}: {def.item.alias || def.item.prompt_id}
+                    </h3>
+                    <p className="text-sm text-primary-500">
+                      Ready to execute (references previous step output)
+                    </p>
+                  </div>
+                  <Button variant="primary" onClick={() => runStepWithTracking(index)}>
+                    Execute Next Step
+                  </Button>
+                </div>
+              </Card>
             )}
 
-            {/* Show next step's input if current step is done and there are more steps */}
-            {isStepDone && index < stepDefinitions.length - 1 && !stepDefinitions[index + 1].item.is_input_step && (
-              <Card className="border-primary-200 bg-primary-50 dark:border-primary-700 dark:bg-primary-900/30">
-                <p className="text-sm text-primary-700 dark:text-primary-300">
-                  Click below to execute the next step.
-                </p>
-                <Button
-                  variant="primary"
-                  onClick={() => runStep(index + 1)}
-                  disabled={executing}
-                  className="mt-2"
-                  loading={executing}
-                >
-                  Execute Next Step
-                </Button>
-              </Card>
+            {/* Step Status */}
+            {stepOutput && (
+              <ChainStepStatus
+                step={stepOutput}
+                expanded={stepOutput.status === "failed"}
+                onToggle={() => {}}
+              />
+            )}
+
+            {/* Output Section for Last Step */}
+            {isLastStep && stepOutput && (
+              <ChainOutputSection
+                step={stepOutput}
+                output={stepOutput.response}
+                onRerun={execution.handleRerun}
+              />
             )}
           </div>
         );
       })}
-
-      {/* All steps completed */}
-      {allStepsDone && hasAnyOutputs && (
-        <Card className="border-secondary-200 bg-secondary-50 dark:border-secondary-700 dark:bg-secondary-900/30 text-center">
-          <p className="text-secondary-800 dark:text-secondary-300 font-medium">All steps completed successfully!</p>
-          <Button
-            variant="success"
-            onClick={handleRerun}
-            className="mt-3"
-          >
-            Start Over
-          </Button>
-        </Card>
-      )}
     </div>
   );
 }

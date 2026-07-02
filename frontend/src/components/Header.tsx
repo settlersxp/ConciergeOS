@@ -1,19 +1,33 @@
 import { Link, useLocation } from 'react-router-dom';
 import { reservationsApi } from '../services/api';
+import { useChainPagesContext } from '../context/ChainPagesContext';
 
 export default function Header() {
   const location = useLocation();
-  const links: { path: string; label: string }[] = [
+  const context = useChainPagesContext();
+
+  // Build dynamic links: static links first, then chain page links from database
+  const staticLinks: { path: string; label: string }[] = [
     { path: '/', label: 'Reservations' },
     { path: '/guest-search', label: 'Guest Search' },
     { path: '/performance-testing', label: 'Performance' },
     { path: '/performance-dashboard', label: 'Dashboard' },
-    { path: '/prompt-chains/guest-intel', label: 'Guest Intelligence' },
-    { path: '/prompt-chains/hello', label: 'Hello World' },
     { path: '/prompts', label: 'Prompt Management' },
     { path: '/prompt-groups', label: 'Prompt Groups' },
     { path: '/settings', label: 'Settings' },
   ];
+
+  const chainLinks = context?.chainPages
+    .filter((p) => p.group.is_active)
+    .map((p) => ({ path: p.route, label: p.group.name }))
+    ?? [];
+
+  // Insert chain links after "Dashboard" (before "Prompt Management")
+  const splitIndex = staticLinks.findIndex((l) => l.path === '/prompts');
+  const links: { path: string; label: string }[] =
+    splitIndex > -1
+      ? [...staticLinks.slice(0, splitIndex), ...chainLinks, ...staticLinks.slice(splitIndex)]
+      : [...staticLinks, ...chainLinks];
 
   const handleShift = async () => {
     try {
