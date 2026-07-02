@@ -59,6 +59,7 @@ export interface PromptGroupItem {
   prompt_version: number;
   alias?: string;
   is_input_step?: boolean;
+  is_active?: boolean;
 }
 
 export interface PromptGroupItemCreate {
@@ -116,6 +117,17 @@ export interface ChainExecutionRequest {
   initial_input?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Step-by-step chain types
+// ---------------------------------------------------------------------------
+
+export interface ChainStepRequest {
+  position: number;
+  inputs: Record<string, string>;
+  initial_input?: string;
+  accumulated_context?: string;
+}
+
 export interface ChainStepResult {
   position: number;
   prompt_id: string;
@@ -126,8 +138,7 @@ export interface ChainStepResult {
   cached: boolean;
   error: string | null;
   user_message: string | null;
-  system_prompt?: string | null;
-  references?: string[];
+  system_prompt: string | null;
 }
 
 export interface ChainExecutionResult {

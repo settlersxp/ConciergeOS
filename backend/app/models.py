@@ -237,6 +237,10 @@ class PromptGroupItem(Base):
     is_input_step: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0",
         comment="Mark this step as the user-input entry point for page mode")
 
+    # NEW: Active/inactive toggle per item
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1",
+        comment="Enable or disable this step in the chain")
+
     group: Mapped["PromptGroup"] = relationship(back_populates="items")
 
 

@@ -49,6 +49,7 @@ function GroupCard({
   onExecute,
   onToggle,
   onDelete,
+  onToggleItem,
   executing,
 }: {
   group: PromptGroup;
@@ -56,6 +57,7 @@ function GroupCard({
   onExecute: () => void;
   onToggle: () => void;
   onDelete: () => void;
+  onToggleItem: (itemId: number) => void;
   executing: boolean;
 }) {
   const activeSchedules = group.schedules?.filter((s) => s.active) ?? [];
@@ -81,9 +83,15 @@ function GroupCard({
 
         <div className="flex flex-wrap gap-1">
           {group.items.map((item) => (
-            <Badge key={item.item_id} variant="neutral">
-              #{item.position} {item.prompt_id}:v{item.prompt_version}
-            </Badge>
+            <div key={item.item_id} className="flex items-center gap-1">
+              <Badge variant={item.is_active ? "neutral" : "danger"}>
+                #{item.position} {item.prompt_id}:v{item.prompt_version}
+              </Badge>
+              <ToggleSwitch
+                checked={item.is_active ?? true}
+                onChange={() => onToggleItem(item.item_id)}
+              />
+            </div>
           ))}
         </div>
 
@@ -489,12 +497,14 @@ function GroupDetailModal({
   onClose,
   onEdit,
   onToggle,
+  onToggleItem,
   onOpenSchedules,
 }: {
   group: PromptGroup;
   onClose: () => void;
   onEdit: () => void;
   onToggle: () => void;
+  onToggleItem: (itemId: number) => void;
   onOpenSchedules: () => void;
 }) {
   const [results, setResults] = useState<PromptGroupResult[]>(group.results ?? []);
@@ -580,10 +590,14 @@ function GroupDetailModal({
           <h3 className="font-medium mb-2 text-primary-900 dark:text-white">Chain ({group.items.length} prompts)</h3>
           {group.items.map((item, idx) => (
             <div key={item.item_id} className="flex items-center gap-2 mb-2">
-              <Badge variant="info">#{item.position}</Badge>
-              <span className="text-sm text-primary-800 dark:text-primary-200">
+              <Badge variant={item.is_active ? "info" : "neutral"}>#{item.position}</Badge>
+              <span className={`text-sm ${item.is_active ? 'text-primary-800 dark:text-primary-200' : 'text-primary-400 dark:text-primary-500 line-through'}`}>
                 {item.prompt_id}:v{item.prompt_version}
               </span>
+              <ToggleSwitch
+                checked={item.is_active ?? true}
+                onChange={() => onToggleItem(item.item_id)}
+              />
               {idx < group.items.length - 1 && (
                 <span className="text-primary-400">→</span>
               )}
@@ -741,6 +755,24 @@ export default function PromptGroups() {
     }
   };
 
+  const handleToggleItem = async (groupId: number, itemId: number) => {
+    try {
+      await promptGroupsApi.toggleItem(groupId, itemId);
+      if (viewingGroup?.group_id === groupId) {
+        setViewingGroup({
+          ...viewingGroup,
+          items: viewingGroup.items.map((item) =>
+            item.item_id === itemId ? { ...item, is_active: !item.is_active } : item
+          ),
+        });
+      }
+      loadGroups();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Toggle failed';
+      setToast({ message: msg, type: 'error' });
+    }
+  };
+
   const handleDelete = async (groupId: number) => {
     if (!confirm('Delete this group? This cannot be undone.')) return;
     try {
@@ -808,6 +840,7 @@ export default function PromptGroups() {
               onExecute={() => handleExecute(g.group_id)}
               onToggle={() => handleToggle(g.group_id)}
               onDelete={() => handleDelete(g.group_id)}
+              onToggleItem={(itemId) => handleToggleItem(g.group_id, itemId)}
               executing={executingId === g.group_id}
             />
           ))}
@@ -839,6 +872,7 @@ export default function PromptGroups() {
             setEditingGroup(viewingGroup);
           }}
           onToggle={() => handleToggle(viewingGroup.group_id)}
+          onToggleItem={(itemId) => handleToggleItem(viewingGroup.group_id, itemId)}
           onOpenSchedules={() => {
             setScheduleGroup(viewingGroup);
           }}

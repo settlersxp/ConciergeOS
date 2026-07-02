@@ -2,7 +2,7 @@
  * API client for Prompt Group CRUD, execution, and scheduling.
  */
 
-import type { ChainExecutionRequest, ChainExecutionResult, PromptGroup, PromptGroupItemCreate, PromptGroupResult, PromptGroupScheduleCreate } from '../types/prompt';
+import type { ChainExecutionRequest, ChainExecutionResult, ChainStepRequest, ChainStepResult, PromptGroup, PromptGroupItemCreate, PromptGroupResult, PromptGroupScheduleCreate } from '../types/prompt';
 
 /** Generic fetch helper that parses JSON responses */
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
@@ -58,6 +58,13 @@ export function deleteGroup(groupId: number): Promise<{ ok: boolean; group_id: n
   });
 }
 
+/** Toggle a single prompt group item's active state */
+export function toggleItem(groupId: number, itemId: number): Promise<{ item_id: number; is_active: boolean }> {
+  return request<{ item_id: number; is_active: boolean }>(`/api/prompt-groups/${groupId}/items/${itemId}/toggle`, {
+    method: 'PATCH',
+  });
+}
+
 /** Execute a prompt chain now */
 export function executeGroup(groupId: number, initialInput?: string): Promise<Record<string, unknown>> {
   const query = initialInput ? `?initial_input=${encodeURIComponent(initialInput)}` : '';
@@ -85,6 +92,39 @@ export function executeChain(
   };
   return request<ChainExecutionResult>(
     `/api/prompt-groups/${groupId}/execute-chain`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+/**
+ * Execute a single chain step (page mode, step-by-step).
+ *
+ * @param groupId The PromptGroup ID
+ * @param position The step position (1-based)
+ * @param inputs User-provided inputs for this step
+ * @param initialInput Optional initial text for the first step
+ * @param accumulatedContext Context accumulated from previous steps
+ * @returns ChainStepResult with per-step details
+ */
+export function executeChainStep(
+  groupId: number,
+  position: number,
+  inputs: Record<string, string>,
+  initialInput?: string,
+  accumulatedContext?: string,
+): Promise<ChainStepResult> {
+  const body: ChainStepRequest = {
+    position,
+    inputs,
+    initial_input: initialInput || "",
+    accumulated_context: accumulatedContext || "",
+  };
+  return request<ChainStepResult>(
+    `/api/prompt-groups/${groupId}/execute-chain-step`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -133,8 +173,10 @@ export const promptGroupsApi = {
   remove: deleteGroup,
   execute: executeGroup,
   executeChain,
+  executeChainStep,
   schedule: scheduleGroup,
   cancelSchedule,
   results: getResults,
   clearSchedules,
+  toggleItem,
 };

@@ -23,13 +23,14 @@ from app.schemas import (
     CreateGroupRequest,
     UpdateGroupRequest,
     ChainExecutionRequest,
+    ChainStepRequest,
     PromptGroupScheduleCreate,
     PromptGroupSchema,
     PromptGroupItemSchema,
     PromptGroupScheduleSchema,
     PromptGroupResultSchema,
 )
-from app.services.prompt_chain import execute_chain
+from app.services.prompt_chain import execute_chain, execute_chain_step
 from app.services.prompt_scheduler import PromptScheduler
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,7 @@ def _group_to_schema(group: PromptGroup) -> PromptGroupSchema:
                 prompt_version=item.prompt_version,
                 alias=item.alias,
                 is_input_step=item.is_input_step,
+                is_active=item.is_active,
             )
             for item in group.items
         ],
@@ -264,7 +266,7 @@ def delete_group(group_id: int):
 
 
 # ---------------------------------------------------------------------------
-# Toggle active state
+# Toggle active state for group
 # ---------------------------------------------------------------------------
 
 @router.patch("/{group_id}/toggle")
@@ -317,6 +319,38 @@ def toggle_group(group_id: int):
 
 
 # ---------------------------------------------------------------------------
+# Toggle active state for individual item
+# ---------------------------------------------------------------------------
+
+@router.patch("/{group_id}/items/{item_id}/toggle")
+def toggle_item(group_id: int, item_id: int):
+    """Toggle the active state of a single prompt group item."""
+    db = _get_db()
+    try:
+        item = db.query(PromptGroupItem).filter(
+            and_(
+                PromptGroupItem.item_id == item_id,
+                PromptGroupItem.group_id == group_id,
+            )
+        ).first()
+
+        if not item:
+            raise HTTPException(status_code=404, detail=f"PromptGroupItem {item_id} not found in group {group_id}")
+
+        item.is_active = not item.is_active
+        db.commit()
+        db.refresh(item)
+        return {"item_id": item.item_id, "is_active": item.is_active}
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
 # Execution
 # ---------------------------------------------------------------------------
 
@@ -352,6 +386,30 @@ def execute_chain_page(group_id: int, req: ChainExecutionRequest):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error("Chain execution failed for group %d: %s", group_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{group_id}/execute-chain-step")
+def execute_chain_step_route(group_id: int, req: ChainStepRequest):
+    """Execute a single step in a prompt chain (page mode, step-by-step).
+
+    This endpoint is used for interactive chain page execution where the frontend
+    calls one step at a time. The accumulated context from previous steps is passed
+    in so that cross-step references ({step_N} / {alias}) work correctly.
+    """
+    try:
+        result = execute_chain_step(
+            group_id,
+            step_position=req.position,
+            inputs=req.inputs,
+            initial_input=req.initial_input,
+            accumulated_context=req.accumulated_context,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error("Chain step execution failed for group %d, step %d: %s", group_id, req.position, e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

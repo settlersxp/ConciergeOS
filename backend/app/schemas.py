@@ -226,10 +226,12 @@ class LLMModelSchema(BaseModel):
     thinking_enabled: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
-
-    model_config = {"from_attributes": True}
-
     model_dump_mode: ClassVar[str] = "json"
+
+    model_config = {
+        "from_attributes": True,
+        "protected_namespaces": ("model_validate",),
+    }
 
 
 class CreateModelRequest(BaseModel):
@@ -518,6 +520,8 @@ class PromptGroupItemSchema(BaseModel):
     # NEW: Chain page fields
     alias: str | None = None
     is_input_step: bool = False
+    # NEW: Active/inactive toggle per item
+    is_active: bool = True
 
     model_config = {"from_attributes": True}
 
@@ -531,6 +535,8 @@ class PromptGroupItemCreate(BaseModel):
     # NEW: Chain page fields
     alias: str | None = None
     is_input_step: bool = False
+    # NEW: Active/inactive toggle per item
+    is_active: bool = True
 
 
 class PromptGroupScheduleSchema(BaseModel):
@@ -642,3 +648,34 @@ class ChainExecutionResultSchema(BaseModel):
     final_output: str | None = None
     result_file: str = ""
     result_id: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Step-by-step chain execution schemas
+# ---------------------------------------------------------------------------
+
+class ChainStepRequest(BaseModel):
+    """Request body for executing a single chain step.
+
+    For page-mode chain execution where each step is called independently.
+    The first step receives user_inputs as template variables.
+    Subsequent steps receive the accumulated context from previous steps.
+    """
+    position: int = Field(..., description="The step position (1-based)")
+    inputs: dict[str, str] = Field(default_factory=dict, description="User-provided inputs for this step")
+    initial_input: str = Field(default="", description="Initial raw input for the first step")
+    accumulated_context: str = Field(default="", description="Context accumulated from previous steps")
+
+
+class ChainStepResponse(BaseModel):
+    """Response from executing a single chain step."""
+    position: int
+    prompt_id: str
+    prompt_version: int
+    alias: str | None = None
+    status: str = "success"  # "success" or "failed"
+    response: str | None = None
+    cached: bool = False
+    error: str | None = None
+    user_message: str | None = None
+    system_prompt: str | None = None
