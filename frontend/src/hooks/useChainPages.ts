@@ -29,7 +29,7 @@ export function useChainPages() {
           .filter((g) => g.is_chain_page && g.page_route)
           .map((g) => ({
             group: g,
-            route: g.page_route!,
+            route: g.page_route!.startsWith("/") ? g.page_route! : `/${g.page_route!}`,
           }));
 
         setChainPages(pages);

@@ -6,14 +6,15 @@ import Textarea from '../components/ui/Textarea';
 import Badge from '../components/ui/Badge';
 import StatusBanner from '../components/ui/StatusBanner';
 import Toast from '../components/ui/Toast';
-import PromptSelector from '../components/ui/PromptSelector';
 import { promptGroupsApi } from '../services/promptGroupsApi';
+import { listAllPrompts, listVersions } from '../services/promptsApi';
 import type {
   PromptGroup,
   PromptGroupItemCreate,
   PromptGroupResult,
   PromptGroupSchedule,
 } from '../types/prompt';
+import type { PromptSummary, PromptVersion } from '../types/prompt';
 
 const FONT_FAMILY =
   '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif';
@@ -318,23 +319,48 @@ function GroupFormModal({
     })) ?? [],
   );
 
-  const [selectorValue, setSelectorValue] = useState<{ prompt_id: string; version?: number }>({
-    prompt_id: '',
-    version: undefined,
-  });
+  // Simple prompt/version selectors (no model selector)
+  const [allPrompts, setAllPrompts] = useState<PromptSummary[]>([]);
+  const [addPromptId, setAddPromptId] = useState('');
+  const [addVersions, setAddVersions] = useState<PromptVersion[]>([]);
+  const [addVersion, setAddVersion] = useState<number | undefined>(undefined);
 
-  const handleSelectorChange = (val: { prompt_id: string; version?: number }) => {
-    setSelectorValue(val);
-  };
+  // Load all prompts on mount
+  useEffect(() => {
+    listAllPrompts()
+      .then((data) => {
+        setAllPrompts(data);
+        if (data.length > 0 && !addPromptId) {
+          setAddPromptId(data[0].prompt_id);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Load versions when prompt changes
+  useEffect(() => {
+    if (addPromptId) {
+      listVersions(addPromptId)
+        .then((data) => {
+          setAddVersions(data);
+          const highest = [...data].sort((a, b) => b.version - a.version)[0];
+          setAddVersion(highest?.version);
+        })
+        .catch(() => setAddVersions([]));
+    } else {
+      setAddVersions([]);
+      setAddVersion(undefined);
+    }
+  }, [addPromptId]);
 
   const addPromptFromSelector = () => {
-    if (!selectorValue.prompt_id || !selectorValue.version) return;
+    if (!addPromptId || addVersion === undefined) return;
     setItems((prev) => [
       ...prev,
       {
         position: prev.length + 1,
-        prompt_id: selectorValue.prompt_id,
-        prompt_version: selectorValue.version!,
+        prompt_id: addPromptId,
+        prompt_version: addVersion,
       },
     ]);
   };
@@ -363,7 +389,7 @@ function GroupFormModal({
     onSave({ name: name.trim(), description: description.trim() || null, items, is_chain_page: isChainPage, page_route: route });
   };
 
-  const canAdd = selectorValue.prompt_id && selectorValue.version != null;
+  const canAdd = addPromptId && addVersion != null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -434,12 +460,40 @@ function GroupFormModal({
              </div>
            )}
 
-          {/* Prompt Selector */}
+          {/* Simple Prompt/Version Selectors */}
           <div>
             <label className="block text-sm font-medium text-primary-700 dark:text-primary-300 mb-2">
               Select Prompt to Add
             </label>
-            <PromptSelector value={selectorValue} onChange={handleSelectorChange} />
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              <select
+                className="rounded-md border border-surface-300 bg-white px-3 py-2 text-sm text-primary-800 focus:border-secondary-400 focus:outline-none focus:ring-2 focus:ring-secondary-400/20 dark:border-primary-600 dark:bg-primary-700 dark:text-white"
+                value={addPromptId}
+                onChange={(e) => setAddPromptId(e.target.value)}
+              >
+                <option value="">-- Select Prompt --</option>
+                {allPrompts.map((p) => (
+                  <option key={p.prompt_id} value={p.prompt_id}>
+                    {p.prompt_id} ({p.version_count} version{p.version_count !== 1 ? 's' : ''})
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rounded-md border border-surface-300 bg-white px-3 py-2 text-sm text-primary-800 focus:border-secondary-400 focus:outline-none focus:ring-2 focus:ring-secondary-400/20 dark:border-primary-600 dark:bg-primary-700 dark:text-white"
+                value={addVersion ?? ''}
+                onChange={(e) => setAddVersion(e.target.value ? Number(e.target.value) : undefined)}
+                disabled={!addPromptId || addVersions.length === 0}
+              >
+                <option value="">
+                  {!addPromptId ? 'Select a prompt first' : addVersions.length === 0 ? 'No versions' : 'Select version'}
+                </option>
+                {addVersions.map((v) => (
+                  <option key={v.version} value={v.version}>
+                    v{v.version}{v.is_default ? ' (default)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
             <Button
               size="sm"
               variant="primary"

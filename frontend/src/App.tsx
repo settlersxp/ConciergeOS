@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Header from './components/Header';
 import Reservations from './pages/Reservations';
-import GuestSearch from './pages/GuestSearch';
 import PerformanceTesting from './pages/PerformanceTesting';
 import Settings from './pages/Settings';
 import PromptManagement from './pages/PromptManagement';
@@ -26,7 +25,6 @@ function App() {
           <Header />
           <Routes>
             <Route path="/" element={<Reservations />} />
-            <Route path="/guest-search" element={<GuestSearch />} />
             <Route path="/performance-testing" element={<PerformanceTesting />} />
             <Route path="/prompts" element={<PromptManagement />} />
             <Route path="/prompt-groups" element={<PromptGroups />} />
@@ -38,6 +36,8 @@ function App() {
             ))}
             {/* Fallback: legacy /prompt-chains/:route pattern */}
             <Route path="/prompt-chains/:route" element={<PromptChainPage />} />
+            {/* Catch-all: any unmatched path — PromptChainPage will try to resolve it as a chain page */}
+            <Route path="*" element={<PromptChainPage />} />
           </Routes>
         </ChainPagesProvider>
       </SettingsProvider>

@@ -46,7 +46,10 @@ export function useChainPageData() {
     const loadChainPage = async () => {
       try {
         const groups = await promptGroupsApi.list();
-        const page = groups.find((g) => g.page_route === pageRoute);
+        const page = groups.find((g) => {
+          const route = (g.page_route || "").startsWith("/") ? (g.page_route || "") : `/${g.page_route || ""}`;
+          return route === pageRoute;
+        });
         if (!page) {
           setGroup(null);
           return;

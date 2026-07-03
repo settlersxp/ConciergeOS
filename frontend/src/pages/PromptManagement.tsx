@@ -247,12 +247,29 @@ export default function PromptManagement() {
           setSelectedVersion(def.version);
         }
       }
-      showNotification("Prompt saved successfully", "success");
-      const updatedVersions = await listVersions(selectedPromptId);
-      setVersions(updatedVersions);
-      if (editingVersion !== null) {
-        setSelectedVersion(editingVersion);
-      }
+       showNotification("Prompt saved successfully", "success");
+       const updatedVersions = await listVersions(selectedPromptId);
+       setVersions(updatedVersions);
+       // Directly use updatedVersions (fresh from server with the new model_id)
+       // instead of calling setSelectedVersion() which reads the stale `versions`
+       // closure variable and would overwrite selectedModelId.
+       if (editingVersion !== null) {
+         const savedVersion = updatedVersions.find((v: PromptVersion) => v.version === editingVersion);
+         if (savedVersion) {
+           setSelectedModelId(savedVersion.model_id ?? null);
+           setEditForm({
+             prompt_id: savedVersion.prompt_id,
+             version: savedVersion.version,
+             name: savedVersion.name || "",
+             intention: savedVersion.intention || "",
+             restrictions: savedVersion.restrictions || "",
+             output_structure: savedVersion.output_structure || "",
+             user_prompt_template: savedVersion.user_prompt_template || "",
+             is_default: savedVersion.is_default || false,
+             metadata: savedVersion.metadata || undefined,
+           });
+         }
+       }
     } catch (err) {
       showNotification(`Save failed: ${(err as Error).message}`, "error");
     } finally {
