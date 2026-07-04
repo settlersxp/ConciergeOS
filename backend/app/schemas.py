@@ -173,42 +173,6 @@ class PromptSummarySchema(BaseModel):
     name: str
 
 
-class CreatePromptRequest(BaseModel):
-    """Request body for creating a new prompt (v1)."""
-
-    name: str
-    intention: str
-    restrictions: str
-    output_structure: str
-    user_prompt_template: str
-    model_id: int | None = None
-    metadata: dict | None = None
-
-
-class UpdatePromptRequest(BaseModel):
-    """Request body for updating an existing prompt version."""
-
-    name: str | None = None
-    intention: str | None = None
-    restrictions: str | None = None
-    output_structure: str | None = None
-    user_prompt_template: str | None = None
-    model_id: int | None = None
-    metadata: dict | None = None
-
-
-class DuplicatePromptRequest(BaseModel):
-    """Request body for duplicating a prompt version."""
-
-    name: str | None = None
-
-
-class SetDefaultRequest(BaseModel):
-    """Request body for setting the default prompt version."""
-
-    version: int
-
-
 # ---------------------------------------------------------------------------
 # LLM Model management schemas
 # ---------------------------------------------------------------------------

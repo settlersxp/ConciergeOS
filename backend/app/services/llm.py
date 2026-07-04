@@ -215,9 +215,6 @@ _TOOL_REGISTRY = {
 }
 
 # Create batch schemas dynamically to support lists of parameters
-class BatchParams(BaseModel):
-    params: list[Any]
-
 def _get_batch_schema(base_schema: type[BaseModel]) -> type[BaseModel]:
     """Creates a new Pydantic model that accepts a list of base_schema objects under the 'params' key."""
     return create_model(

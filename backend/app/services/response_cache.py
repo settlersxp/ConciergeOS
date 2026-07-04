@@ -116,15 +116,6 @@ class CacheEntry(BaseCacheEntry, Generic[T]):
         super().__init__(timestamp, ttl)
         self.value = value
 
-    @property
-    def response(self) -> Any:
-        """Alias for .value — provides backwards-compatible access as 'response'."""
-        return self.value
-
-    @response.setter
-    def response(self, value: Any) -> None:
-        self.value = value
-
 
 class CacheStore(BaseCacheStore["CacheEntry[str]"]):
     """In-memory LLM response cache with TTL-based expiration.
