@@ -77,10 +77,10 @@ export default function PromptChainPage() {
   };
 
   // Wrap runStep to track which step is executing
-  const runStepWithTracking = async (stepIndex: number) => {
+  const runStepWithTracking = async (stepIndex: number, mediaFile?: File | null) => {
     setExecutingStep(stepIndex);
     try {
-      await execution.runStep(stepIndex);
+      await execution.runStep(stepIndex, mediaFile);
     } finally {
       setExecutingStep(null);
     }
@@ -145,10 +145,12 @@ export default function PromptChainPage() {
               <ChainInputSection
                 step={def.item}
                 template={def.template || ""}
+                modelId={def.model_id}
                 inputs={execution.stepInputs[position] || {}}
                 onInputChange={handleStepInputChange(index)}
-                onRun={(inputs: Record<number, Record<string, string>>, initialInput?: string) => {
-                  execution.handleRun(inputs, initialInput);
+                onRun={(inputs: Record<number, Record<string, string>>, initialInput?: string, mediaFile?: File | null) => {
+                  execution.setStepInputs(inputs);
+                  runStepWithTracking(0, mediaFile);
                 }}
                 loading={executingStep === index}
               />

@@ -14,6 +14,7 @@ import { promptGroupsApi } from "../services/promptGroupsApi";
 export interface StepDefinition {
   item: PromptGroupItem;
   template: string | null;
+  model_id: number | null;
 }
 
 interface UseChainExecutionParams {
@@ -23,10 +24,11 @@ interface UseChainExecutionParams {
 
 interface UseChainExecutionReturn {
   stepInputs: Record<number, Record<string, string>>;
+  setStepInputs: React.Dispatch<React.SetStateAction<Record<number, Record<string, string>>>>;
   stepOutputs: ChainStepResult[];
   executing: boolean;
   handleInputChange: (stepPosition: number, name: string, value: string) => void;
-  runStep: (stepIndex: number) => Promise<void>;
+  runStep: (stepIndex: number, mediaFile?: File | null) => Promise<void>;
   handleRun: (inputs: Record<number, Record<string, string>>, _initialInput?: string) => void;
   handleRerun: () => void;
   allStepsDone: boolean;
@@ -34,16 +36,19 @@ interface UseChainExecutionReturn {
 }
 
 /**
- * Fetches the default prompt version for a step to get the user_prompt_template.
+ * Fetches the prompt version to get the user_prompt_template and model_id.
  */
-async function fetchStepTemplate(item: PromptGroupItem): Promise<string | null> {
+async function fetchStepTemplate(item: PromptGroupItem): Promise<{ template: string | null; model_id: number | null }> {
   try {
     const { promptsApi } = await import("../services/promptsApi");
     const version = await promptsApi.getByVersion(item.prompt_id, item.prompt_version);
-    return version?.user_prompt_template || null;
+    return {
+      template: version?.user_prompt_template || null,
+      model_id: version?.model_id || null,
+    };
   } catch (err) {
     console.warn(`Failed to fetch template for ${item.prompt_id}:${item.prompt_version}`, err);
-    return null;
+    return { template: null, model_id: null };
   }
 }
 
@@ -63,7 +68,7 @@ export function useChainExecution({
   }, []);
 
   const runStep = useCallback(
-    async (stepIndex: number) => {
+    async (stepIndex: number, mediaFile?: File | null) => {
       if (!group || stepIndex >= stepDefinitions.length) return;
 
       const def = stepDefinitions[stepIndex];
@@ -83,6 +88,7 @@ export function useChainExecution({
           stepInputs[position] || {},
           position === 1 ? (stepInputs[1]?.customer_name || "") : undefined,
           accumulatedContext,
+          mediaFile,
         );
 
         setStepOutputs((prev) => {
@@ -137,6 +143,7 @@ export function useChainExecution({
 
   return {
     stepInputs,
+    setStepInputs,
     stepOutputs,
     executing,
     handleInputChange,
@@ -154,8 +161,8 @@ export function useChainExecution({
 export async function buildStepDefinitions(items: PromptGroupItem[]): Promise<StepDefinition[]> {
   const definitions: StepDefinition[] = [];
   for (const item of items) {
-    const template = await fetchStepTemplate(item);
-    definitions.push({ item, template });
+    const { template, model_id } = await fetchStepTemplate(item);
+    definitions.push({ item, template, model_id });
   }
   return definitions;
 }

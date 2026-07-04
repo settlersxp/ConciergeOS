@@ -120,11 +120,17 @@ def _call_llm(
     item: PromptGroupItem,
     user_message: str,
     system_prompt: str,
+    media_file: bytes | None = None,
+    media_content_type: str | None = None,
 ) -> tuple[str, bool]:
-    """Call the LLM with the resolved prompts. Returns (response, was_cached)."""
+    """Call the LLM with the resolved prompts. Returns (response, was_cached).
+
+    When media_file is provided, the LLM is called with multimodal content
+    (image or audio) so it can extract information directly from the media
+    and then use tools to look up guest data.
+    """
     from app.models import PromptVersion as PV
     from app.services.llm import get_llm_config_by_model_id
-    from app.services.response_cache import call_llm_with_db_tools_with_cache_flag
 
     pv = session.query(PV).filter(
         PV.prompt_id == item.prompt_id,
@@ -132,12 +138,50 @@ def _call_llm(
     ).first()
     model_id_val = pv.model_id if pv else None
 
-    get_llm_config_by_model_id(model_id_val)  # side-effect: sets up client
-    llm_response, was_cached = call_llm_with_db_tools_with_cache_flag(
-        user_message,
-        system_prompt=system_prompt,
-    )
-    return llm_response, was_cached
+    client, model_name = get_llm_config_by_model_id(model_id_val)
+
+    # If no media, use the simple cached text path
+    if not media_file:
+        from app.services.response_cache import call_llm_with_db_tools_with_cache_flag
+        llm_response, was_cached = call_llm_with_db_tools_with_cache_flag(
+            user_message,
+            system_prompt=system_prompt,
+        )
+        return llm_response, was_cached
+
+    # --- Multimodal LLM call with tool calling ---
+    import base64
+
+    b64_data = base64.b64encode(media_file).decode("ascii")
+    is_image = media_content_type and "image" in media_content_type
+    is_audio = media_content_type and "audio" in media_content_type
+
+    # Build multimodal user content
+    content_parts: list[dict[str, Any]] = []
+    if is_image:
+        content_parts.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{media_content_type};base64,{b64_data}"},
+        })
+    elif is_audio:
+        content_parts.append({
+            "type": "input_audio",
+            "input_audio": {
+                "data": b64_data,
+                "format": media_content_type.split("/")[-1].split(";")[0] if media_content_type else "webm",
+            },
+        })
+    content_parts.append({"type": "text", "text": user_message})
+
+    from app.services.tool_calling import _run_tool_calling_loop
+
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": content_parts},
+    ]
+
+    llm_response = _run_tool_calling_loop(client, model_name, messages)
+    return llm_response, False
 
 
 def _build_step_result(
@@ -171,6 +215,8 @@ def _execute_single_step(
     aliases: dict[str, int],
     accumulated_context: str,
     initial_input: str = "",
+    media_file: bytes | None = None,
+    media_content_type: str | None = None,
 ) -> tuple[dict[str, Any], str, str]:
     """Execute a single chain step and return (step_result, llm_response, new_context).
 
@@ -182,7 +228,11 @@ def _execute_single_step(
             accumulated_context, initial_input, item.position,
         )
 
-        llm_response, was_cached = _call_llm(session, item, user_message, system_prompt)
+        llm_response, was_cached = _call_llm(
+            session, item, user_message, system_prompt,
+            media_file=media_file,
+            media_content_type=media_content_type,
+        )
 
         step_result = _build_step_result(
             item, system_prompt, user_message, llm_response, was_cached, None
@@ -315,12 +365,15 @@ def execute_chain_step(
     initial_input: str = "",
     accumulated_context: str = "",
     db: Session | None = None,
+    media_file: bytes | None = None,
+    media_content_type: str | None = None,
 ) -> dict[str, Any]:
     """Execute a single step in a prompt chain.
 
     This is used for page-mode chain execution where each step is called independently.
     The first step receives user_inputs as template variables.
     Subsequent steps receive the accumulated context from previous steps.
+    Optionally accepts a media file (image/audio) for multimodal LLM processing.
 
     Args:
         group_id: ID of the PromptGroup.
@@ -329,6 +382,8 @@ def execute_chain_step(
         initial_input: Raw text passed to the first step before template resolution.
         accumulated_context: Context accumulated from previous steps.
         db: Optional existing database session.
+        media_file: Optional raw bytes of an image or audio file for multimodal input.
+        media_content_type: MIME type of the media file (e.g., "image/png", "audio/webm").
 
     Returns:
         Dictionary with step execution details.
@@ -374,6 +429,8 @@ def execute_chain_step(
             session_manager, prompt_store, target_item,
             runtime_vars, prev_chain_results, aliases,
             accumulated_context, initial_input,
+            media_file=media_file,
+            media_content_type=media_content_type,
         )
 
         # Convert batch-format result to step-format

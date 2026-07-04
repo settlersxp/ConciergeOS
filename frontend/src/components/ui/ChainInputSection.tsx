@@ -11,24 +11,31 @@ import { inferInputFields } from "../../utils/inputFields";
 export interface ChainInputSectionProps {
   step: PromptGroupItem;
   template: string;
+  modelId?: number | null;
   inputs: Record<string, string>;
   onInputChange: (name: string, value: string) => void;
-  onRun: (inputs: Record<number, Record<string, string>>, initialInput?: string) => void;
+  /**
+   * Called when the user clicks "Search".
+   * @param inputs Per-step inputs map
+   * @param initialInput Optional initial text (e.g. customer_name)
+   * @param mediaFile Optional image or audio file for multimodal LLM input
+   */
+  onRun: (inputs: Record<number, Record<string, string>>, initialInput?: string, mediaFile?: File | null) => void;
   loading: boolean;
 }
 
 /**
  * ChainInputSection renders the input fields for a chain step.
  * It parses the step's user_prompt_template for {placeholder} patterns,
- * generates appropriate input fields, and includes media input for name extraction.
+ * generates appropriate input fields, and includes media input.
  *
- * Uses:
- * - inferInputFields() from shared utilities for template parsing
- * - useMediaExtraction() hook for photo/voice/recording/extraction logic
+ * The single "Search" button sends all available data (text inputs + media file)
+ * to the backend. The LLM decides what to do with whatever it receives.
  */
 export default function ChainInputSection({
   step: _step,
   template,
+  modelId,
   inputs,
   onInputChange,
   onRun,
@@ -37,13 +44,19 @@ export default function ChainInputSection({
   // Parse template for placeholder fields (shared utility)
   const fields = inferInputFields(template);
 
-  // Media extraction (shared hook)
-  const media = useMediaExtraction((name: string) => {
-    onInputChange("customer_name", name);
-  });
+  // Media extraction hook (kept for file upload/recording UI, but extraction happens on backend)
+  const media = useMediaExtraction(
+    (name: string) => {
+      // Auto-populate customer_name if extraction callback fires (e.g., from keyboard shortcut)
+      onInputChange("customer_name", name);
+    },
+    modelId ?? undefined,
+  );
 
   const handleSubmit = () => {
-    onRun({ 1: { ...inputs } }, inputs.customer_name);
+    // Prefer image file, then audio file, then null
+    const mediaFile = media.imageFile ?? media.audioFile ?? null;
+    onRun({ 1: { ...inputs } }, inputs.customer_name, mediaFile);
   };
 
   return (
@@ -136,7 +149,7 @@ export default function ChainInputSection({
         </div>
       </div>
 
-      {/* Image preview with region selector */}
+      {/* Image preview */}
       {media.selectedImage && (
         <div className="mt-4">
           <RegionSelector
@@ -144,20 +157,9 @@ export default function ChainInputSection({
             alt="Image preview"
             onRegionChange={() => {}}
           />
-          {media.cropRegion && (
-            <div className="mt-2 flex justify-end">
-              <Button
-                variant="primary"
-                loading={media.extracting}
-                onClick={() => media.handleExtractName()}
-              >
-                Extract Name
-              </Button>
-            </div>
-          )}
-          <div className="mt-1 text-xs text-primary-400 dark:text-primary-500 text-center">
-            Click and drag to select the name region, then click Extract Name
-          </div>
+          <p className="mt-1 text-xs text-primary-400 dark:text-primary-500 text-center">
+            Image attached. Click Search to send it to the assistant.
+          </p>
         </div>
       )}
 
@@ -166,37 +168,13 @@ export default function ChainInputSection({
         <div className="mt-4">
           <p className="text-sm text-primary-600 dark:text-primary-400 mb-1">Recorded audio:</p>
           <audio controls src={media.recordedAudio} className="w-full" />
-          <div className="mt-2 flex justify-end">
-            <Button
-              variant="primary"
-              loading={media.extracting}
-              onClick={() => media.handleExtractName()}
-            >
-              Extract Name
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Extraction error */}
-      {media.extractError && (
-        <div className="mt-4 p-3 bg-accent-50 border border-accent-200 rounded-md dark:bg-accent-900/30 dark:border-accent-800">
-          <p className="text-sm font-medium text-accent-900 dark:text-accent-300">
-            Extraction Error: {media.extractError}
+          <p className="mt-1 text-xs text-primary-400 dark:text-primary-500 text-center">
+            Audio attached. Click Search to send it to the assistant.
           </p>
         </div>
       )}
 
-      {/* Extracted name display */}
-      {media.extractedName && (
-        <div className="mt-4 p-3 bg-primary-50 border border-primary-200 rounded-md dark:bg-primary-900/30 dark:border-primary-700">
-          <p className="text-sm font-medium text-primary-900 dark:text-primary-200">
-            Extracted Name: {media.extractedName}
-          </p>
-        </div>
-      )}
-
-      {/* Run button */}
+      {/* Search button - sends text inputs + media file to the LLM */}
       <div className="mt-6 flex items-center gap-3">
         <Button
           variant="primary"
@@ -205,9 +183,6 @@ export default function ChainInputSection({
           disabled={loading}
         >
           Search
-        </Button>
-        <Button variant="ghost" onClick={() => media.handleExtractName()} disabled={loading}>
-          Extract Name
         </Button>
       </div>
     </Card>

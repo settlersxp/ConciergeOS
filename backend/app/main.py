@@ -5,8 +5,10 @@ FastAPI application for ConciergeOS reservation dashboard.
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.routes import (
     guest_search_router,
@@ -32,6 +34,27 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ConciergeOS", lifespan=lifespan)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Custom handler that safely encodes binary data in validation errors.
+
+    The default handler crashes with UnicodeDecodeError when multipart/form-data
+    includes binary file uploads that fail validation.
+    """
+    sanitized = []
+    for error in exc.errors():
+        sanitized_error = dict(error)
+        ctx = sanitized_error.get("ctx")
+        if isinstance(ctx, dict):
+            # Replace any binary values in the context with a safe placeholder
+            for key, value in ctx.items():
+                if isinstance(value, bytes):
+                    ctx[key] = f"<binary data ({len(value)} bytes)>"
+        sanitized.append(sanitized_error)
+
+    return JSONResponse(status_code=422, content={"detail": sanitized})
 
 app.add_middleware(
     CORSMiddleware,

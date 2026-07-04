@@ -79,7 +79,6 @@ class AiImproveResponse(BaseModel):
 
 def _prompt_to_schema(pv: Any) -> dict[str, Any]:
     """Convert a PromptVersion ORM object to a dict suitable for JSONResponse."""
-    import json
     meta = None
     if pv.meta_json is not None:
         try:
@@ -275,20 +274,13 @@ async def get_field_schema():
 @router.post("/{prompt_id}/{version:int}/preview")
 async def preview_prompt(prompt_id: str, version: int):
     """Resolve all placeholders and return the fully rendered prompt."""
-    from app.services.prompts import PromptStore
     from app.services.placeholders import resolve_placeholders
+    from app.services.prompts import PromptStore, build_system_prompt
     store = PromptStore()
     prompt = store.get_prompt(prompt_id, version)
     if prompt is None:
         raise HTTPException(status_code=404, detail="Prompt not found")
-    system_sections = []
-    if prompt.intention:
-        system_sections.append(f"Intention:\n{prompt.intention}")
-    if prompt.restrictions:
-        system_sections.append(f"Restrictions:\n{prompt.restrictions}")
-    if prompt.output_structure:
-        system_sections.append(f"Output Structure:\n{prompt.output_structure}")
-    system_prompt = "\n\n".join(system_sections)
+    system_prompt = build_system_prompt(prompt)
     resolved_system = resolve_placeholders(system_prompt)
     resolved_user = prompt.user_prompt_template.replace("{customer_name}", "John Doe")
     resolved_user = f"User Prompt Template:\n{resolved_user}"
@@ -305,8 +297,6 @@ async def get_default(prompt_id: str):
         if prompt is None:
             raise HTTPException(status_code=404, detail=f"Default prompt '{prompt_id}' not found.")
         return _prompt_to_schema(prompt)
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Error getting default for {prompt_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -325,8 +315,6 @@ async def get_version(prompt_id: str, version: int):
                 detail=f"Prompt '{prompt_id}:v{version}' not found.",
             )
         return _prompt_to_schema(prompt)
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Error getting {prompt_id}:v{version}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -342,8 +330,6 @@ async def list_versions(prompt_id: str):
         if not versions:
             raise HTTPException(status_code=404, detail=f"Prompt '{prompt_id}' not found.")
         return [_prompt_to_schema(v) for v in versions]
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Error listing versions for {prompt_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

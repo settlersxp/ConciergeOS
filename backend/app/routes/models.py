@@ -27,22 +27,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/models", tags=["models"])
 
 
-def _model_to_schema(m: Any) -> dict[str, Any]:
-    """Convert an LLMModel ORM object to a dict suitable for JSONResponse."""
-    return {
-        "model_id": m.model_id,
-        "name": m.name,
-        "endpoint": m.endpoint,
-        "models_endpoint": m.models_endpoint,
-        "model_name": m.model_name,
-        "model_type": m.model_type,
-        "vllm_version": m.vllm_version,
-        "thinking_enabled": bool(m.thinking_enabled),
-        "created_at": m.created_at.isoformat() if m.created_at else None,
-        "updated_at": m.updated_at.isoformat() if m.updated_at else None,
-    }
-
-
 async def _fetch_remote_model_info(models_url: str) -> dict[str, Any]:
     """Fetch model info from an upstream vLLM endpoint.
 

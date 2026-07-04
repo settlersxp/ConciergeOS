@@ -46,6 +46,7 @@ export interface MediaExtractionHandlers {
 
 export function useMediaExtraction(
   onNameExtracted?: (name: string) => void,
+  modelId?: number,
 ): MediaExtractionState & MediaExtractionHandlers {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -160,7 +161,7 @@ export function useMediaExtraction(
       if (imageFile) {
         setExtracting(true);
         guestSearchApi
-          .extractName(imageFile, cropRegion || undefined)
+          .extractName(imageFile, cropRegion || undefined, modelId)
           .then((data) => {
             setExtractedName(data.extracted_name);
             populate?.(data.extracted_name);
@@ -175,7 +176,7 @@ export function useMediaExtraction(
       } else if (audioFile) {
         setExtracting(true);
         guestSearchApi
-          .extractName(audioFile)
+          .extractName(audioFile, undefined, modelId)
           .then((data) => {
             setExtractedName(data.extracted_name);
             populate?.(data.extracted_name);
@@ -191,7 +192,7 @@ export function useMediaExtraction(
         setExtractError("Please upload an image or record audio first");
       }
     },
-    [imageFile, audioFile, cropRegion, onNameExtracted],
+    [imageFile, audioFile, cropRegion, onNameExtracted, modelId],
   );
 
   // ── Clear All ───────────────────────────────────────────────────────
