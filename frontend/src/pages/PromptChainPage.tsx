@@ -11,7 +11,7 @@ import { useChainExecution } from "../hooks/useChainExecution";
  * - useChainExecution() for step-by-step chain execution logic
  * - Shared ChainInputSection, ChainStepStatus, ChainOutputSection components
  *
- * This component is now a thin presenter (~120 lines) since all business
+ * This component is now a thin presenter (~150 lines) since all business
  * logic is extracted into custom hooks.
  */
 export default function PromptChainPage() {
@@ -86,6 +86,17 @@ export default function PromptChainPage() {
     }
   };
 
+  // ── Helpers for context summary ──
+  /** Build a short label for a step's output (truncated) */
+  function stepOutputSummary(step: typeof execution.stepOutputs[0]): string {
+    if (step.status === "failed") return `❌ ${step.error || "unknown error"}`;
+    if (step.response) {
+      const t = step.response.length > 120 ? step.response.slice(0, 120) + "..." : step.response;
+      return `✅ ${t}`;
+    }
+    return "⚪ (no output)";
+  }
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
       {/* Page Header */}
@@ -110,22 +121,22 @@ export default function PromptChainPage() {
         </Card>
       )}
 
-      {/* Progress Indicator */}
-      {execution.hasAnyOutputs && !execution.allStepsDone && (
-        <Card className="mb-6">
-          <div className="flex items-center gap-3">
-            <div className="flex-1 bg-surface-200 dark:bg-primary-700 rounded-full h-2.5">
-              <div
-                className="bg-secondary-500 h-2.5 rounded-full transition-all duration-300"
-                style={{ width: `${(execution.stepOutputs.length / stepDefinitions.length) * 100}%` }}
-              />
-            </div>
-            <span className="text-sm font-medium text-primary-600 dark:text-primary-400">
-              {execution.stepOutputs.length} of {stepDefinitions.length} steps
-            </span>
-          </div>
-        </Card>
-      )}
+       {/* Progress Indicator */}
+       {execution.hasAnyOutputs && !execution.allStepsDone && (
+         <Card className="mb-6">
+           <div className="flex items-center gap-3">
+             <div className="flex-1 bg-surface-200 dark:bg-primary-700 rounded-full h-2.5">
+               <div
+                 className="bg-secondary-500 h-2.5 rounded-full transition-all duration-300"
+                 style={{ width: `${(execution.uniqueStepsCompleted / stepDefinitions.length) * 100}%` }}
+               />
+             </div>
+             <span className="text-sm font-medium text-primary-600 dark:text-primary-400">
+               {execution.uniqueStepsCompleted} of {stepDefinitions.length} steps
+             </span>
+           </div>
+         </Card>
+       )}
 
       {/* Render Each Step */}
       {stepDefinitions.map((def, index) => {
@@ -148,7 +159,7 @@ export default function PromptChainPage() {
                 modelId={def.model_id}
                 inputs={execution.stepInputs[position] || {}}
                 onInputChange={handleStepInputChange(index)}
-                onRun={(inputs: Record<number, Record<string, string>>, initialInput?: string, mediaFile?: File | null) => {
+                onRun={(inputs: Record<number, Record<string, string>>, _initialInput?: string, mediaFile?: File | null) => {
                   execution.setStepInputs(inputs);
                   runStepWithTracking(0, mediaFile);
                 }}
@@ -159,7 +170,7 @@ export default function PromptChainPage() {
             {/* Execute Next Step Button (intermediate) */}
             {!isInputStep && isNextExecutable && (
               <Card className="mb-4">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-3">
                   <div>
                     <h3 className="font-medium text-primary-900 dark:text-white">
                       Step {index + 1}: {def.item.alias || def.item.prompt_id}
@@ -172,6 +183,24 @@ export default function PromptChainPage() {
                     Execute Next Step
                   </Button>
                 </div>
+
+                {/* Context Summary: what will be passed to this step */}
+                {execution.stepOutputs.length > 0 && (
+                  <div className="mt-2 p-3 bg-surface-100 dark:bg-primary-900/50 rounded border border-surface-200 dark:border-primary-700">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-primary-500 dark:text-primary-400 mb-2">
+                      Context from previous steps
+                    </p>
+                    <ul className="space-y-1">
+                      {execution.stepOutputs.map((s) => (
+                        <li key={s.position} className="text-xs font-mono text-primary-700 dark:text-primary-300 break-all">
+                          <span className="font-semibold text-primary-500">Step {s.position}</span>
+                          {s.alias && <span className="text-primary-400 ml-1">({s.alias})</span>}
+                          <span className="ml-2">{stepOutputSummary(s)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </Card>
             )}
 
@@ -181,6 +210,7 @@ export default function PromptChainPage() {
                 step={stepOutput}
                 expanded={stepOutput.status === "failed"}
                 onToggle={() => {}}
+                allOutputs={execution.stepOutputs}
               />
             )}
 

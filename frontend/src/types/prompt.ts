@@ -139,6 +139,8 @@ export interface ChainStepResult {
   error: string | null;
   user_message: string | null;
   system_prompt: string | null;
+  /** The accumulated_context passed into this step (output from previous steps) */
+  context_input: string | null;
 }
 
 export interface ChainExecutionResult {

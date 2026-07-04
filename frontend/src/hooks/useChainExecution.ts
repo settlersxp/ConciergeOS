@@ -33,6 +33,7 @@ interface UseChainExecutionReturn {
   handleRerun: () => void;
   allStepsDone: boolean;
   hasAnyOutputs: boolean;
+  uniqueStepsCompleted: number;
 }
 
 /**
@@ -91,6 +92,9 @@ export function useChainExecution({
           mediaFile,
         );
 
+        // Attach the accumulated_context so the UI can display what was passed in
+        result.context_input = accumulatedContext || null;
+
         setStepOutputs((prev) => {
           const filtered = prev.filter((o) => o.position !== position);
           return [...filtered, result];
@@ -113,6 +117,7 @@ export function useChainExecution({
           error: errorMsg,
           user_message: null,
           system_prompt: null,
+          context_input: accumulatedContext || null,
         };
         setStepOutputs((prev) => {
           const filtered = prev.filter((o) => o.position !== position);
@@ -138,7 +143,8 @@ export function useChainExecution({
     runStep(0);
   }, [runStep]);
 
-  const allStepsDone = stepOutputs.length === stepDefinitions.length && stepDefinitions.length > 0;
+  const uniqueStepsCompleted = new Set(stepOutputs.map((o) => o.position)).size;
+  const allStepsDone = uniqueStepsCompleted === stepDefinitions.length && stepDefinitions.length > 0;
   const hasAnyOutputs = stepOutputs.length > 0;
 
   return {
@@ -152,6 +158,7 @@ export function useChainExecution({
     handleRerun,
     allStepsDone,
     hasAnyOutputs,
+    uniqueStepsCompleted,
   };
 }
 

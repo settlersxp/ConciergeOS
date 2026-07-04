@@ -119,10 +119,13 @@ export function useMediaExtraction(
       };
 
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const mimeType = mediaRecorder.mimeType || "audio/webm";
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
         let ext = "webm";
-        if (mediaRecorder.mimeType.includes("mp4")) ext = "m4a";
-        setAudioFile(new File([audioBlob], `recording.${ext}`, { type: mediaRecorder.mimeType || "audio/webm" }));
+        if (mimeType.includes("mp4") || mimeType.includes("mp3")) ext = "mp4";
+        else if (mimeType.includes("ogg")) ext = "ogg";
+        else if (mimeType.includes("m4a")) ext = "m4a";
+        setAudioFile(new File([audioBlob], `recording.${ext}`, { type: mimeType }));
         setImageFile(null);
         setSelectedImage(null);
         setCropRegion(null);

@@ -3,12 +3,13 @@
 API routes for Prompt Group CRUD, execution, and scheduling.
 """
 
+import json as _json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import and_
 from sqlalchemy.orm import Session, joinedload
@@ -327,47 +328,85 @@ def execute_chain_page(group_id: int, req: ChainExecutionRequest, db: Session = 
 @router.post("/{group_id}/execute-chain-step")
 async def execute_chain_step_route(
     group_id: int,
-    position: int = Form(...),
-    initial_input: str = Form(""),
-    accumulated_context: str = Form(""),
-    inputs_json: str = Form("{}"),
-    file: UploadFile | None = File(None),
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Execute a single step in a prompt chain (page mode, step-by-step).
 
-    This endpoint accepts multipart/form-data to support optional file uploads
-    (images/audio) for multimodal LLM processing.
+    Accepts both JSON body and multipart/form-data:
 
-    Form fields:
+    JSON body (no file):
+    ```json
+    {
+      "position": 1,
+      "inputs": {"customer_name": "John"},
+      "initial_input": "",
+      "accumulated_context": ""
+    }
+    ```
+
+    Form data (with file):
     - position: Step position (1-based)
     - initial_input: Raw text for the first step
     - accumulated_context: Context from previous steps
     - inputs_json: JSON string of {field: value} inputs
     - file: Optional image or audio file for multimodal input
     """
-    import json as _json
-
-    try:
-        inputs = _json.loads(inputs_json) if inputs_json else {}
-    except Exception:
-        inputs = {}
+    content_type = (request.headers.get("content-type") or "").lower()
 
     # Read optional media file
     media_file: bytes | None = None
     media_content_type: str | None = None
-    if file and file.file:
-        media_file = await file.read()
-        media_content_type = file.content_type
+
+    if "multipart/form-data" in content_type:
+        # Parse multipart/form-data manually to avoid FastAPI's Form() limitations
+        form = await request.form()
+
+        # form.get() returns str for single-value fields, UploadFile for file fields
+        position_val = form.get("position")
+        if isinstance(position_val, str):
+            resolved_position: int = int(position_val)
+        else:
+            raise HTTPException(status_code=422, detail="position is required")
+
+        initial_input_val = form.get("initial_input")
+        resolved_initial_input = initial_input_val if isinstance(initial_input_val, str) else ""
+
+        ctx_val = form.get("accumulated_context")
+        resolved_accumulated_context = ctx_val if isinstance(ctx_val, str) else ""
+
+        inputs_json_val = form.get("inputs_json")
+        if isinstance(inputs_json_val, str) and inputs_json_val:
+            try:
+                resolved_inputs: dict[str, str] = _json.loads(inputs_json_val)
+            except Exception:
+                resolved_inputs = {}
+        else:
+            resolved_inputs = {}
+
+        # Extract file if present
+        uploaded_file = form.get("file")
+        if isinstance(uploaded_file, UploadFile):
+            media_file = await uploaded_file.read()
+            media_content_type = uploaded_file.content_type
+    else:
+        # Parse JSON body
+        body: dict[str, Any] = await request.json()
+        resolved_position = body.get("position")
+        if resolved_position is None:
+            raise HTTPException(status_code=422, detail="position is required")
+        resolved_initial_input = body.get("initial_input", "") or ""
+        resolved_accumulated_context = body.get("accumulated_context", "") or ""
+        resolved_inputs = body.get("inputs", {}) or {}
 
     return _safe_chain_execution(
         group_id,
         execute_chain_step,
         group_id,
-        step_position=position,
-        inputs=inputs,
-        initial_input=initial_input,
-        accumulated_context=accumulated_context,
+        step_position=resolved_position,
+        inputs=resolved_inputs,
+        initial_input=resolved_initial_input,
+        accumulated_context=resolved_accumulated_context,
         media_file=media_file,
         media_content_type=media_content_type,
     )

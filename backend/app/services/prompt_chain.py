@@ -435,7 +435,7 @@ def execute_chain_step(
 
         # Convert batch-format result to step-format
         return {
-            "step": step_position,
+            "position": step_position,
             "prompt_id": step_result["prompt_id"],
             "prompt_version": step_result["prompt_version"],
             "alias": step_result["alias"],
@@ -450,7 +450,7 @@ def execute_chain_step(
     except Exception as e:
         logger.error("Error executing chain step %d (group %d): %s", step_position, group_id, e, exc_info=True)
         return {
-            "step": step_position,
+            "position": step_position,
             "prompt_id": "",
             "prompt_version": 0,
             "alias": None,
