@@ -76,7 +76,7 @@ services:
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
-      KC_HOSTNAME: "http://out-customer.com/auth"
+      KC_HOSTNAME: "https://out-customer.com/auth"
       KC_HOSTNAME_STRICT: "true"
       KC_HTTP_RELATIVE_PATH: /auth
       KC_HTTP_ENABLED: "true"

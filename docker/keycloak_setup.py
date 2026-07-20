@@ -22,9 +22,9 @@ GROUPS = ["single", "all"]
 CLIENT_ID = "concierge"
 CLIENT_SECRET = "changeme"
 # oauth2-proxy redirect URIs (must match oidc-main.toml and oidc-settings.toml)
-OIDC_MAIN_REDIRECT_URI = "http://out-customer.com/oauth2/callback"
-OIDC_SETTINGS_REDIRECT_URI = "http://out-customer.com/settings/oauth2/callback"
-POST_LOGOUT_URI = "http://out-customer.com/"
+OIDC_MAIN_REDIRECT_URI = "https://out-customer.com/oauth2/callback"
+OIDC_SETTINGS_REDIRECT_URI = "https://out-customer.com/settings/oauth2/callback"
+POST_LOGOUT_URI = "https://out-customer.com/"
 
 USERS = {
     "user1": {"password": "password1", "group": "single"},
@@ -339,11 +339,11 @@ def create_client(base_url: str, token: str, realm: str) -> str:
             "redirectUris": [
                 OIDC_MAIN_REDIRECT_URI,
                 OIDC_SETTINGS_REDIRECT_URI,
-                "http://out-customer.com/*",
+                "https://out-customer.com/*",
                 "http://localhost:*/*",
             ],
             "webOrigins": [
-                "http://out-customer.com",
+                "https://out-customer.com",
                 "http://localhost:*",
             ],
             # postLogoutRedirectUris is NOT a top-level field in Keycloak 26's
@@ -353,7 +353,7 @@ def create_client(base_url: str, token: str, realm: str) -> str:
                 "pkce.code.challenge.method": "S256",
                 "post.logout.redirect.uris": "##".join([
                     POST_LOGOUT_URI,
-                    "http://out-customer.com/*",
+                    "https://out-customer.com/*",
                     "http://localhost:*",
                 ]),
             },

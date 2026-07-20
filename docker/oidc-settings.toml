@@ -1,14 +1,14 @@
 provider = "keycloak-oidc"
-oidc_issuer_url = "http://out-customer.com/auth/realms/production"
+oidc_issuer_url = "https://out-customer.com/auth/realms/production"
 client_id = "concierge"
 client_secret = "changeme"
-redirect_url = "http://out-customer.com/settings/oauth2/callback"
+redirect_url = "https://out-customer.com/settings/oauth2/callback"
 cookie_secret = "WVLqV8UqJ5k9v2x7n4m1b3c6d0f8a2e5"
 cookie_secure = false
 email_domains = ["*"]
 allowed_groups = ["single", "all"]
 oidc_groups_claim = "groups"
-upstreams = ["http://frontend:80/"]
+upstreams = ["https://frontend:80/"]
 http_address = "0.0.0.0:4181"
 proxy_prefix = "/settings/oauth2"
 reverse_proxy = true
