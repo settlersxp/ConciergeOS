@@ -308,7 +308,11 @@ def assign_all_users_to_groups(
 
 
 def create_client(base_url: str, token: str, realm: str) -> str:
-    """Create the conciergeos client in a realm. Returns the client UUID."""
+    """Create the conciergeos client in a realm. Returns the client UUID.
+    
+    Always sets the client secret to CLIENT_SECRET to match oauth2-proxy config,
+    even if the client already exists.
+    """
     print(f"  Creating client: {CLIENT_ID} in {realm}...")
 
     # Check if client exists
@@ -321,69 +325,71 @@ def create_client(base_url: str, token: str, realm: str) -> str:
     match = [c for c in clients if c["clientId"] == CLIENT_ID]
 
     if match:
-        print(f"    ⏭ Client {CLIENT_ID} already exists in {realm}")
-        return match[0]["id"]
-
-    resp = api_request(
-        "POST",
-        f"{base_url}/admin/realms/{realm}/clients",
-        token,
-        {
-            "clientId": CLIENT_ID,
-            "enabled": True,
-            "publicClient": False,
-            "standardFlowEnabled": True,
-            "implicitFlowEnabled": False,
-            "directAccessGrantsEnabled": True,
-            "serviceAccountsEnabled": False,
-            "redirectUris": [
-                OIDC_MAIN_REDIRECT_URI,
-                OIDC_SETTINGS_REDIRECT_URI,
-                "https://out-customer.com/*",
-                "http://localhost:*/*",
-            ],
-            "webOrigins": [
-                "https://out-customer.com",
-                "http://localhost:*",
-            ],
-            # postLogoutRedirectUris is NOT a top-level field in Keycloak 26's
-            # ClientRepresentation - it's stored as a semicolon-separated attribute
-            # (see OIDCConfigAttributes.POST_LOGOUT_REDIRECT_URIS = "post.logout.redirect.uris")
-            "attributes": {
-                "pkce.code.challenge.method": "S256",
-                "post.logout.redirect.uris": "##".join([
-                    POST_LOGOUT_URI,
-                    "https://out-customer.com/*",
-                    "http://localhost:*",
-                ]),
-            },
-        },
-    )
-    resp.raise_for_status()
-
-    # Extract client UUID from Location header
-    client_uuid = resp.headers.get("Location", "").split("/")[-1]
-    if not client_uuid:
-        # Fallback: query again
-        resp = requests.get(
+        client_uuid = match[0]["id"]
+        print(f"    ⏭ Client {CLIENT_ID} already exists in {realm}, will update secret...")
+    else:
+        resp = api_request(
+            "POST",
             f"{base_url}/admin/realms/{realm}/clients",
-            headers={"Authorization": f"Bearer {token}"},
+            token,
+            {
+                "clientId": CLIENT_ID,
+                "enabled": True,
+                "publicClient": False,
+                "standardFlowEnabled": True,
+                "implicitFlowEnabled": False,
+                "directAccessGrantsEnabled": True,
+                "serviceAccountsEnabled": False,
+                "redirectUris": [
+                    OIDC_MAIN_REDIRECT_URI,
+                    OIDC_SETTINGS_REDIRECT_URI,
+                    "https://out-customer.com/*",
+                    "http://localhost:*/*",
+                ],
+                "webOrigins": [
+                    "https://out-customer.com",
+                    "http://localhost:*",
+                ],
+                # postLogoutRedirectUris is NOT a top-level field in Keycloak 26's
+                # ClientRepresentation - it's stored as a semicolon-separated attribute
+                # (see OIDCConfigAttributes.POST_LOGOUT_REDIRECT_URIS = "post.logout.redirect.uris")
+                "attributes": {
+                    "pkce.code.challenge.method": "S256",
+                    "post.logout.redirect.uris": "##".join([
+                        POST_LOGOUT_URI,
+                        "https://out-customer.com/*",
+                        "http://localhost:*",
+                    ]),
+                },
+            },
         )
         resp.raise_for_status()
-        match = [c for c in resp.json() if c["clientId"] == CLIENT_ID]
-        client_uuid = match[0]["id"]
 
-    # Generate client secret (Keycloak 26+ requires POST to /client-secret)
+        # Extract client UUID from Location header
+        client_uuid = resp.headers.get("Location", "").split("/")[-1]
+        if not client_uuid:
+            # Fallback: query again
+            resp = requests.get(
+                f"{base_url}/admin/realms/{realm}/clients",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            resp.raise_for_status()
+            match = [c for c in resp.json() if c["clientId"] == CLIENT_ID]
+            client_uuid = match[0]["id"]
+
+    # Set client secret to match oauth2-proxy config
+    # Keycloak 26+: POST to /client-secret with a payload to set a custom secret
     resp = requests.post(
         f"{base_url}/admin/realms/{realm}/clients/{client_uuid}/client-secret",
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {token}",
         },
+        json={"value": CLIENT_SECRET},
     )
     resp.raise_for_status()
     secret_value = resp.json().get("value", CLIENT_SECRET)
-    print(f"    ✓ Client {CLIENT_ID} created in {realm} (secret: {secret_value})")
+    print(f"    ✓ Client {CLIENT_ID} in {realm} (secret: {secret_value})")
     return client_uuid
 
 

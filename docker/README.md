@@ -132,3 +132,11 @@ Then access via `https://out-customer.com:8443`.
 
 ## Accepted tradeoff
 server.js is needed because without it caddy would have to serve the static files thus "/api/*" has to be exposed as well. Since the purpose of this feature is to secure FastAPI and expose only frontend, server.js was created.
+
+## Keycloak setup:
+```
+python keycloak_setup.py localhost 8080
+python update_oidc_secret.py localhost 8080
+docker compose restart oidc-settings
+docker compose restart oidc-main
+```
