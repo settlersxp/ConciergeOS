@@ -1,0 +1,112 @@
+{
+	"admin": {
+		"disabled": true
+	},
+	"logging": {
+		"logs": {
+			"default": {
+				"level": "DEBUG",
+				"writer": {
+					"output": "stdout"
+				}
+			}
+		}
+	},
+	"apps": {
+		"http": {
+			"http_port": 80,
+			"https_port": 443,
+			"servers": {
+				"https-server": {
+					"listen": [
+						":443"
+					],
+					"routes": [
+						{
+							"match": [
+								{
+									"host": [
+										"out-customer.com"
+									]
+								}
+							],
+							"handle": [
+								{
+									"handler": "reverse_proxy",
+									"upstreams": [
+										{
+											"dial": "frontend:80"
+										}
+									],
+									"headers": {
+										"request": {
+											"set": {
+												"X-Forwarded-By": ["out-customer.com"],
+												"X-Forwarded-Proto": ["https"]
+											}
+										}
+									}
+								}
+							]
+						}
+					]
+				},
+				"http-server": {
+					"listen": [
+						":80"
+					],
+					"routes": [
+						{
+							"match": [
+								{
+									"host": [
+										"out-customer.com"
+									]
+								}
+							],
+							"handle": [
+								{
+									"handler": "static_response",
+									"status_code": "301",
+									"headers": {
+										"Location": [
+											"https://{http.request.host}{http.request.uri}"
+										]
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		},
+		"tls": {
+			"certificates": {
+				"automate": [
+					"out-customer.com"
+				]
+			},
+			"automation": {
+				"policies": [
+					{
+						"issuers": [
+							{
+								"module": "internal"
+							}
+						],
+						"subjects": [
+							"out-customer.com"
+						]
+					}
+				]
+			}
+		},
+		"pki": {
+			"certificate_authorities": {
+				"local": {
+					"install_trust": false
+				}
+			}
+		}
+	}
+}

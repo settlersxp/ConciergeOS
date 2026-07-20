@@ -1,0 +1,28 @@
+FROM node:20-alpine AS build
+
+WORKDIR /app
+
+# Copy package files first for better caching
+COPY frontend/package.json frontend/package-lock.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code and build
+COPY frontend/ ./
+RUN npm run build
+
+# Final stage - minimal Node.js image with static file server
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy built assets from build stage
+COPY --from=build /app/dist ./dist
+
+# Copy static file server
+COPY frontend/server.js ./server.js
+
+EXPOSE 80
+
+CMD ["node", "server.js"]
