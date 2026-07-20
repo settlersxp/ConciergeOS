@@ -20,3 +20,6 @@ set_xauthrequest = false
 ssl_insecure_skip_verify = true
 code_challenge_method = "S256"
 oidc_extra_audiences = ["account"]
+# Force periodic session validation with Keycloak
+cookie_refresh = "1m"
+cookie_expire = "1h"
