@@ -74,7 +74,9 @@ def run_tests(settings: Optional[TestSettings] = None) -> dict[str, object]:
     # Fetch model info if not set by user
     if not settings.model_name:
         try:
-            model_info = fetch_model_info(settings.models_endpoint)
+            # Append /models to the base URL for the direct HTTP GET call
+            models_url = settings.models_endpoint.rstrip("/") + "/models"
+            model_info = fetch_model_info(models_url)
             if not settings.model_name:
                 settings.model_name = model_info.get("model_name", "unknown")
             if not settings.vllm_version:

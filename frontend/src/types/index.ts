@@ -63,7 +63,7 @@ export interface LLMModel {
 export interface CreateModelRequest {
   name: string;
   endpoint: string;
-  models_endpoint: string;
+  models_endpoint?: string; // Optional — derived from endpoint if not provided
   model_name: string;
   model_type?: ModelType;
   vllm_version?: string;

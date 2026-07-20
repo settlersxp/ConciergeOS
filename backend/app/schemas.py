@@ -253,7 +253,7 @@ class PerformanceTestRequest(BaseModel):
 
     customer_name: str = Field(default="عائشة إبراهيم")
     vllm_url: str = Field(default="http://10.0.0.227:8000/v1")
-    models_endpoint: str = Field(default="http://10.0.0.227:8000/v1/models")
+    models_endpoint: str = Field(default="http://10.0.0.227:8000/v1")
     sequential_batch_size: int = Field(default=5)
     concurrent_batch_size: int = Field(default=8)
     test_mode: str = Field(default="single")

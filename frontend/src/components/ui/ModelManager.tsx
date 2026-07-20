@@ -19,7 +19,6 @@ const MODEL_TYPE_OPTIONS = [
 export default function ModelManager({ open, onClose, model, onSave }: ModelManagerProps) {
   const [name, setName] = useState('');
   const [endpoint, setEndpoint] = useState('');
-  const [modelsEndpoint, setModelsEndpoint] = useState('');
   const [modelName, setModelName] = useState('');
   const [modelType, setModelType] = useState<'text' | 'image_audio' | 'general'>('general');
   const [vllmVersion, setVllmVersion] = useState('');
@@ -36,7 +35,6 @@ export default function ModelManager({ open, onClose, model, onSave }: ModelMana
         // Editing existing model
         setName(model.name);
         setEndpoint(model.endpoint);
-        setModelsEndpoint(model.models_endpoint);
         setModelName(model.model_name);
         setModelType(model.model_type as 'text' | 'image_audio' | 'general');
         setVllmVersion(model.vllm_version || '');
@@ -45,7 +43,6 @@ export default function ModelManager({ open, onClose, model, onSave }: ModelMana
         // Creating new model
         setName('');
         setEndpoint('');
-        setModelsEndpoint('');
         setModelName('');
         setModelType('general');
         setVllmVersion('');
@@ -60,9 +57,7 @@ export default function ModelManager({ open, onClose, model, onSave }: ModelMana
     setFetching(true);
     setFetchStatus('Fetching model info...');
     try {
-      // modelsEndpoint is the /v1/models URL, but we need the raw endpoint for fetch-info
-      const baseEndpoint = endpoint.replace(/\/v1\/models$/, '/v1');
-      const info = await modelsApi.fetchInfo(baseEndpoint);
+      const info = await modelsApi.fetchInfo(endpoint);
       setModelName(info.model_name);
       setVllmVersion(info.vllm_version);
       setThinkingEnabled(info.thinking_enabled);
@@ -74,17 +69,6 @@ export default function ModelManager({ open, onClose, model, onSave }: ModelMana
     } finally {
       setFetching(false);
     }
-  };
-
-  const normalizeModelsEndpoint = (endpoint: string, baseEndpoint: string): string => {
-    let trimmed = endpoint.trim();
-    // OpenAI requires /v1/models — always enforce this suffix
-    if (trimmed.endsWith('/v1/models')) return trimmed;
-    if (trimmed.endsWith('/v1')) return trimmed + '/models';
-    // No /v1 suffix → append /v1/models
-    const base = trimmed || baseEndpoint.trim().replace(/\/+$/, '');
-    if (base.endsWith('/v1')) return base + '/models';
-    return base + '/v1/models';
   };
 
   const handleSave = async () => {
@@ -101,8 +85,6 @@ export default function ModelManager({ open, onClose, model, onSave }: ModelMana
       return;
     }
 
-    const normalizedEndpoint = normalizeModelsEndpoint(modelsEndpoint, endpoint);
-
     setSaving(true);
     setError('');
 
@@ -110,7 +92,6 @@ export default function ModelManager({ open, onClose, model, onSave }: ModelMana
       const payload = {
         name: name.trim(),
         endpoint: endpoint.trim(),
-        models_endpoint: normalizedEndpoint,
         model_name: modelName.trim(),
         model_type: modelType,
         vllm_version: vllmVersion || undefined,
@@ -178,22 +159,6 @@ export default function ModelManager({ open, onClose, model, onSave }: ModelMana
                 value={endpoint}
                 onChange={(e) => setEndpoint(e.target.value)}
                 placeholder="http://localhost:8000/v1"
-                disabled={saving}
-              />
-            </FormField>
-
-            {/* Models Endpoint */}
-            <FormField
-              htmlFor="models_endpoint"
-              label="Models Endpoint"
-              helperText="Full models endpoint URL (e.g. http://localhost:8000/v1/models)"
-            >
-              <Input
-                id="models_endpoint"
-                type="text"
-                value={modelsEndpoint}
-                onChange={(e) => setModelsEndpoint(e.target.value)}
-                placeholder="http://localhost:8000/v1/models"
                 disabled={saving}
               />
             </FormField>

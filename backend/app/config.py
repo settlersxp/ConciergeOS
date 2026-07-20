@@ -10,7 +10,7 @@ _CONFIG_DIR = Path(__file__).resolve().parent
 class TestSettings:
     """Configuration settings for LLM model configuration."""
     # vLLM Connection
-    models_endpoint: str = "http://localhost:8000/v1/models"
+    models_endpoint: str = "http://localhost:8000/v1"
     model_name: str = "facebook/opt-125m"
     vllm_version: str = ""
     thinking_enabled: bool = False
