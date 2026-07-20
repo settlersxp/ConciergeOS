@@ -23,19 +23,12 @@
 					],
 					"routes": [
 						{
-							"match": [
-								{
-									"host": [
-										"out-customer.com"
-									]
-								}
-							],
 							"handle": [
 								{
 									"handler": "reverse_proxy",
 									"upstreams": [
 										{
-											"dial": "frontend:80"
+											"dial": "keycloak:8080"
 										}
 									],
 									"headers": {
@@ -46,6 +39,76 @@
 											}
 										}
 									}
+								}
+							],
+							"match": [
+								{
+									"host": [
+										"out-customer.com"
+									],
+									"path": [
+										"/auth/*"
+									]
+								}
+							],
+							"terminal": true
+						},
+						{
+							"handle": [
+								{
+									"handler": "reverse_proxy",
+									"upstreams": [
+										{
+											"dial": "oidc-settings:4181"
+										}
+									],
+									"headers": {
+										"request": {
+											"set": {
+												"X-Forwarded-By": ["out-customer.com"],
+												"X-Forwarded-Proto": ["https"]
+											}
+										}
+									}
+								}
+							],
+							"match": [
+								{
+									"host": [
+										"out-customer.com"
+									],
+									"path": [
+										"/settings",
+										"/settings/*"
+									]
+								}
+							],
+							"terminal": true
+						},
+						{
+							"handle": [
+								{
+									"handler": "reverse_proxy",
+									"upstreams": [
+										{
+											"dial": "oidc-main:4182"
+										}
+									],
+									"headers": {
+										"request": {
+											"set": {
+												"X-Forwarded-By": ["out-customer.com"],
+												"X-Forwarded-Proto": ["https"]
+											}
+										}
+									}
+								}
+							],
+							"match": [
+								{
+									"host": [
+										"out-customer.com"
+									]
 								}
 							]
 						}
