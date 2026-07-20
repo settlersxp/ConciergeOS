@@ -1,4 +1,4 @@
-provider = "keycloak"
+provider = "keycloak-oidc"
 oidc_issuer_url = "http://out-customer.com/auth/realms/production"
 client_id = "concierge"
 client_secret = "changeme"
@@ -18,3 +18,4 @@ pass_authorization_header = false
 pass_user_headers = true
 set_xauthrequest = false
 ssl_insecure_skip_verify = true
+code_challenge_method = "S256"

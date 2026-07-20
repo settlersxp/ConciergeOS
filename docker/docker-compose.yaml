@@ -23,6 +23,8 @@ services:
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
     container_name: oidc-settings
     restart: unless-stopped
+    extra_hosts:
+      - "out-customer.com:host-gateway"
     volumes:
       - ./oidc-settings.toml:/cfg.toml
     command: oauth2-proxy --config /cfg.toml
@@ -36,6 +38,8 @@ services:
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
     container_name: oidc-main
     restart: unless-stopped
+    extra_hosts:
+      - "out-customer.com:host-gateway"
     volumes:
       - ./oidc-main.toml:/cfg.toml
     command: oauth2-proxy --config /cfg.toml
@@ -72,9 +76,8 @@ services:
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
-      KC_HOSTNAME: out-customer.com
-      KC_HOSTNAME_STRICT: "false"
-      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HOSTNAME: "http://out-customer.com/auth"
+      KC_HOSTNAME_STRICT: "true"
       KC_HTTP_RELATIVE_PATH: /auth
       KC_HTTP_ENABLED: "true"
     command: start-dev
