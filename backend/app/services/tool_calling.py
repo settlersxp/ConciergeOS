@@ -45,6 +45,82 @@ TOOL_EXECUTORS = {
 }
 
 
+def _run_tool_calling_loop(
+    client: Any,
+    model_name: str,
+    messages: list[dict[str, Any]],
+    max_turns: int = 100,
+) -> str:
+    """Run the LLM tool-calling loop until the assistant stops calling tools.
+
+    Accepts arbitrary messages (supporting multimodal content), executes tool
+    calls via TOOL_EXECUTORS, and appends results back to the messages list.
+
+    Args:
+        client: OpenAI client instance
+        model_name: Model name to use
+        messages: Pre-built messages list (system + user + ...). Modified in-place.
+        max_turns: Max number of LLM turns before giving up.
+
+    Returns:
+        The final response text from the LLM, or a max-turns-exceeded message.
+    """
+    for turn in range(max_turns):
+        # Call LLM with tools
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=messages,  # type: ignore[arg-type]
+            tools=TOOL_DEFINITIONS,
+            temperature=0.1,
+            max_tokens=1024,
+        )
+
+        assistant_message = response.choices[0].message
+
+        # Check if the assistant wants to call tools
+        tool_calls = assistant_message.tool_calls or []
+
+        if not tool_calls:
+            # No more tool calls - this is the final response
+            return assistant_message.content or "The LLM returned an empty response."
+
+        # Append assistant message to conversation
+        messages.append(assistant_message)
+
+        # Execute ALL tool calls in this response (batch execution)
+        for tool_call in tool_calls:
+            func_name = tool_call.function.name
+            func_args = json.loads(tool_call.function.arguments)
+            call_id = tool_call.id
+
+            # Execute the tool via TOOL_EXECUTORS dispatch
+            if func_name in TOOL_EXECUTORS:
+                try:
+                    executor = TOOL_EXECUTORS[func_name]
+                    # Handle batch: if params is a list, iterate; otherwise call directly
+                    if isinstance(func_args, list):
+                        results = [executor(item_arg) for item_arg in func_args]
+                        result = json.dumps(results)
+                    else:
+                        result = executor(func_args)
+                except Exception as e:
+                    result = f"Error executing {func_name}: {str(e)}"
+            else:
+                result = f"Unknown tool: {func_name}"
+
+            # Append tool result to conversation
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": result,
+                }
+            )
+
+    # If we exhausted max_turns, return a message
+    return f"The request exceeded the maximum of {max_turns} turns. Please simplify your request."
+
+
 def call_llm_with_db_tools(
     user_message: str,
     model: str | None = None,
@@ -79,52 +155,4 @@ def call_llm_with_db_tools(
         {"role": "user", "content": user_message},
     ]
 
-    for turn in range(max_turns):
-        # Call LLM with tools
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=messages,
-            tools=TOOL_DEFINITIONS,
-            temperature=0.1,
-            max_tokens=10240,
-        )
-
-        assistant_message = response.choices[0].message
-
-        # Check if the assistant wants to call tools
-        tool_calls = assistant_message.tool_calls or []
-
-        if not tool_calls:
-            # No more tool calls - this is the final response
-            return assistant_message.content or "The LLM returned an empty response."
-
-        # Append assistant message to conversation
-        messages.append(assistant_message)
-
-        # Execute ALL tool calls in this response (batch execution)
-        for tool_call in tool_calls:
-            # Use attribute access for tool_call.function
-            func_name = tool_call.function.name
-            func_args = json.loads(tool_call.function.arguments)
-            call_id = tool_call.id
-
-            # Execute the tool
-            if func_name in TOOL_EXECUTORS:
-                try:
-                    result = TOOL_EXECUTORS[func_name](func_args)
-                except Exception as e:
-                    result = f"Error executing {func_name}: {str(e)}"
-            else:
-                result = f"Unknown tool: {func_name}"
-
-            # Append tool result to conversation
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": call_id,
-                    "content": result,
-                }
-            )
-
-    # If we exhausted max_turns, return a message
-    return f"The request exceeded the maximum of {max_turns} turns. Please simplify your request."
+    return _run_tool_calling_loop(client, model_name, messages, max_turns)

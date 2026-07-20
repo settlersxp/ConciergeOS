@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 from app.models import Guest, Reservation, Room
 from app.config import config_manager
-from app.utils.endpoints import strip_to_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -216,9 +215,6 @@ _TOOL_REGISTRY = {
 }
 
 # Create batch schemas dynamically to support lists of parameters
-class BatchParams(BaseModel):
-    params: list[Any]
-
 def _get_batch_schema(base_schema: type[BaseModel]) -> type[BaseModel]:
     """Creates a new Pydantic model that accepts a list of base_schema objects under the 'params' key."""
     return create_model(
@@ -282,23 +278,20 @@ def _get_shared_http_client() -> httpx.Client:
     return _SHARED_HTTP_CLIENT
 
 
-def _get_base_client() -> tuple[OpenAI, str]:
+def _get_base_client() -> OpenAI:
     """Internal helper to create an OpenAI client that shares a connection pool.
 
     Every OpenAI client passes the **same** underlying ``httpx.Client`` so that
     TCP connections are reused across all concurrent requests.
     """
     models_endpoint = config_manager.test_settings.models_endpoint
-    base_url = strip_to_base_url(models_endpoint)
 
-    # Reuse the existing shared httpx.Client
     shared_client = _get_shared_http_client()
-    client = OpenAI(
+    return OpenAI(
         http_client=shared_client,  # type: ignore[arg-type]
-        base_url=base_url,
+        base_url=models_endpoint,
         api_key="none",
     )
-    return client, base_url
 
 
 def _build_client_from_model(model: Any) -> tuple[OpenAI, str]:
@@ -314,11 +307,10 @@ def _build_client_from_model(model: Any) -> tuple[OpenAI, str]:
     tuple[OpenAI, str]
         An OpenAI client and the resolved model name.
     """
-    base_url = strip_to_base_url(model.endpoint)
     shared_client = _get_shared_http_client()
     client = OpenAI(
         http_client=shared_client,  # type: ignore[arg-type]
-        base_url=base_url,
+        base_url=model.endpoint,
         api_key="none",
     )
     return client, model.model_name
@@ -329,7 +321,7 @@ def get_llm_config() -> tuple[OpenAI, str]:
     Dynamically fetch the LLM client and model name from the global configuration.
     If the vLLM server is unreachable, returns a fallback client and model.
     """
-    client, _ = _get_base_client()
+    client = _get_base_client()
     model_name = config_manager.test_settings.model_name
     
     try:
@@ -353,11 +345,11 @@ def get_llm_config() -> tuple[OpenAI, str]:
 
 def get_available_models() -> list[LLMModelInfo]:
     """Fetch all available models from the configured LLM endpoint.
-    
+
     Returns:
         List of LLMModelInfo objects representing available models.
     """
-    client, _ = _get_base_client()
+    client = _get_base_client()
     try:
         models = client.models.list()
         return [LLMModelInfo(id=m.id, object=m.object, created=m.created, owned_by=m.owned_by) for m in models.data]
@@ -369,6 +361,45 @@ def get_available_models() -> list[LLMModelInfo]:
 # ---------------------------------------------------------------------------
 # DB-based model lookup (replaces config-based model selection)
 # ---------------------------------------------------------------------------
+
+def _resolve_model_from_db(
+    filter_callable: Callable[["Session"], Any],
+    label: str,
+) -> tuple[OpenAI, str]:
+    """Open a DB session, query an LLMModel, build a client, and close the session.
+
+    Parameters
+    ----------
+    filter_callable : Callable[[Session], Any]
+        A function that receives a DB session and returns a query result
+        (typically ``db.query(LLMModel).filter(...).first()``).
+    label : str
+        Human-readable label used in log messages.
+
+    Returns
+    -------
+    tuple[OpenAI, str]
+        An OpenAI client and the resolved model name, or the fallback config
+        if the model was not found or an error occurred.
+    """
+    from app.db import SessionLocal
+    from app.models import LLMModel
+
+    db = SessionLocal()
+    try:
+        model = filter_callable(db)
+        if model is None:
+            logger.warning("LLMModel '%s' not found, falling back to default config", label)
+            return get_llm_config()
+
+        client, model_name = _build_client_from_model(model)
+        return client, model_name
+    except Exception as e:
+        logger.warning("Failed to resolve model '%s' from DB: %s. Falling back.", label, e)
+        return get_llm_config()
+    finally:
+        db.close()
+
 
 def get_llm_config_by_model_id(model_id: int | None) -> tuple[OpenAI, str]:
     """Resolve model config from the LLMModels table.
@@ -387,23 +418,12 @@ def get_llm_config_by_model_id(model_id: int | None) -> tuple[OpenAI, str]:
     if model_id is None:
         return get_llm_config()
 
-    from app.db import SessionLocal
     from app.models import LLMModel
 
-    db = SessionLocal()
-    try:
-        model = db.query(LLMModel).filter(LLMModel.model_id == model_id).first()
-        if model is None:
-            logger.warning("LLMModel %s not found, falling back to default config", model_id)
-            return get_llm_config()
-
-        client, model_name = _build_client_from_model(model)
-        return client, model_name
-    except Exception as e:
-        logger.warning("Failed to resolve model %s from DB: %s. Falling back.", model_id, e)
-        return get_llm_config()
-    finally:
-        db.close()
+    return _resolve_model_from_db(
+        lambda db: db.query(LLMModel).filter(LLMModel.model_id == model_id).first(),
+        str(model_id),
+    )
 
 
 def resolve_prompt_model(
@@ -444,23 +464,12 @@ def get_llm_config_by_name(name: str) -> tuple[OpenAI, str]:
     tuple[OpenAI, str]
         An OpenAI client and the resolved model name.
     """
-    from app.db import SessionLocal
     from app.models import LLMModel
 
-    db = SessionLocal()
-    try:
-        model = db.query(LLMModel).filter(LLMModel.name == name).first()
-        if model is None:
-            logger.warning("LLMModel '%s' not found, falling back to default config", name)
-            return get_llm_config()
-
-        client, model_name = _build_client_from_model(model)
-        return client, model_name
-    except Exception as e:
-        logger.warning("Failed to resolve model '%s' from DB: %s. Falling back.", name, e)
-        return get_llm_config()
-    finally:
-        db.close()
+    return _resolve_model_from_db(
+        lambda db: db.query(LLMModel).filter(LLMModel.name == name).first(),
+        name,
+    )
 
 
 # ---------------------------------------------------------------------------

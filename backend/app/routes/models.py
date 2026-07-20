@@ -27,22 +27,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/models", tags=["models"])
 
 
-def _model_to_schema(m: Any) -> dict[str, Any]:
-    """Convert an LLMModel ORM object to a dict suitable for JSONResponse."""
-    return {
-        "model_id": m.model_id,
-        "name": m.name,
-        "endpoint": m.endpoint,
-        "models_endpoint": m.models_endpoint,
-        "model_name": m.model_name,
-        "model_type": m.model_type,
-        "vllm_version": m.vllm_version,
-        "thinking_enabled": bool(m.thinking_enabled),
-        "created_at": m.created_at.isoformat() if m.created_at else None,
-        "updated_at": m.updated_at.isoformat() if m.updated_at else None,
-    }
-
-
 async def _fetch_remote_model_info(models_url: str) -> dict[str, Any]:
     """Fetch model info from an upstream vLLM endpoint.
 
@@ -114,10 +98,15 @@ async def create_model(body: CreateModelRequest, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=409, detail=f"Model with name '{body.name}' already exists.")
 
+    # Derive models_endpoint from endpoint if not provided
+    final_models_endpoint = body.models_endpoint or ""
+    if not final_models_endpoint:
+        final_models_endpoint = normalize_models_endpoint(body.endpoint)
+
     model = LLMModel(
         name=body.name,
         endpoint=body.endpoint,
-        models_endpoint=body.models_endpoint or "",
+        models_endpoint=final_models_endpoint,
         model_name=body.model_name,
         model_type=body.model_type or "general",
         vllm_version=body.vllm_version,
@@ -151,6 +140,15 @@ async def update_model(model_id: int, body: UpdateModelRequest, db: Session = De
             raise HTTPException(status_code=409, detail=f"Model with name '{body.name}' already exists.")
 
     update_data = body.model_dump(exclude_unset=True)
+
+    # Derive models_endpoint from endpoint if not explicitly provided
+    if "models_endpoint" not in update_data and "endpoint" in update_data:
+        update_data["models_endpoint"] = normalize_models_endpoint(update_data["endpoint"])
+    elif "models_endpoint" in update_data and not update_data["models_endpoint"]:
+        # Empty models_endpoint provided → derive from endpoint
+        endpoint_to_use = update_data.get("endpoint") or model.endpoint
+        update_data["models_endpoint"] = normalize_models_endpoint(endpoint_to_use)
+
     for key, value in update_data.items():
         setattr(model, key, value)
 

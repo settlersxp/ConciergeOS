@@ -41,24 +41,3 @@ def normalize_models_endpoint(raw_url: str) -> str:
     return f"{url}/v1/models"
 
 
-def strip_to_base_url(endpoint: str) -> str:
-    """Strip /v1/models or /v1 suffix to get the base vLLM URL.
-
-    Args:
-        endpoint: Endpoint URL that may end with /v1/models, /v1, or neither
-
-    Returns:
-        Base URL with /v1/models or /v1 suffix removed
-
-    Examples:
-        >>> strip_to_base_url("http://localhost:8000/v1/models")
-        'http://localhost:8000'
-        >>> strip_to_base_url("http://localhost:8000/v1")
-        'http://localhost:8000'
-        >>> strip_to_base_url("http://localhost:8000")
-        'http://localhost:8000'
-    """
-    url = endpoint.rstrip("/")
-    if url.endswith("/v1/models"):
-        return url[:-len("/models")]
-    return url

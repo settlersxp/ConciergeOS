@@ -38,20 +38,17 @@ from urllib.parse import urlencode, urlparse, parse_qs
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
+EntryT = TypeVar("EntryT")
 
 
 # ---------------------------------------------------------------------------
-# Generic Cache data structures
+# Base classes (shared between LLM cache and HTTP cache)
 # ---------------------------------------------------------------------------
 
-class CacheEntry(Generic[T]):
-    """A generic cached entry with expiration tracking.
+class BaseCacheEntry:
+    """Base cached entry with expiration tracking."""
 
-    Type parameter T represents the stored data type (e.g., str, tuple[int, dict, str]).
-    """
-
-    def __init__(self, value: T, timestamp: float, ttl: int):
-        self.value = value
+    def __init__(self, timestamp: float, ttl: int):
         self.timestamp = timestamp
         self.ttl = ttl
 
@@ -60,17 +57,67 @@ class CacheEntry(Generic[T]):
         """Return True if this entry has exceeded its TTL."""
         return (time.time() - self.timestamp) >= self.ttl
 
-    @property
-    def response(self) -> Any:
-        """Alias for .value — provides backwards-compatible access as 'response'."""
-        return self.value
 
-    @response.setter
-    def response(self, value: Any) -> None:
+class BaseCacheStore(Generic[EntryT]):
+    """Base in-memory cache store with TTL-based expiration.
+
+    Single-process use. Designed to be swapped for Redis or other backends later
+    without changing the API.
+    """
+
+    def __init__(self, ttl: int = 3600):
+        """Initialize the cache store.
+
+        Args:
+            ttl: Time-to-live in seconds (default 3600 = 1 hour)
+        """
+        self._store: dict[str, EntryT] = {}
+        self._ttl = ttl
+        self._hits = 0
+        self._misses = 0
+
+    @property
+    def ttl(self) -> int:
+        """Current TTL in seconds."""
+        return self._ttl
+
+    @ttl.setter
+    def ttl(self, value: int) -> None:
+        """Change the TTL. Existing entries keep their original timestamps."""
+        self._ttl = value
+
+    def delete(self, key: str) -> None:
+        """Remove an entry from the cache."""
+        self._store.pop(key, None)
+
+    def clear(self) -> None:
+        """Clear all entries from the cache."""
+        self._store.clear()
+        self._hits = 0
+        self._misses = 0
+
+    @property
+    def stats(self) -> dict[str, int]:
+        """Return cache hit/miss stats."""
+        return {"hits": self._hits, "misses": self._misses, "size": len(self._store)}
+
+
+# ---------------------------------------------------------------------------
+# LLM Cache data structures
+# ---------------------------------------------------------------------------
+
+class CacheEntry(BaseCacheEntry, Generic[T]):
+    """A generic cached entry with expiration tracking.
+
+    Type parameter T represents the stored data type (e.g., str, tuple[int, dict, str]).
+    """
+
+    def __init__(self, value: T, timestamp: float, ttl: int):
+        super().__init__(timestamp, ttl)
         self.value = value
 
 
-class CacheStore:
+class CacheStore(BaseCacheStore["CacheEntry[str]"]):
     """In-memory LLM response cache with TTL-based expiration.
 
     Single-process use. Designed to be swapped for Redis or other backends later
@@ -90,22 +137,9 @@ class CacheStore:
         Args:
             ttl: Time-to-live in seconds (default 3600 = 1 hour)
         """
-        self._store: dict[str, CacheEntry[str]] = {}
-        self._ttl = ttl
-        self._hits = 0
-        self._misses = 0
+        super().__init__(ttl)
 
-    @property
-    def ttl(self) -> int:
-        """Current TTL in seconds."""
-        return self._ttl
-
-    @ttl.setter
-    def ttl(self, value: int) -> None:
-        """Change the TTL. Existing entries keep their original timestamps."""
-        self._ttl = value
-
-    def get(self, key: str) -> CacheEntry[str] | None:
+    def get(self, key: str) -> "CacheEntry[str] | None":
         """Get a cached entry by key. Returns None if expired."""
         entry = self._store.get(key)
         if entry is None or entry.is_expired:
@@ -120,46 +154,25 @@ class CacheStore:
         """Cache a value with the default TTL."""
         self._store[key] = CacheEntry(value=value, timestamp=time.time(), ttl=self._ttl)
 
-    def delete(self, key: str) -> None:
-        """Remove an entry from the cache."""
-        self._store.pop(key, None)
-
-    def clear(self) -> None:
-        """Clear all entries from the cache."""
-        self._store.clear()
-        self._hits = 0
-        self._misses = 0
-
-    @property
-    def stats(self) -> dict[str, int]:
-        """Return cache hit/miss stats."""
-        return {"hits": self._hits, "misses": self._misses, "size": len(self._store)}
-
 
 # ---------------------------------------------------------------------------
 # HTTP Cache data structures
 # ---------------------------------------------------------------------------
 
-class HttpCacheEntry:
+class HttpCacheEntry(BaseCacheEntry):
     """A single cached HTTP response with expiration tracking."""
 
     def __init__(self, status_code: int, headers: dict[str, str], body: str, timestamp: float, ttl: int):
+        super().__init__(timestamp, ttl)
         self.status_code = status_code
         self.headers = headers
         self.body = body
-        self.timestamp = timestamp
-        self.ttl = ttl
-
-    @property
-    def is_expired(self) -> bool:
-        """Return True if this entry has exceeded its TTL."""
-        return (time.time() - self.timestamp) >= self.ttl
 
 
-class HttpCacheStore:
+class HttpCacheStore(BaseCacheStore[HttpCacheEntry]):
     """
     In-memory HTTP response cache with TTL-based expiration.
-    
+
     Stores full HTTP responses (status, headers, body) to avoid redundant network calls.
 
     Single-process use. Designed to be swapped for Redis or other backends later
@@ -179,20 +192,7 @@ class HttpCacheStore:
         Args:
             ttl: Time-to-live in seconds (default 3600 = 1 hour)
         """
-        self._store: dict[str, HttpCacheEntry] = {}
-        self._ttl = ttl
-        self._hits = 0
-        self._misses = 0
-
-    @property
-    def ttl(self) -> int:
-        """Current TTL in seconds."""
-        return self._ttl
-
-    @ttl.setter
-    def ttl(self, value: int) -> None:
-        """Change the TTL. Existing entries keep their original timestamps."""
-        self._ttl = value
+        super().__init__(ttl)
 
     def get(self, key: str) -> HttpCacheEntry | None:
         """Get a cached HTTP response entry by key. Returns None if expired."""
@@ -223,21 +223,6 @@ class HttpCacheStore:
             timestamp=time.time(),
             ttl=entry_ttl,
         )
-
-    def delete(self, key: str) -> None:
-        """Remove an entry from the cache."""
-        self._store.pop(key, None)
-
-    def clear(self) -> None:
-        """Clear all entries from the cache."""
-        self._store.clear()
-        self._hits = 0
-        self._misses = 0
-
-    @property
-    def stats(self) -> dict[str, int]:
-        """Return cache hit/miss stats."""
-        return {"hits": self._hits, "misses": self._misses, "size": len(self._store)}
 
 
 # ---------------------------------------------------------------------------
@@ -308,20 +293,6 @@ def _get_http_cache() -> HttpCacheStore:
     return _http_response_cache
 
 
-def cache_clear() -> None:
-    """Clear the LLM response cache."""
-    global _response_cache
-    if _response_cache is not None:
-        _response_cache.clear()
-
-
-def http_cache_clear() -> None:
-    """Clear the HTTP response cache."""
-    global _http_response_cache
-    if _http_response_cache is not None:
-        _http_response_cache.clear()
-
-
 # ---------------------------------------------------------------------------
 # LLM Call wrapper with caching
 # ---------------------------------------------------------------------------
@@ -380,3 +351,53 @@ def call_llm_with_db_tools_with_cache_flag(
     cache.set(cache_key, result)
 
     return result, False
+
+
+# ---------------------------------------------------------------------------
+# Debug-friendly public API (referenced by debug.py)
+# ---------------------------------------------------------------------------
+
+def cache_stats() -> dict[str, int]:
+    """Return LLM cache statistics for debug endpoints."""
+    return _get_cache().stats
+
+
+def http_cache_stats() -> dict[str, int]:
+    """Return HTTP cache statistics for debug endpoints."""
+    return _get_http_cache().stats
+
+
+def cache_clear() -> int:
+    """Clear the LLM response cache and return the number of cleared entries."""
+    cache = _get_cache()
+    count = len(cache._store)
+    cache.clear()
+    return count
+
+
+def http_cache_clear() -> int:
+    """Clear the HTTP response cache and return the number of cleared entries."""
+    cache = _get_http_cache()
+    count = len(cache._store)
+    cache.clear()
+    return count
+
+
+def call_llm_with_db_tools(user_prompt: str, system_prompt: str | None = None) -> str:
+    """Convenience wrapper used by debug endpoints.
+
+    Returns only the LLM response string (no cache flag).
+    """
+    response, _ = call_llm_with_db_tools_with_cache_flag(
+        user_prompt, system_prompt=system_prompt
+    )
+    return response
+
+
+def http_cache_cleanup_expired() -> int:
+    """Remove all expired HTTP cache entries. Returns count of removed entries."""
+    cache = _get_http_cache()
+    expired_keys = [k for k, v in cache._store.items() if v.is_expired]
+    for key in expired_keys:
+        cache.delete(key)
+    return len(expired_keys)

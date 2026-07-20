@@ -15,7 +15,7 @@ _TOOL_CALL_MAX_TOKENS = 1024
 _DEFAULT_TEMPERATURE = 0
 _TOOL_CALL_TEMPERATURE = 0.1
 _MAX_TOOL_TURNS = 10
-_MODELS_ENDPOINT = "http://localhost:8000/v1/models"
+_MODELS_ENDPOINT = "http://localhost:8000/v1"
 _API_KEY_PLACEHOLDER = "sk-placeholder"  # Dummy API key for vLLM (not validated)
 _MODEL_INFO_TIMEOUT = 10  # Seconds to wait for /v1/models response
 

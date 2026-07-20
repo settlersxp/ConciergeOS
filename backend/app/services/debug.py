@@ -139,26 +139,6 @@ def delete_http_cache_entry(key: str):
     return {"deleted": deleted, "key": key, "cache": "http"}
 
 
-@debug_router.post("/cache/http/by-pattern")
-def clear_http_cache_by_pattern(pattern: str):
-    """
-    Clear HTTP cache entries matching a URI pattern.
-
-    Query param: pattern=/api/reservations
-
-    This clears ALL entries (iterates and matches).
-    """
-    from app.services.response_cache import generate_http_cache_key, _get_http_cache
-    import hashlib
-
-    cache = _get_http_cache()
-    # We need to match by pattern - delete all entries whose normalized URL contains the pattern
-    # Since we can't iterate the internal store externally, we clear all and note this limitation
-    # For production, consider using a proper cache backend with pattern support
-    count = cache.clear()
-    return {"cleared_all": count, "pattern": pattern, "note": "Pattern-based delete requires clearing all entries - use /cache/clear-http for targeted clear"}
-
-
 @debug_router.post("/cache/http/cleanup-expired")
 def cleanup_expired_http_cache():
     """Remove all expired HTTP cache entries."""

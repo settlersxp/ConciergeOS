@@ -6,14 +6,15 @@ import Textarea from '../components/ui/Textarea';
 import Badge from '../components/ui/Badge';
 import StatusBanner from '../components/ui/StatusBanner';
 import Toast from '../components/ui/Toast';
-import PromptSelector from '../components/ui/PromptSelector';
 import { promptGroupsApi } from '../services/promptGroupsApi';
+import { listAllPrompts, listVersions } from '../services/promptsApi';
 import type {
   PromptGroup,
   PromptGroupItemCreate,
   PromptGroupResult,
   PromptGroupSchedule,
 } from '../types/prompt';
+import type { PromptSummary, PromptVersion } from '../types/prompt';
 
 const FONT_FAMILY =
   '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif';
@@ -49,6 +50,7 @@ function GroupCard({
   onExecute,
   onToggle,
   onDelete,
+  onToggleItem,
   executing,
 }: {
   group: PromptGroup;
@@ -56,6 +58,7 @@ function GroupCard({
   onExecute: () => void;
   onToggle: () => void;
   onDelete: () => void;
+  onToggleItem: (itemId: number) => void;
   executing: boolean;
 }) {
   const activeSchedules = group.schedules?.filter((s) => s.active) ?? [];
@@ -81,9 +84,15 @@ function GroupCard({
 
         <div className="flex flex-wrap gap-1">
           {group.items.map((item) => (
-            <Badge key={item.item_id} variant="neutral">
-              #{item.position} {item.prompt_id}:v{item.prompt_version}
-            </Badge>
+            <div key={item.item_id} className="flex items-center gap-1">
+              <Badge variant={item.is_active ? "neutral" : "danger"}>
+                #{item.position} {item.prompt_id}:v{item.prompt_version}
+              </Badge>
+              <ToggleSwitch
+                checked={item.is_active ?? true}
+                onChange={() => onToggleItem(item.item_id)}
+              />
+            </div>
           ))}
         </div>
 
@@ -293,36 +302,65 @@ function GroupFormModal({
   onCancel,
 }: {
   initial?: PromptGroup | null;
-  onSave: (data: { name: string; description: string | null; items: PromptGroupItemCreate[] }) => void;
+  onSave: (data: { name: string; description: string | null; items: PromptGroupItemCreate[]; is_chain_page?: boolean; page_route?: string | null }) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
+  const [isChainPage, setIsChainPage] = useState(initial?.is_chain_page ?? false);
+  const [pageRoute, setPageRoute] = useState(initial?.page_route ?? '');
   const [items, setItems] = useState<PromptGroupItemCreate[]>(
     initial?.items.map((i) => ({
       position: i.position,
       prompt_id: i.prompt_id,
       prompt_version: i.prompt_version,
+      alias: i.alias,
+      is_input_step: i.is_input_step,
     })) ?? [],
   );
 
-  const [selectorValue, setSelectorValue] = useState<{ prompt_id: string; version?: number }>({
-    prompt_id: '',
-    version: undefined,
-  });
+  // Simple prompt/version selectors (no model selector)
+  const [allPrompts, setAllPrompts] = useState<PromptSummary[]>([]);
+  const [addPromptId, setAddPromptId] = useState('');
+  const [addVersions, setAddVersions] = useState<PromptVersion[]>([]);
+  const [addVersion, setAddVersion] = useState<number | undefined>(undefined);
 
-  const handleSelectorChange = (val: { prompt_id: string; version?: number }) => {
-    setSelectorValue(val);
-  };
+  // Load all prompts on mount
+  useEffect(() => {
+    listAllPrompts()
+      .then((data) => {
+        setAllPrompts(data);
+        if (data.length > 0 && !addPromptId) {
+          setAddPromptId(data[0].prompt_id);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Load versions when prompt changes
+  useEffect(() => {
+    if (addPromptId) {
+      listVersions(addPromptId)
+        .then((data) => {
+          setAddVersions(data);
+          const highest = [...data].sort((a, b) => b.version - a.version)[0];
+          setAddVersion(highest?.version);
+        })
+        .catch(() => setAddVersions([]));
+    } else {
+      setAddVersions([]);
+      setAddVersion(undefined);
+    }
+  }, [addPromptId]);
 
   const addPromptFromSelector = () => {
-    if (!selectorValue.prompt_id || !selectorValue.version) return;
+    if (!addPromptId || addVersion === undefined) return;
     setItems((prev) => [
       ...prev,
       {
         position: prev.length + 1,
-        prompt_id: selectorValue.prompt_id,
-        prompt_version: selectorValue.version!,
+        prompt_id: addPromptId,
+        prompt_version: addVersion,
       },
     ]);
   };
@@ -341,12 +379,17 @@ function GroupFormModal({
     });
   };
 
-  const handleSave = () => {
-    if (!name.trim()) return;
-    onSave({ name: name.trim(), description: description.trim() || null, items });
+  const toggleInputStep = (index: number) => {
+    setItems((prev) => prev.map((item, i) => (i === index ? { ...item, is_input_step: !item.is_input_step } : item)));
   };
 
-  const canAdd = selectorValue.prompt_id && selectorValue.version != null;
+  const handleSave = () => {
+    if (!name.trim()) return;
+    const route = isChainPage ? (pageRoute.replace(/^\//, '') || null) : null;
+    onSave({ name: name.trim(), description: description.trim() || null, items, is_chain_page: isChainPage, page_route: route });
+  };
+
+  const canAdd = addPromptId && addVersion != null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -368,24 +411,89 @@ function GroupFormModal({
               placeholder="My Prompt Chain"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-primary-700 dark:text-primary-300 mb-1">
-              Description
-            </label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description…"
-              rows={2}
-            />
-          </div>
+           <div>
+             <label className="block text-sm font-medium text-primary-700 dark:text-primary-300 mb-1">
+               Description
+             </label>
+             <Textarea
+               value={description}
+               onChange={(e) => setDescription(e.target.value)}
+               placeholder="Optional description…"
+               rows={2}
+             />
+           </div>
 
-          {/* Prompt Selector */}
+           {/* Is Chain Page toggle */}
+           <div className="flex items-center gap-3">
+             <ToggleSwitch
+               checked={isChainPage}
+               onChange={() => setIsChainPage(!isChainPage)}
+             />
+             <div>
+               <label className="text-sm font-medium text-primary-700 dark:text-primary-300">
+                 Is Chain Page
+               </label>
+               <p className="text-xs text-primary-500 dark:text-primary-400">
+                 Enable to create a page accessible at /prompt-chains/{'...'}
+               </p>
+             </div>
+           </div>
+
+           {/* Page Route (only shown when Is Chain Page is enabled) */}
+           {isChainPage && (
+             <div>
+               <label className="block text-sm font-medium text-primary-700 dark:text-primary-300 mb-1">
+                 Page Route
+               </label>
+               <input
+                 className="w-full rounded-md border border-surface-300 bg-white px-3 py-2 text-sm text-primary-800 placeholder:text-primary-400 focus:border-secondary-400 focus:outline-none focus:ring-2 focus:ring-secondary-400/20 dark:border-primary-600 dark:bg-primary-700 dark:text-white dark:placeholder:text-primary-500"
+                 value={pageRoute}
+                 onChange={(e) => setPageRoute(e.target.value)}
+                 placeholder={`e.g., ${name.toLowerCase().replace(/\s+/g, '-') || 'my-page'}`}
+                 disabled={!isChainPage}
+               />
+                {pageRoute && (
+                  <p className="mt-1 text-xs text-secondary-500">
+                    URL: <code>/prompt-chains/{pageRoute.replace(/^\//, '')}</code>
+                  </p>
+                )}
+             </div>
+           )}
+
+          {/* Simple Prompt/Version Selectors */}
           <div>
             <label className="block text-sm font-medium text-primary-700 dark:text-primary-300 mb-2">
               Select Prompt to Add
             </label>
-            <PromptSelector value={selectorValue} onChange={handleSelectorChange} />
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              <select
+                className="rounded-md border border-surface-300 bg-white px-3 py-2 text-sm text-primary-800 focus:border-secondary-400 focus:outline-none focus:ring-2 focus:ring-secondary-400/20 dark:border-primary-600 dark:bg-primary-700 dark:text-white"
+                value={addPromptId}
+                onChange={(e) => setAddPromptId(e.target.value)}
+              >
+                <option value="">-- Select Prompt --</option>
+                {allPrompts.map((p) => (
+                  <option key={p.prompt_id} value={p.prompt_id}>
+                    {p.prompt_id} ({p.version_count} version{p.version_count !== 1 ? 's' : ''})
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rounded-md border border-surface-300 bg-white px-3 py-2 text-sm text-primary-800 focus:border-secondary-400 focus:outline-none focus:ring-2 focus:ring-secondary-400/20 dark:border-primary-600 dark:bg-primary-700 dark:text-white"
+                value={addVersion ?? ''}
+                onChange={(e) => setAddVersion(e.target.value ? Number(e.target.value) : undefined)}
+                disabled={!addPromptId || addVersions.length === 0}
+              >
+                <option value="">
+                  {!addPromptId ? 'Select a prompt first' : addVersions.length === 0 ? 'No versions' : 'Select version'}
+                </option>
+                {addVersions.map((v) => (
+                  <option key={v.version} value={v.version}>
+                    v{v.version}{v.is_default ? ' (default)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
             <Button
               size="sm"
               variant="primary"
@@ -406,22 +514,34 @@ function GroupFormModal({
               <p className="text-sm text-primary-500 dark:text-primary-400 mb-2">No prompts added yet.</p>
             )}
             {items.map((item, idx) => (
-              <div key={idx} className="flex items-center gap-2 mb-2">
-                <Badge variant="info">#{item.position}</Badge>
-                <span className="text-sm flex-1 text-primary-800 dark:text-primary-200">
-                  {item.prompt_id}:v{item.prompt_version}
-                </span>
-                <Button size="sm" onClick={() => movePrompt(idx, 'up')} disabled={idx === 0}>
-                  ↑
-                </Button>
-                <Button size="sm" onClick={() => movePrompt(idx, 'down')} disabled={idx === items.length - 1}>
-                  ↓
-                </Button>
-                <Button size="sm" variant="danger" onClick={() => removePrompt(idx)}>
-                  ✕
-                </Button>
-              </div>
-            ))}
+               <div key={idx} className="flex items-center gap-2 mb-2">
+                 <Badge variant="info">#{item.position}</Badge>
+                 <span className="text-sm flex-1 text-primary-800 dark:text-primary-200">
+                   {item.prompt_id}:v{item.prompt_version}
+                 </span>
+                 <button
+                   type="button"
+                   onClick={() => toggleInputStep(idx)}
+                   className={`text-xs px-2 py-1 rounded border transition-colors ${
+                     item.is_input_step
+                       ? 'bg-secondary-100 border-secondary-400 text-secondary-700 dark:bg-secondary-900 dark:border-secondary-600 dark:text-secondary-300'
+                       : 'bg-white border-surface-300 text-primary-500 hover:border-secondary-400 dark:bg-primary-700 dark:border-primary-600 dark:text-primary-400'
+                   }`}
+                   title="Mark as input step (user provides input on chain page)"
+                 >
+                   Input Step
+                 </button>
+                 <Button size="sm" onClick={() => movePrompt(idx, 'up')} disabled={idx === 0}>
+                   ↑
+                 </Button>
+                 <Button size="sm" onClick={() => movePrompt(idx, 'down')} disabled={idx === items.length - 1}>
+                   ↓
+                 </Button>
+                 <Button size="sm" variant="danger" onClick={() => removePrompt(idx)}>
+                   ✕
+                 </Button>
+               </div>
+             ))}
           </div>
 
           <div className="flex gap-2 justify-end mt-4">
@@ -447,12 +567,14 @@ function GroupDetailModal({
   onClose,
   onEdit,
   onToggle,
+  onToggleItem,
   onOpenSchedules,
 }: {
   group: PromptGroup;
   onClose: () => void;
   onEdit: () => void;
   onToggle: () => void;
+  onToggleItem: (itemId: number) => void;
   onOpenSchedules: () => void;
 }) {
   const [results, setResults] = useState<PromptGroupResult[]>(group.results ?? []);
@@ -538,10 +660,14 @@ function GroupDetailModal({
           <h3 className="font-medium mb-2 text-primary-900 dark:text-white">Chain ({group.items.length} prompts)</h3>
           {group.items.map((item, idx) => (
             <div key={item.item_id} className="flex items-center gap-2 mb-2">
-              <Badge variant="info">#{item.position}</Badge>
-              <span className="text-sm text-primary-800 dark:text-primary-200">
+              <Badge variant={item.is_active ? "info" : "neutral"}>#{item.position}</Badge>
+              <span className={`text-sm ${item.is_active ? 'text-primary-800 dark:text-primary-200' : 'text-primary-400 dark:text-primary-500 line-through'}`}>
                 {item.prompt_id}:v{item.prompt_version}
               </span>
+              <ToggleSwitch
+                checked={item.is_active ?? true}
+                onChange={() => onToggleItem(item.item_id)}
+              />
               {idx < group.items.length - 1 && (
                 <span className="text-primary-400">→</span>
               )}
@@ -699,6 +825,24 @@ export default function PromptGroups() {
     }
   };
 
+  const handleToggleItem = async (groupId: number, itemId: number) => {
+    try {
+      await promptGroupsApi.toggleItem(groupId, itemId);
+      if (viewingGroup?.group_id === groupId) {
+        setViewingGroup({
+          ...viewingGroup,
+          items: viewingGroup.items.map((item) =>
+            item.item_id === itemId ? { ...item, is_active: !item.is_active } : item
+          ),
+        });
+      }
+      loadGroups();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Toggle failed';
+      setToast({ message: msg, type: 'error' });
+    }
+  };
+
   const handleDelete = async (groupId: number) => {
     if (!confirm('Delete this group? This cannot be undone.')) return;
     try {
@@ -766,6 +910,7 @@ export default function PromptGroups() {
               onExecute={() => handleExecute(g.group_id)}
               onToggle={() => handleToggle(g.group_id)}
               onDelete={() => handleDelete(g.group_id)}
+              onToggleItem={(itemId) => handleToggleItem(g.group_id, itemId)}
               executing={executingId === g.group_id}
             />
           ))}
@@ -797,6 +942,7 @@ export default function PromptGroups() {
             setEditingGroup(viewingGroup);
           }}
           onToggle={() => handleToggle(viewingGroup.group_id)}
+          onToggleItem={(itemId) => handleToggleItem(viewingGroup.group_id, itemId)}
           onOpenSchedules={() => {
             setScheduleGroup(viewingGroup);
           }}

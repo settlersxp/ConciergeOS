@@ -87,6 +87,7 @@ export const guestSearchApi = {
   extractName: async (
     file: File,
     crop?: CropRegion,
+    modelId?: number,
   ): Promise<NameExtractionResponse> => {
     const formData = new FormData();
     formData.append('file', file);
@@ -96,6 +97,10 @@ export const guestSearchApi = {
       formData.append('crop_y', String(crop.y));
       formData.append('crop_w', String(crop.width));
       formData.append('crop_h', String(crop.height));
+    }
+
+    if (modelId !== undefined) {
+      formData.append('model_id', String(modelId));
     }
 
     const resp = await fetch('/api/guest-search/extract-name', {
@@ -214,7 +219,7 @@ export const performanceApi = {
   // ── Duplicate Check ───────────────────────────────────────────────────
 
   checkDuplicates: () =>
-    request<CheckDuplicatesResult>('/api/performance-testing/check-duplicates'),
+    request<unknown>('/api/performance-testing/check-duplicates'),
 
   // ── Validation ────────────────────────────────────────────────────────
 

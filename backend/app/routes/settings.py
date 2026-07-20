@@ -36,11 +36,12 @@ async def api_update_settings(body: dict[str, Any]) -> JSONResponse:
 @router.get("/api/settings/models-info")
 async def api_get_models_info() -> JSONResponse:
     """Proxy request to the configured vLLM models endpoint."""
-    models_endpoint = config_manager.test_settings.models_endpoint
+    base_url = config_manager.test_settings.models_endpoint.rstrip("/")
+    models_url = f"{base_url}/models"
     try:
         import httpx
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(models_endpoint)
+            resp = await client.get(models_url)
             resp.raise_for_status()
             return JSONResponse(content=resp.json())
     except Exception as e:

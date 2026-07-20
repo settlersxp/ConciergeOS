@@ -20,6 +20,18 @@ from app.models import PromptVersion
 logger = logging.getLogger(__name__)
 
 
+def build_system_prompt(pv: PromptVersion) -> str:
+    """Build the system prompt string from a PromptVersion's structured fields."""
+    parts = []
+    if pv.intention:
+        parts.append(pv.intention)
+    if pv.restrictions:
+        parts.append(pv.restrictions)
+    if pv.output_structure:
+        parts.append(pv.output_structure)
+    return "\n\n".join(parts)
+
+
 class PromptStore:
     """Database-backed prompt version store."""
 
@@ -322,15 +334,7 @@ class PromptStore:
                 f"Prompt {prompt_id}{':v' + str(version) if version else ''} not found."
             )
 
-        parts = []
-        if prompt.intention:
-            parts.append(prompt.intention)
-        if prompt.restrictions:
-            parts.append(prompt.restrictions)
-        if prompt.output_structure:
-            parts.append(prompt.output_structure)
-
-        system_prompt = "\n\n".join(parts) if parts else ""
+        system_prompt = build_system_prompt(prompt)
 
         # Resolve placeholders at query time
         from app.services.placeholders import resolve_placeholders
