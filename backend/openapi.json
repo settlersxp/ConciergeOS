@@ -103,7 +103,7 @@
     "/api/guest-search/extract-name": {
       "post": {
         "summary": "Api Extract Name",
-        "description": "Extract a guest name from a multimedia file (image or audio).\n\nFor images:\n- If crop coordinates are provided (non-zero crop_w), the image is cropped first.\n\nFor audio:\n- The entire file is sent to the audio-capable LLM.",
+        "description": "Extract a guest name from a multimedia file (image or audio).\n\nFor images:\n- If crop coordinates are provided (non-zero crop_w), the image is cropped first.\n\nFor audio:\n- The entire file is sent to the audio-capable LLM.\n\nIf model_id is provided, uses that specific model for extraction.\nOtherwise, falls back to the default configured model.",
         "operationId": "api_extract_name_api_guest_search_extract_name_post",
         "requestBody": {
           "content": {
@@ -193,11 +193,11 @@
         }
       }
     },
-    "/api/models": {
+    "/api/settings/models-info": {
       "get": {
-        "summary": "Api Get Models",
+        "summary": "Api Get Models Info",
         "description": "Proxy request to the configured vLLM models endpoint.",
-        "operationId": "api_get_models_api_models_get",
+        "operationId": "api_get_models_info_api_settings_models_info_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -551,6 +551,25 @@
                   },
                   "type": "array",
                   "title": "Response Api Get Test Guests Api Performance Testing Test Guests Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/performance-testing/check-duplicates": {
+      "get": {
+        "summary": "Api Check Duplicate Test Guests",
+        "description": "Check for duplicate test guests among those marked with special_preferences = 'performance_test'.\n\nReturns a report showing which name combinations have multiple entries,\nwhich can cause validation issues during performance testing.",
+        "operationId": "api_check_duplicate_test_guests_api_performance_testing_check_duplicates_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckDuplicatesResponse"
                 }
               }
             }
@@ -1423,6 +1442,290 @@
         }
       }
     },
+    "/api/models": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "List Models",
+        "description": "List all registered LLM models.",
+        "operationId": "list_models_api_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LLMModelSchema"
+                  },
+                  "type": "array",
+                  "title": "Response List Models Api Models Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Create Model",
+        "description": "Create a new LLM model.\n\nExpects JSON body with:\n  name, endpoint, models_endpoint (optional), model_name,\n  model_type (optional), vllm_version (optional), thinking_enabled (optional)",
+        "operationId": "create_model_api_models_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateModelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LLMModelSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/models/{model_id}": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Get Model",
+        "description": "Get a single LLM model by ID.",
+        "operationId": "get_model_api_models__model_id__get",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LLMModelSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Update Model",
+        "description": "Update an existing LLM model.\n\nAll fields are optional \u2014 only provided fields will be updated.",
+        "operationId": "update_model_api_models__model_id__put",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateModelRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LLMModelSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Delete Model",
+        "description": "Delete an LLM model.\n\nPrevents deletion if the model is still referenced by any prompt version.",
+        "operationId": "delete_model_api_models__model_id__delete",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteModelResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/models/fetch-info": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Fetch Info By Url",
+        "description": "Fetch live model info from a raw endpoint URL.\n\nAccepts a JSON body with:\n  models_endpoint (optional) \u2014 the full /v1/models URL, or a base URL (e.g. /v1)\n  endpoint (required if models_endpoint missing) \u2014 base URL, appends /v1/models",
+        "operationId": "fetch_info_by_url_api_models_fetch_info_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/models/{model_id}/info": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Fetch Model Info",
+        "description": "Fetch live model info from the LLM endpoint.\n\nHits the {models_endpoint} (or /v1/models) on the model's base URL\nto discover what the model actually reports.",
+        "operationId": "fetch_model_info_api_models__model_id__info_get",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/prompt-groups": {
       "get": {
         "tags": [
@@ -1651,6 +1954,56 @@
         }
       }
     },
+    "/api/prompt-groups/{group_id}/items/{item_id}/toggle": {
+      "patch": {
+        "tags": [
+          "prompt-groups"
+        ],
+        "summary": "Toggle Item",
+        "description": "Toggle the active state of a single prompt group item.",
+        "operationId": "toggle_item_api_prompt_groups__group_id__items__item_id__toggle_patch",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/prompt-groups/{group_id}/execute": {
       "post": {
         "tags": [
@@ -1677,6 +2030,98 @@
               "type": "string",
               "default": "",
               "title": "Initial Input"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompt-groups/{group_id}/execute-chain": {
+      "post": {
+        "tags": [
+          "prompt-groups"
+        ],
+        "summary": "Execute Chain Page",
+        "description": "Execute chain with user inputs (page mode).\n\nThe first step receives user_inputs as template variables.\nSubsequent steps receive the output of their predecessor via chain results.",
+        "operationId": "execute_chain_page_api_prompt_groups__group_id__execute_chain_post",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChainExecutionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompt-groups/{group_id}/execute-chain-step": {
+      "post": {
+        "tags": [
+          "prompt-groups"
+        ],
+        "summary": "Execute Chain Step Route",
+        "description": "Execute a single step in a prompt chain (page mode, step-by-step).\n\nAccepts both JSON body and multipart/form-data:\n\nJSON body (no file):\n```json\n{\n  \"position\": 1,\n  \"inputs\": {\"customer_name\": \"John\"},\n  \"initial_input\": \"\",\n  \"accumulated_context\": \"\"\n}\n```\n\nForm data (with file):\n- position: Step position (1-based)\n- initial_input: Raw text for the first step\n- accumulated_context: Context from previous steps\n- inputs_json: JSON string of {field: value} inputs\n- file: Optional image or audio file for multimodal input",
+        "operationId": "execute_chain_step_route_api_prompt_groups__group_id__execute_chain_step_post",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Group Id"
             }
           }
         ],
@@ -2161,47 +2606,6 @@
         }
       }
     },
-    "/api/debug/cache/http/by-pattern": {
-      "post": {
-        "tags": [
-          "debug"
-        ],
-        "summary": "Clear Http Cache By Pattern",
-        "description": "Clear HTTP cache entries matching a URI pattern.\n\nQuery param: pattern=/api/reservations\n\nThis clears ALL entries (iterates and matches).",
-        "operationId": "clear_http_cache_by_pattern_api_debug_cache_http_by_pattern_post",
-        "parameters": [
-          {
-            "name": "pattern",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Pattern"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/debug/cache/http/cleanup-expired": {
       "post": {
         "tags": [
@@ -2332,6 +2736,17 @@
             "type": "number",
             "title": "Crop H",
             "default": 0.0
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
           }
         },
         "type": "object",
@@ -2352,6 +2767,29 @@
         "title": "BookingSource",
         "description": "Where a reservation was created / booked from."
       },
+      "ChainExecutionRequest": {
+        "properties": {
+          "inputs": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Inputs",
+            "default": {}
+          },
+          "initial_input": {
+            "type": "string",
+            "title": "Initial Input",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "ChainExecutionRequest",
+        "description": "Request body for page-mode chain execution.\n\nThe first step receives user_inputs as template variables.\nSubsequent steps receive the output of their predecessor."
+      },
       "ChatMessage": {
         "properties": {
           "role": {
@@ -2369,6 +2807,47 @@
           "content"
         ],
         "title": "ChatMessage"
+      },
+      "CheckDuplicatesResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "default": true
+          },
+          "has_duplicates": {
+            "type": "boolean",
+            "title": "Has Duplicates",
+            "default": false
+          },
+          "duplicates": {
+            "items": {
+              "$ref": "#/components/schemas/DuplicateGuestInfo"
+            },
+            "type": "array",
+            "title": "Duplicates",
+            "default": []
+          },
+          "total_test_guests": {
+            "type": "integer",
+            "title": "Total Test Guests",
+            "default": 0
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "title": "CheckDuplicatesResponse",
+        "description": "Response from the check-duplicates endpoint."
       },
       "CreateGroupRequest": {
         "properties": {
@@ -2403,6 +2882,69 @@
         "title": "CreateGroupRequest",
         "description": "Request body for creating a new prompt group."
       },
+      "CreateModelRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Friendly display name for the model"
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "Endpoint",
+            "description": "Base URL of the OpenAI-compatible endpoint"
+          },
+          "models_endpoint": {
+            "type": "string",
+            "title": "Models Endpoint",
+            "description": "Models endpoint URL (e.g., /v1/models)",
+            "default": ""
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name",
+            "description": "Actual model ID (e.g., facebook/opt-125m)"
+          },
+          "model_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Type",
+            "description": "Capability tag: 'text', 'image_audio', or 'general'"
+          },
+          "vllm_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vllm Version",
+            "description": "vLLM version string"
+          },
+          "thinking_enabled": {
+            "type": "boolean",
+            "title": "Thinking Enabled",
+            "description": "Whether the model supports thinking mode",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "endpoint",
+          "model_name"
+        ],
+        "title": "CreateModelRequest",
+        "description": "Request body for creating a new LLM model."
+      },
       "CreatePromptRequest": {
         "properties": {
           "name": {
@@ -2424,6 +2966,17 @@
           "user_prompt_template": {
             "type": "string",
             "title": "User Prompt Template"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
           },
           "metadata": {
             "anyOf": [
@@ -2482,6 +3035,83 @@
         ],
         "title": "DeleteBatchResponse",
         "description": "Response from the delete-batch endpoint."
+      },
+      "DeleteModelResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "default": true
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "title": "DeleteModelResponse",
+        "description": "Response from the delete model endpoint."
+      },
+      "DuplicateGuestInfo": {
+        "properties": {
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "guest_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Guest Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "first_name",
+          "last_name",
+          "count",
+          "guest_ids"
+        ],
+        "title": "DuplicateGuestInfo",
+        "description": "Information about duplicate test guests with the same name."
       },
       "DuplicatePromptRequest": {
         "properties": {
@@ -2724,6 +3354,91 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "LLMModelSchema": {
+        "properties": {
+          "model_id": {
+            "type": "integer",
+            "title": "Model Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "Endpoint"
+          },
+          "models_endpoint": {
+            "type": "string",
+            "title": "Models Endpoint"
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name"
+          },
+          "model_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Type"
+          },
+          "vllm_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vllm Version"
+          },
+          "thinking_enabled": {
+            "type": "boolean",
+            "title": "Thinking Enabled",
+            "default": false
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model_id",
+          "name",
+          "endpoint",
+          "models_endpoint",
+          "model_name"
+        ],
+        "title": "LLMModelSchema",
+        "description": "Output schema for a single LLM model."
+      },
       "NameExtractionResponse": {
         "properties": {
           "extracted_name": {
@@ -2799,7 +3514,7 @@
           "models_endpoint": {
             "type": "string",
             "title": "Models Endpoint",
-            "default": "http://10.0.0.227:8000/v1/models"
+            "default": "http://10.0.0.227:8000/v1"
           },
           "sequential_batch_size": {
             "type": "integer",
@@ -3108,6 +3823,27 @@
           "prompt_version": {
             "type": "integer",
             "title": "Prompt Version"
+          },
+          "alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alias"
+          },
+          "is_input_step": {
+            "type": "boolean",
+            "title": "Is Input Step",
+            "default": false
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
           }
         },
         "type": "object",
@@ -3503,6 +4239,28 @@
             ],
             "title": "Is Active"
           },
+          "is_chain_page": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Chain Page"
+          },
+          "page_route": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Route"
+          },
           "items": {
             "anyOf": [
               {
@@ -3581,6 +4339,90 @@
         "title": "UpdateIdentifierResponse",
         "description": "Response from the update-identifier endpoint."
       },
+      "UpdateModelRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "models_endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Models Endpoint"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "model_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Type"
+          },
+          "vllm_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vllm Version"
+          },
+          "thinking_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thinking Enabled"
+          }
+        },
+        "type": "object",
+        "title": "UpdateModelRequest",
+        "description": "Request body for updating an existing LLM model."
+      },
       "UpdatePromptRequest": {
         "properties": {
           "name": {
@@ -3637,6 +4479,17 @@
               }
             ],
             "title": "User Prompt Template"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
           },
           "metadata": {
             "anyOf": [
