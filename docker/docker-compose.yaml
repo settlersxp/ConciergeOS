@@ -11,6 +11,25 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     command: caddy run --config /etc/caddy/Caddyfile.json
+    depends_on:
+      - frontend
+      - keycloak
+      - oidc-main
+    networks:
+      - app-network
+
+  oidc-main:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
+    container_name: oidc-main
+    restart: unless-stopped
+    extra_hosts:
+      - "out-customer.com:host-gateway"
+    volumes:
+      - ./oidc-main.toml:/cfg.toml
+    command: oauth2-proxy --config /cfg.toml
+    depends_on:
+      - keycloak
+      - frontend
     networks:
       - app-network
 
@@ -31,6 +50,23 @@ services:
       dockerfile: docker/Dockerfile.backend
     container_name: backend
     restart: unless-stopped
+    networks:
+      - app-network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: keycloak
+    restart: unless-stopped
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: "https://out-customer.com/auth"
+      KC_HOSTNAME_STRICT: "true"
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HTTP_ENABLED: "true"
+    command: start-dev
+    ports:
+      - "8080:8080"
     networks:
       - app-network
 
