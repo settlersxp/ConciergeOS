@@ -1,5 +1,5 @@
 provider = "keycloak-oidc"
-oidc_issuer_url = "http://keycloak:8080/auth/realms/production"
+oidc_issuer_url = "https://out-customer.com/auth/realms/production"
 client_id = "concierge"
 client_secret = "1CkjeG73GUq8BfUAQIy72ci0XNTfgOSO"
 redirect_url = "https://out-customer.com/oauth2/callback"

@@ -25,11 +25,13 @@ services:
     restart: unless-stopped
     volumes:
       - ./oidc-main.toml:/cfg.toml
+    extra_hosts:
+      - "out-customer.com:host-gateway"
     environment:
       - OIDC_REALM=${OIDC_REALM:-production}
     command: >
       oauth2-proxy --config /cfg.toml
-      --oidc-issuer-url=http://keycloak:8080/auth/realms/${OIDC_REALM:-production}
+      --oidc-issuer-url=https://out-customer.com/auth/realms/${OIDC_REALM:-production}
     depends_on:
       - keycloak
       - frontend
@@ -87,8 +89,7 @@ services:
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
-      KC_HOSTNAME: "http://keycloak:8080/auth"
-      KC_HOSTNAME_STRICT_HTTP: "true"
+      KC_HOSTNAME: "https://out-customer.com/auth"
       KC_HTTP_RELATIVE_PATH: /auth
       KC_HTTP_ENABLED: "true"
     command: start-dev
