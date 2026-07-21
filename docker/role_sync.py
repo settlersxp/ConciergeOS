@@ -274,23 +274,37 @@ def build_caddy_routes(deny_rules: list[dict]) -> list[dict]:
 
 
 def push_routes_to_caddy(routes: list[dict]) -> bool:
-    """Push the updated routes to Caddy via the Admin API."""
-    # Build the full config patch: only update the internal-server routes
-    config_patch = {
-        "apps": {
-            "http": {
-                "servers": {
-                    "internal-server": {
-                        "routes": routes,
-                    }
-                }
-            }
-        }
-    }
+    """Push the updated routes to Caddy via the Admin API.
 
+    Fetches the full current config, updates only the internal-server routes,
+    then pushes the complete config back to avoid overwriting other servers
+    (http-server, https-server, TLS, PKI, logging, etc.).
+    """
+    # 1. Fetch the current full config from Caddy
+    resp = requests.get(
+        f"{CADDY_ADMIN_URL}/config/",
+        headers={"Content-Type": "application/json"},
+    )
+    if resp.status_code != 200:
+        print(f"  ERROR: Failed to fetch current Caddy config: HTTP {resp.status_code}")
+        print(f"  Response: {resp.text}")
+        return False
+
+    full_config = resp.json()
+    print(f"  ✓ Fetched current Caddy config")
+
+    # 2. Walk the config down to the internal-server and update its routes.
+    #    Create intermediate keys if they don't already exist.
+    apps = full_config.setdefault("apps", {})
+    http_app = apps.setdefault("http", {})
+    servers = http_app.setdefault("servers", {})
+    internal = servers.setdefault("internal-server", {})
+    internal["routes"] = routes
+
+    # 3. Push the complete config back using PATCH (which merges with Caddy's state)
     resp = requests.patch(
         f"{CADDY_ADMIN_URL}/config",
-        json=config_patch,
+        json=full_config,
         headers={"Content-Type": "application/json"},
     )
 
