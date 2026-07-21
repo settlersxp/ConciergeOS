@@ -209,8 +209,9 @@ def build_caddy_routes(deny_rules: list[dict]) -> list[dict]:
 
     Order:
       1. Static assets (always allowed)
-      2. Deny rules (from mapping)
-      3. Catch-all proxy to frontend
+      2. Full-access bypass (users with role:full-access skip deny rules)
+      3. Deny rules (from mapping)
+      4. Catch-all proxy to frontend
     """
     # Static assets route (always first)
     static_assets_route = {
@@ -251,6 +252,31 @@ def build_caddy_routes(deny_rules: list[dict]) -> list[dict]:
         "terminal": True,
     }
 
+    # Full-access bypass route (users with role:full-access skip all deny rules)
+    # This route matches ALL paths for users with the full-access role and proxies them through
+    full_access_bypass_route = {
+        "handle": [
+            {
+                "handler": "reverse_proxy",
+                "upstreams": [
+                    {
+                        "dial": "frontend:80"
+                    }
+                ],
+            }
+        ],
+        "match": [
+            {
+                "header_regexp": {
+                    "X-Forwarded-Groups": {
+                        "pattern": ".*role:full-access.*"
+                    }
+                }
+            }
+        ],
+        "terminal": True,
+    }
+
     # Catch-all proxy (always last)
     catch_all_route = {
         "handle": [
@@ -265,7 +291,7 @@ def build_caddy_routes(deny_rules: list[dict]) -> list[dict]:
         ],
     }
 
-    return [static_assets_route] + deny_rules + [catch_all_route]
+    return [static_assets_route, full_access_bypass_route] + deny_rules + [catch_all_route]
 
 
 # ------------------------------------------------------------------
