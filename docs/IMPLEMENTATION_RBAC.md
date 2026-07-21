@@ -1,7 +1,7 @@
 # Role-Based Access Control (RBAC) Implementation Plan
 
 > **Status:** Draft — pending refinement
-> **Objective:** Replace the current group-based access model with a fine-grained role-based architecture using Keycloak roles, oauth2-proxy role extraction, and Caddy path-based enforcement — without modifying frontend or backend code. Role changes in Keycloak are automatically synced to Caddy via a polling-based sync service.
+> **Objective:** Replace the current group-based access model with a fine-grained role-based architecture using Keycloak roles, oauth2-proxy role extraction, and Caddy path-based enforcement — without modifying frontend or backend code. Role changes in Keycloak are automatically synced to Caddy via a polling-based sync service. User/session changes are detected and sessions are force-logged-out via Valkey server-side session storage.
 
 ---
 
@@ -10,6 +10,7 @@
 1. [Current State](#1-current-state)
 2. [Target State](#2-target-state)
 3. [Architecture](#3-architecture)
+   - [3.1 Session Invalidation (Force Logout)](#31-session-invalidation-force-logout)
 4. [Role Naming Convention](#4-role-naming-convention)
 5. [Component Changes](#5-component-changes)
    - [5.1 Keycloak Setup Script](#51-keycloak-setup-script-dockerkeycloak_setuppy)
@@ -61,6 +62,7 @@ Browser → Caddy (443) → oauth2-proxy (4182) → Caddy internal (8000) → fr
 4. **Scalable** — adding a new permission requires 1 role in Keycloak + 1 entry in mapping file (sync is automatic)
 5. **Realm switching** — controlled via environment variable for testing/production parity
 6. **Auto-sync** — role changes in Keycloak are automatically propagated to Caddy via a polling sync service
+7. **Session invalidation** — deleted users are detected via `/userinfo` returning 401 (within `cookie_refresh` interval), with optional Valkey session store for immediate force logout
 
 ### Target Access Model
 
@@ -70,6 +72,7 @@ Browser → Caddy (443) → oauth2-proxy (4182) → Caddy internal (8000) → fr
 | oauth2-proxy | `allowed_groups = ["*"]` (deny-by-default pushed to Caddy) | Roles auto-extracted with `role:` prefix into `X-Forwarded-Groups` |
 | Role Sync Service | Polls Keycloak Admin Events API | Detects role CRUD operations, generates Caddy routes, pushes via Caddy Admin API |
 | Caddy | Explicit role-to-path deny rules (auto-generated) | `header_regexp` matches `role:<name>` patterns, deny-by-default |
+| Valkey (optional) | Server-side session store | Enables immediate force logout by deleting sessions when user deleted/terminated |
 
 ---
 
@@ -157,6 +160,122 @@ This means `X-Forwarded-Groups` will contain values like:
 | Recommendation | ✅ **Preferred** | Use if multi-client isolation needed |
 
 **Decision:** Use **realm roles** for simplicity. Shorter header values, simpler Caddy regex patterns.
+
+### 3.1 Session Invalidation (Force Logout)
+
+#### Problem Statement
+
+When a user is deleted from Keycloak, or their session is manually terminated (e.g., via admin console or API), the user can **continue accessing the application** until their oauth2-proxy cookie expires. This is because:
+
+1. oauth2-proxy stores session state in **browser cookies** by default (no server-side store)
+2. Cookies cannot be revoked server-side — they persist until expiry (`cookie_expire = "1h"`)
+3. Role route updates via the sync service only affect **new** requests with updated headers, not existing cookies
+
+#### Detection Mechanism: Keycloak `/userinfo` Returns 401
+
+**Discovery:** When a user is deleted from Keycloak (or their session terminated), the Keycloak `/userinfo` endpoint returns `HTTP 401 Unauthorized`.
+
+```
+GET /auth/realms/{realm}/protocol/openid-connect/userinfo
+Authorization: Bearer <valid_jwt_token>
+
+Response: HTTP 401 (user no longer exists or session expired)
+```
+
+**How oauth2-proxy uses this:** The `cookie_refresh` setting controls how often oauth2-proxy calls the `/userinfo` endpoint (via `ValidateURL`) to validate the session. On each validation:
+
+1. oauth2-proxy calls `GET /userinfo` with the current access token
+2. If the response is `HTTP 200`, the session is valid — tokens are refreshed
+3. If the response is `HTTP 401` (user deleted/session terminated), oauth2-proxy **invalidates the session** and redirects to login
+
+**Default behavior with `cookie_refresh = "1m"`:** A deleted user will be detected and forced to log out within **~1 minute** (bounded by the refresh interval).
+
+#### Limitation: Cookie-Only Session Storage
+
+With the default cookie-based session storage in oauth2-proxy:
+
+| Aspect | Behavior |
+|--------|----------|
+| Detection mechanism | `ValidateURL` calls `/userinfo` every `cookie_refresh` interval |
+| Max detection delay | `cookie_refresh` duration (1 minute with current config) |
+| Server-side invalidation | **Not possible** — cookies are client-side |
+| Immediate force logout | **Not possible** without Valkey session store |
+
+**The `cookie_refresh = "1m"` setting already provides bounded detection.** Reducing it further (e.g., `30s`) increases detection speed but also increases load on Keycloak's `/userinfo` endpoint.
+
+#### Optional: Real-Time Force Logout with Valkey Session Store
+
+If **immediate** force logout is required (e.g., for security-sensitive environments), oauth2-proxy supports **server-side session storage** via Valkey. This enables the sync service to actively delete sessions from Valkey when a user is deleted or session terminated.
+
+##### Architecture with Valkey
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│  Keycloak          Role Sync Service              Valkey        oauth2-proxy │
+│  ┌──────────┐     (extended polling)        ┌──────────┐   ┌──────────┐    │
+│  │          │ 1. Admin deletes user         │          │   │          │    │
+│  │  Events  │ ──────────────────────────→   │  Session │   │  Session │    │
+│  │  API     │     (USER_DELETE,             │  Store   │   │  Validation│   │
+│  │          │      SESSION_REMOVE)          │          │   │          │    │
+│  │          │ 2. Sync service detects       │          │   │          │    │
+│  │          │ ──────────────────────────→   │  DELETE  │←──│  CHECK   │    │
+│  │          │     session invalidation       │  session │   │  on req  │    │
+│  │          │                               │          │   │          │    │
+│  └──────────┘                               └──────────┘   └──────────┘    │
+│                                                                             │
+│  Result: User is immediately logged out on next request (session gone).     │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+##### Required Changes for Valkey Session Store
+
+**oauth2-proxy configuration** (`docker/oidc-main.toml`):
+
+```toml
+# ADD these lines:
+session_store_type = "redis"
+session_store_clients = ["valkey:6379"]
+session_store_redis_options = "{\"Password\":\"\",\"DB\":0}"
+```
+
+**Docker Compose** — add Valkey service:
+
+```yaml
+valkey:
+  image: valkey/valkey:alpine
+  container_name: valkey
+  restart: unless-stopped
+  networks:
+    - app-network
+```
+
+**Role sync service** — extend event filtering:
+
+```python
+# ADD these event types to the filter:
+USER_EVENTS = ["USER_DELETE", "SESSION_REMOVE", "LOGIN_FAILURE"]  # Extend as needed
+
+# When detected, find all sessions in Valkey for the user and delete them:
+def invalidate_user_sessions(user_id: str, valkey_client):
+    """Delete all oauth2-proxy sessions for a given user."""
+    # oauth2-proxy stores sessions as: _oauth2-proxy:<hash>
+    # Scan for sessions containing the user_id and delete
+    for key in valkey_client.scan_iter(match=f"*{user_id}*"):
+        valkey_client.delete(key)
+```
+
+##### Trade-off: Valkey vs Cookie-Only
+
+| Factor | Cookie-Only (current) | Valkey (optional) |
+|--------|------------------------|-------------------|
+| Detection delay | Up to `cookie_refresh` (~1 min) | Near-instant (next request) |
+| Infrastructure | None | Additional Valkey container |
+| Complexity | Low | Medium (sync service extension) |
+| Scalability | Stateless oauth2-proxy | Shared state via Valkey |
+| Recommendation | ✅ **Start here** | Add if immediate invalidation required |
+
+**Recommendation:** Start with cookie-only (rely on `cookie_refresh = "1m"` for detection). Add Valkey session store in a follow-on phase if immediate force logout becomes a requirement.
 
 ---
 
@@ -815,7 +934,17 @@ For organizations that prefer tier-based management (e.g., "receptionist", "mana
 | Role in mapping but not in Keycloak | Sync service logs warning, route skipped |
 | ETag handling | Caddy returns 304 when no config changes; sync service handles gracefully |
 
-### 9.4 Manual Verification Steps
+### 9.4 Session Invalidation Tests
+
+| Test | Assertion |
+|------|-----------|
+| User deleted from Keycloak | User forced to login within `cookie_refresh` interval (~1 min) |
+| User session terminated in Keycloak | User forced to login within `cookie_refresh` interval |
+| `/userinfo` returns 401 | oauth2-proxy invalidates session, redirects to login |
+| (Valkey) User deleted from Keycloak | Session deleted from Valkey immediately, user logged out on next request |
+| (Valkey) SESSION_REMOVE event | Sync service detects event, deletes session from Valkey |
+
+### 9.5 Manual Verification Steps
 
 1. Start all services: `docker compose up -d`
 2. Run setup script: `docker run --rm --network docker_app-network -v "$(pwd)/docker":/work python:3.12-slim bash -c "cd /work && pip install requests -q && python3 keycloak_setup.py keycloak 8080"`
@@ -890,3 +1019,5 @@ For organizations that prefer tier-based management (e.g., "receptionist", "mana
 | `docker/rbac_routes.yaml` | **Create** | Role-to-path mapping: YAML file that maps role names to protected Caddy paths |
 | `docker/README.md` | Modify | Update architecture diagram, role naming convention, user access matrix, setup instructions |
 | `docs/IMPLEMENTATION_RBAC.md` | Create | This document |
+| `docker/docker-compose.yaml` | Modify (optional) | Add Valkey service for immediate session invalidation |
+| `docker/oidc-main.toml` | Modify (optional) | Add `session_store_type = "redis"` for immediate session invalidation (Valkey is protocol-compatible) |
