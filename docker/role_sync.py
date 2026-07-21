@@ -189,7 +189,7 @@ def generate_deny_rules(mapping: list[dict], available_roles: set[str]) -> list[
                         {
                         "header_regexp": {
                             "X-Forwarded-Groups": {
-                                "pattern": f".*{role_name}.*"
+                                "pattern": f".*role:{role_name}.*"
                             }
                         }
                         }
@@ -429,25 +429,44 @@ def main() -> None:
 
     # Wait for Keycloak and Caddy to be ready
     print("Waiting for Keycloak and Caddy to be ready...")
-    max_retries = 30
+    max_retries = 60
     retry_delay = 2
+    caddy_ready = False
+    keycloak_ready = False
 
     for attempt in range(max_retries):
-        try:
-            # Check if Caddy admin API is reachable
-            resp = requests.get(f"{CADDY_ADMIN_URL}/config", timeout=3)
-            if resp.status_code == 200:
-                print("  ✓ Caddy admin API is ready")
-                break
-        except requests.RequestException:
-            pass
+        # Check if Caddy admin API is reachable
+        if not caddy_ready:
+            try:
+                resp = requests.get(f"{CADDY_ADMIN_URL}/config", timeout=3)
+                if resp.status_code == 200:
+                    print("  ✓ Caddy admin API is ready")
+                    caddy_ready = True
+            except requests.RequestException:
+                pass
+
+        # Check if Keycloak is reachable
+        if not keycloak_ready:
+            try:
+                resp = requests.get(f"{KEYCLOAK_URL}/realms/master", timeout=3)
+                if resp.status_code == 200:
+                    print("  ✓ Keycloak is ready")
+                    keycloak_ready = True
+            except requests.RequestException:
+                pass
+
+        if caddy_ready and keycloak_ready:
+            break
 
         if attempt % 5 == 0 and attempt > 0:
             print(f"  Waiting... (attempt {attempt + 1}/{max_retries})")
 
         time.sleep(retry_delay)
     else:
-        print("  ERROR: Caddy admin API did not become ready in time.")
+        if not caddy_ready:
+            print("  ERROR: Caddy admin API did not become ready in time.")
+        if not keycloak_ready:
+            print("  ERROR: Keycloak did not become ready in time.")
         sys.exit(1)
 
     # Perform initial sync
