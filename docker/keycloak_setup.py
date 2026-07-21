@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Keycloak Setup Script for ConciergeOS.
 
-Provisions realms, users, groups, and client configuration for ConciergeOS.
+Provisions realms, users, roles, and client configuration for ConciergeOS.
 Usage: python keycloak_setup.py [keycloak_host] [keycloak_port]
 Example: python keycloak_setup.py localhost 8080
 """
@@ -18,7 +18,6 @@ import requests
 # ------------------------------------------------------------------
 
 REALMS = ["testing", "production"]
-GROUPS = ["single", "all"]
 CLIENT_ID = "concierge"
 CLIENT_SECRET = "changeme"
 # oauth2-proxy redirect URI (must match oidc-main.toml)
@@ -27,9 +26,36 @@ OIDC_MAIN_REDIRECT_URI = "https://out-customer.com/oauth2/callback"
 _actual_client_secret = CLIENT_SECRET
 POST_LOGOUT_URI = "https://out-customer.com/"
 
+# ------------------------------------------------------------------
+# Role Definitions
+# ------------------------------------------------------------------
+
+ROLES = {
+    "reservations:view":        "Read-only reservation access",
+    "reservations:write":       "Modify reservation data",
+    "guest-search:view":        "Search for guests",
+    "guest-search:extract":     "Extract names from media",
+    "performance:view":         "View performance results",
+    "performance:run":          "Execute/manage performance tests",
+    "settings:view":            "View and edit application settings",
+    "models:admin":             "Full LLM model management",
+    "prompts:admin":            "Full prompt management",
+}
+
+# Composite role that inherits all granular roles
+COMPOSITE_ROLES = {
+    "full-access": list(ROLES.keys()),
+}
+
 USERS = {
-    "user1": {"password": "password1", "group": "single"},
-    "user2": {"password": "password2", "group": "all"},
+    "user1": {
+        "password": "password1",
+        "roles": ["reservations:view", "guest-search:view"],
+    },
+    "user2": {
+        "password": "password2",
+        "roles": ["full-access"],
+    },
 }
 
 
@@ -62,7 +88,7 @@ def api_request(
     method: str,
     url: str,
     token: str,
-    payload: dict | None = None,
+    payload: dict | list | None = None,
 ) -> requests.Response:
     """Make an API request to Keycloak admin API."""
     return requests.request(
@@ -82,87 +108,158 @@ def api_request(
 
 
 def create_realms(base_url: str, token: str) -> None:
-    """Create realms: testing, production."""
+    """Create realms: testing, production.
+
+    Enables admin events and user events on each realm so that the
+    role-sync service can poll the /admin/realms/{realm}/events endpoint.
+    """
     print("[2/8] Creating realms...")
+    headers = {"Authorization": f"Bearer {token}"}
     for realm in REALMS:
         resp = requests.get(
             f"{base_url}/admin/realms/{realm}",
-            headers={"Authorization": f"Bearer {token}"},
+            headers=headers,
         )
         if resp.status_code == 200:
-            print(f"  ⏭ Realm {realm} already exists, skipping")
+            print(f"  ⏭ Realm {realm} already exists, ensuring events enabled")
+            # Ensure events are enabled on existing realms
+            _ensure_events_enabled(base_url, token, realm)
             continue
         resp = api_request("POST", f"{base_url}/admin/realms", token, {
             "realm": realm,
             "enabled": True,
+            "adminEventsEnabled": True,
+            "eventsEnabled": True,
+            "eventsExpiration": 43200,  # 12 hours
         })
         resp.raise_for_status()
-        print(f"  ✓ Realm {realm} created")
+        print(f"  ✓ Realm {realm} created (events enabled)")
     print()
 
 
+def _ensure_events_enabled(base_url: str, token: str, realm: str) -> None:
+    """Enable admin and user events on an existing realm.
+
+    Keycloak 26 requires a full PUT (not PATCH) to update realm config.
+    """
+    headers = {"Authorization": f"Bearer {token}"}
+    realm_url = f"{base_url}/admin/realms/{realm}"
+
+    # Read current realm config
+    resp = requests.get(realm_url, headers=headers)
+    resp.raise_for_status()
+    config = resp.json()
+
+    admin_events = config.get("adminEventsEnabled", False)
+    user_events = config.get("eventsEnabled", False)
+
+    if admin_events and user_events:
+        return  # Already enabled
+
+    # Merge event settings into full config
+    config["adminEventsEnabled"] = True
+    config["eventsEnabled"] = True
+    config.setdefault("eventsExpiration", 43200)
+
+    # PUT full config back (Keycloak 26 does not support PATCH for realms)
+    resp = requests.put(realm_url, headers=headers, json=config)
+    resp.raise_for_status()
+    print(f"    ✓ Events enabled for {realm}")
+
+
 # ------------------------------------------------------------------
-# 3. Create Groups
+# 3. Create Roles
 # ------------------------------------------------------------------
 
 
-def create_group(base_url: str, token: str, realm: str, group_name: str) -> str:
-    """Create a group in a realm. Returns the group ID."""
-    # Search for existing group
+def create_role(base_url: str, token: str, realm: str, role_name: str, description: str = "") -> str:
+    """Create a realm role. Returns the role name (Keycloak roles are identified by name)."""
+    # Check if role exists
     resp = requests.get(
-        f"{base_url}/admin/realms/{realm}/groups",
-        params={"first": 0, "max": 100, "q": group_name},
+        f"{base_url}/admin/realms/{realm}/roles/{role_name}",
         headers={"Authorization": f"Bearer {token}"},
     )
-    resp.raise_for_status()
-    groups = resp.json()
-    match = [g for g in groups if g["name"] == group_name]
-
-    if match:
-        print(f"    ⏭ Group {group_name} already exists")
-        return match[0]["id"]
+    if resp.status_code == 200:
+        print(f"    ⏭ Role {role_name} already exists")
+        return role_name
 
     resp = api_request(
         "POST",
-        f"{base_url}/admin/realms/{realm}/groups",
+        f"{base_url}/admin/realms/{realm}/roles",
         token,
-        {"name": group_name},
+        {
+            "name": role_name,
+            "description": description,
+        },
     )
-    resp.raise_for_status()
-    group_id = resp.headers.get("Location", "").split("/")[-1]
-    if not group_id:
-        # Fallback: query by group name
+    if resp.status_code in (201, 204):
+        print(f"    ✓ Role {role_name} created")
+    else:
+        print(f"    ⚠ Failed to create role {role_name}: {resp.status_code} {resp.text}")
+    return role_name
+
+
+def create_composite_role(
+    base_url: str,
+    token: str,
+    realm: str,
+    role_name: str,
+    composite_role_names: list[str],
+) -> str:
+    """Create a composite role that inherits from the given composite roles."""
+    # First create the role itself
+    create_role(base_url, token, realm, role_name, f"Composite role: {', '.join(composite_role_names)}")
+
+    # Get the composite role IDs
+    composite_role_ids = []
+    for comp_name in composite_role_names:
         resp = requests.get(
-            f"{base_url}/admin/realms/{realm}/groups",
-            params={"first": 0, "max": 100, "q": group_name},
+            f"{base_url}/admin/realms/{realm}/roles/{comp_name}",
             headers={"Authorization": f"Bearer {token}"},
         )
-        resp.raise_for_status()
-        match = [g for g in resp.json() if g["name"] == group_name]
-        if match:
-            group_id = match[0]["id"]
+        if resp.status_code == 200:
+            composite_role_ids.append(resp.json().get("id"))
 
-    if not group_id:
-        print(f"    ⚠ Could not extract group ID for {group_name}")
-        return ""
-    print(f"    ✓ Group {group_name} created (id: {group_id[:8]}...)")
-    return group_id
+    # Set composites
+    if composite_role_ids:
+        resp = api_request(
+            "PUT",
+            f"{base_url}/admin/realms/{realm}/roles/{role_name}/composites",
+            token,
+            composite_role_ids,
+        )
+        # PUT returns 204 No Content on success
+        if resp.status_code in (200, 204):
+            print(f"    ✓ Composite role {role_name} configured with {len(composite_role_ids)} sub-roles")
+        else:
+            print(f"    ⚠ Failed to configure composites for {role_name}: {resp.status_code}")
+
+    return role_name
 
 
-def create_all_groups(base_url: str, token: str) -> dict[str, dict[str, str]]:
-    """Create groups in all realms. Returns {realm: {group_name: group_id}}."""
-    print("[3/8] Creating groups in realms...")
-    group_ids: dict[str, dict[str, str]] = {}
+def create_all_roles(base_url: str, token: str) -> dict[str, dict[str, str]]:
+    """Create roles in all realms. Returns {realm: {role_name: role_data}}."""
+    print("[3/8] Creating roles in realms...")
+    role_data: dict[str, dict[str, str]] = {}
 
     for realm in REALMS:
         print(f"  Realm: {realm}")
-        group_ids[realm] = {}
-        for group_name in GROUPS:
-            group_ids[realm][group_name] = create_group(
-                base_url, token, realm, group_name
+        role_data[realm] = {}
+
+        # Create granular roles
+        for role_name, description in ROLES.items():
+            role_data[realm][role_name] = create_role(
+                base_url, token, realm, role_name, description
             )
+
+        # Create composite roles
+        for composite_name, sub_roles in COMPOSITE_ROLES.items():
+            role_data[realm][composite_name] = create_composite_role(
+                base_url, token, realm, composite_name, sub_roles
+            )
+
     print()
-    return group_ids
+    return role_data
 
 
 # ------------------------------------------------------------------
@@ -237,68 +334,84 @@ def create_all_users(base_url: str, token: str) -> dict[str, dict[str, str]]:
 
 
 # ------------------------------------------------------------------
-# 5. Assign Users to Groups
+# 5. Assign Users to Roles
 # ------------------------------------------------------------------
 
 
-def assign_user_to_group(
+def assign_user_to_roles(
     base_url: str,
     token: str,
     realm: str,
     user_id: str,
-    group_id: str,
+    role_names: list[str],
     username: str,
-    group_name: str,
 ) -> None:
-    """Assign a user to a group."""
-    if not user_id or not group_id:
-        print(f"    ⚠ Skipping {username} -> {group_name} (missing IDs)")
+    """Assign a user to realm roles."""
+    if not user_id:
+        print(f"    ⚠ Skipping {username} (missing user ID)")
         return
 
-    # Check if already assigned (Keycloak returns 200 if member, 404 if not)
+    # Get all roles with their IDs and realm_access structure
     resp = requests.get(
-        f"{base_url}/admin/realms/{realm}/users/{user_id}/groups/{group_id}",
+        f"{base_url}/admin/realms/{realm}/roles",
         headers={"Authorization": f"Bearer {token}"},
     )
+    resp.raise_for_status()
+    all_roles = {r["name"]: r for r in resp.json()}
 
-    if resp.status_code == 200:
-        print(f"    ⏭ {username} already in {group_name}")
-        return
-
-    resp = api_request(
-        "PUT",
-        f"{base_url}/admin/realms/{realm}/users/{user_id}/groups/{group_id}",
-        token,
-        {},
+    # Check existing role mappings
+    resp = requests.get(
+        f"{base_url}/admin/realms/{realm}/users/{user_id}/role-mappings/realm",
+        headers={"Authorization": f"Bearer {token}"},
     )
-    # PUT returns 204 No Content on success
-    if resp.status_code in (200, 204):
-        print(f"    ✓ {username} -> {group_name}")
-    else:
-        print(f"    ⚠ Could not assign {username} to {group_name}: {resp.status_code}")
+    resp.raise_for_status()
+    existing_roles = {r["name"] for r in resp.json()}
+
+    # Assign missing roles
+    roles_payload = []
+    for role_name in role_names:
+        if role_name in existing_roles:
+            print(f"    ⏭ {username} already has {role_name}")
+            continue
+        if role_name in all_roles:
+            roles_payload.append({
+                "id": all_roles[role_name]["id"],
+                "name": role_name,
+            })
+
+    if roles_payload:
+        resp = api_request(
+            "POST",
+            f"{base_url}/admin/realms/{realm}/users/{user_id}/role-mappings/realm",
+            token,
+            roles_payload,
+        )
+        if resp.status_code in (200, 204, 201):
+            role_list = ", ".join(r["name"] for r in roles_payload)
+            print(f"    ✓ {username} → {role_list}")
+        else:
+            print(f"    ⚠ Could not assign roles to {username}: {resp.status_code}")
 
 
-def assign_all_users_to_groups(
+def assign_all_users_to_roles(
     base_url: str,
     token: str,
     user_ids: dict[str, dict[str, str]],
-    group_ids: dict[str, dict[str, str]],
+    role_data: dict[str, dict[str, str]],
 ) -> None:
-    """Assign all users to their respective groups in all realms."""
-    print("[5/8] Assigning users to groups...")
+    """Assign all users to their respective roles in all realms."""
+    print("[5/8] Assigning users to roles...")
 
     for realm in REALMS:
         print(f"  Realm: {realm}")
         for username, config in USERS.items():
-            group_name = config["group"]
-            assign_user_to_group(
+            assign_user_to_roles(
                 base_url,
                 token,
                 realm,
                 user_ids[realm][username],
-                group_ids[realm][group_name],
+                config["roles"],
                 username,
-                group_name,
             )
     print()
 
@@ -406,13 +519,17 @@ def create_all_clients(base_url: str, token: str) -> dict[str, str]:
 
 
 # ------------------------------------------------------------------
-# 7. Configure Client Scopes
+# 7. Configure Client (Roles in Access Token)
 # ------------------------------------------------------------------
 
 
-def configure_groups_claim(base_url: str, token: str, realm: str, client_uuid: str) -> None:
-    """Ensure groups claim is included in ID token."""
-    print(f"  Configuring groups claim for {realm}...")
+def configure_role_claim(base_url: str, token: str, realm: str, client_uuid: str) -> None:
+    """Ensure realm roles are included in the access token.
+    
+    Roles are included in the access token by default in Keycloak, but we
+    verify a mapper exists to ensure the claim is always emitted.
+    """
+    print(f"  Configuring role claim for {realm}...")
 
     # Get existing protocol mappers
     resp = requests.get(
@@ -421,43 +538,47 @@ def configure_groups_claim(base_url: str, token: str, realm: str, client_uuid: s
     )
     resp.raise_for_status()
     mappers = resp.json()
-    has_groups = any(m["name"] == "groups" for m in mappers)
+    has_role_mapper = any(
+        m["protocolMapper"] == "oidc-usermodel-realm-role-mapper"
+        for m in mappers
+    )
 
-    if has_groups:
-        print("    ⏭ Groups mapper already exists")
+    if has_role_mapper:
+        print("    ⏭ Realm role mapper already exists")
         return
 
     resp = api_request(
         "POST",
         f"{base_url}/admin/realms/{realm}/clients/{client_uuid}/protocol-mappers/models",
         token,
-            {
-                "name": "groups",
-                "protocol": "openid-connect",
-                "protocolMapper": "oidc-group-membership-mapper",
-                "config": {
-                "claim.name": "groups",
-                "id.token.claim": "true",
+        {
+            "name": "realm-roles",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-realm-role-mapper",
+            "config": {
                 "access.token.claim": "true",
                 "userinfo.token.claim": "true",
+                "id.token.claim": "false",
+                "claim.name": "realm_access.roles",
+                "jsonType.label": "String",
                 "multivalued": "true",
             },
         },
     )
     resp.raise_for_status()
-    print("    ✓ Groups mapper created")
+    print("    ✓ Realm role mapper created")
 
 
-def configure_all_groups_claims(
+def configure_all_role_claims(
     base_url: str,
     token: str,
     client_uuids: dict[str, str],
 ) -> None:
-    """Configure groups claim for all realms."""
-    print("[7/8] Configuring groups claim in ID token...")
+    """Configure role claim for all realms."""
+    print("[7/8] Configuring role claim in access token...")
 
     for realm in REALMS:
-        configure_groups_claim(base_url, token, realm, client_uuids[realm])
+        configure_role_claim(base_url, token, realm, client_uuids[realm])
     print()
 
 
@@ -468,7 +589,6 @@ def configure_all_groups_claims(
 
 def update_oidc_configs(actual_secret: str) -> None:
     """Update oidc-main.toml with the actual Keycloak client secret."""
-    import os
     script_dir = os.path.dirname(os.path.abspath(__file__))
     for toml_file in ["oidc-main.toml"]:
         filepath = os.path.join(script_dir, toml_file)
@@ -491,9 +611,17 @@ def print_summary(base_url: str, admin_user: str, admin_pass: str, actual_secret
     print("=== Setup Complete ===")
     print()
     print(f"Realms created: {', '.join(REALMS)}")
+    print()
+    print("Roles created:")
+    for role_name, description in ROLES.items():
+        print(f"  {role_name}: {description}")
+    for composite_name, sub_roles in COMPOSITE_ROLES.items():
+        print(f"  {composite_name}: (composite of {len(sub_roles)} roles)")
+    print()
     print("Users per realm:")
     for username, config in USERS.items():
-        print(f"  {username} (password: {config['password']}) -> group: {config['group']}")
+        role_list = ", ".join(config["roles"])
+        print(f"  {username} (password: {config['password']}) → roles: {role_list}")
     print()
     print(f"Client: {CLIENT_ID} (confidential, PKCE enabled)")
     print(f"Client Secret: {actual_secret}")
@@ -504,9 +632,11 @@ def print_summary(base_url: str, admin_user: str, admin_pass: str, actual_secret
     print(f"  URL: {base_url}/admin")
     print(f"  Login: {admin_user} / {admin_pass}")
     print()
-    print("Access Control:")
-    print("  - Group 'single': access to /settings only")
-    print("  - Group 'all': access to all pages")
+    print("Access Control (Role-Based):")
+    print("  - Roles are extracted from access token by oauth2-proxy")
+    print("  - X-Forwarded-Groups header contains 'role:<name>' values")
+    print("  - Caddy enforces path-level access via header_regexp rules")
+    print("  - Role sync service auto-propagates role changes to Caddy")
     print()
 
 
@@ -518,7 +648,7 @@ def print_summary(base_url: str, admin_user: str, admin_pass: str, actual_secret
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Keycloak Setup for ConciergeOS. "
-        "Provisions realms, users, groups, and client configuration."
+        "Provisions realms, users, roles, and client configuration."
     )
     parser.add_argument(
         "host",
@@ -549,20 +679,20 @@ def main() -> None:
     # 2. Create realms
     create_realms(base_url, token)
 
-    # 3. Create groups
-    group_ids = create_all_groups(base_url, token)
+    # 3. Create roles (replaces groups)
+    role_data = create_all_roles(base_url, token)
 
     # 4. Create users
     user_ids = create_all_users(base_url, token)
 
-    # 5. Assign users to groups
-    assign_all_users_to_groups(base_url, token, user_ids, group_ids)
+    # 5. Assign users to roles (replaces group assignment)
+    assign_all_users_to_roles(base_url, token, user_ids, role_data)
 
     # 6. Create clients
     client_uuids = create_all_clients(base_url, token)
 
-    # 7. Configure groups claim
-    configure_all_groups_claims(base_url, token, client_uuids)
+    # 7. Configure role claim (replaces groups claim)
+    configure_all_role_claims(base_url, token, client_uuids)
 
     # 7.5 Update oidc configs with actual secret
     actual_secret = _actual_client_secret

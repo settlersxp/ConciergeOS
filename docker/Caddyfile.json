@@ -1,6 +1,6 @@
 {
 	"admin": {
-		"disabled": true
+		"listen": "0.0.0.0:2019"
 	},
 	"logging": {
 		"logs": {
@@ -147,56 +147,6 @@
 										"/*.ttf",
 										"/*.eot"
 									]
-								}
-							],
-							"terminal": true
-						},
-						{
-							"handle": [
-								{
-									"handler": "static_response",
-									"status_code": "403",
-									"body": "Access denied: /settings is not available for your account."
-								}
-							],
-							"match": [
-								{
-									"path": [
-										"/settings",
-										"/settings/*"
-									],
-									"header_regexp": {
-										"X-Forwarded-Groups": {
-											"pattern": ".*all.*"
-										}
-									}
-								}
-							],
-							"terminal": true
-						},
-						{
-							"handle": [
-								{
-									"handler": "static_response",
-									"status_code": "403",
-									"body": "Access denied: this page is not available for your account."
-								}
-							],
-							"match": [
-								{
-									"not": [
-										{
-											"path": [
-												"/settings",
-												"/settings/*"
-											]
-										}
-									],
-									"header_regexp": {
-										"X-Forwarded-Groups": {
-											"pattern": ".*single.*"
-										}
-									}
 								}
 							],
 							"terminal": true

@@ -6,6 +6,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "2019:2019"
     volumes:
       - ./Caddyfile.json:/etc/caddy/Caddyfile.json
       - caddy_data:/data
@@ -22,14 +23,38 @@ services:
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
     container_name: oidc-main
     restart: unless-stopped
-    extra_hosts:
-      - "out-customer.com:host-gateway"
     volumes:
       - ./oidc-main.toml:/cfg.toml
-    command: oauth2-proxy --config /cfg.toml
+    environment:
+      - OIDC_REALM=${OIDC_REALM:-production}
+    command: >
+      oauth2-proxy --config /cfg.toml
+      --oidc-issuer-url=http://keycloak:8080/auth/realms/${OIDC_REALM:-production}
     depends_on:
       - keycloak
       - frontend
+    networks:
+      - app-network
+
+  role-sync:
+    image: python:3.12-slim
+    container_name: role-sync
+    restart: unless-stopped
+    volumes:
+      - ./role_sync.py:/app/role_sync.py
+      - ./rbac_routes.yaml:/app/rbac_routes.yaml
+    environment:
+      - KEYCLOAK_URL=http://keycloak:8080/auth
+      - KEYCLOAK_REALM=${OIDC_REALM:-production}
+      - KEYCLOAK_ADMIN_USER=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - CADDY_ADMIN_URL=http://caddy:2019
+      - SYNC_INTERVAL=30
+    command: >
+      sh -c "pip install requests pyyaml -q && python3 -u /app/role_sync.py"
+    depends_on:
+      - keycloak
+      - caddy
     networks:
       - app-network
 
@@ -57,11 +82,13 @@ services:
     image: quay.io/keycloak/keycloak:26.0
     container_name: keycloak
     restart: unless-stopped
+    volumes:
+      - keycloak_data:/opt/keycloak/data
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
-      KC_HOSTNAME: "https://out-customer.com/auth"
-      KC_HOSTNAME_STRICT: "true"
+      KC_HOSTNAME: "http://keycloak:8080/auth"
+      KC_HOSTNAME_STRICT_HTTP: "true"
       KC_HTTP_RELATIVE_PATH: /auth
       KC_HTTP_ENABLED: "true"
     command: start-dev
@@ -73,6 +100,7 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  keycloak_data:
 
 networks:
   app-network:
