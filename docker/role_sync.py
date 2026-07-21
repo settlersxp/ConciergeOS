@@ -187,11 +187,11 @@ def generate_deny_rules(mapping: list[dict], available_roles: set[str]) -> list[
                     "path": paths,
                     "not": [
                         {
-                            "header_regexp": {
-                                "X-Forwarded-Groups": {
-                                    "pattern": f".*role:{role_name}.*"
-                                }
+                        "header_regexp": {
+                            "X-Forwarded-Groups": {
+                                "pattern": f".*{role_name}.*"
                             }
+                        }
                         }
                     ],
                 }

@@ -8,7 +8,7 @@ Validates that:
 3. Both configs are consistent with each other
 4. The Keycloak OIDC discovery endpoint is reachable via the public domain
 5. The discovery endpoint returns HTTPS URLs (not internal Docker hostnames)
-6. The oauth2-proxy /oauth2/sign_in endpoint redirects to Keycloak (not internal hostname)
+6. The oauth2-proxy /oauth2/start endpoint redirects to Keycloak (not internal hostname)
 
 These tests make REAL HTTP calls — no mocking. The Docker stack must be running.
 
@@ -262,29 +262,32 @@ class TestAuthorizationEndpoint:
 
 class TestSignInRedirect:
 
-    def test_sign_in_redirects_to_keycloak(self):
+    def test_start_redirects_to_keycloak(self):
         """
-        Hitting /oauth2/sign_in must redirect to Keycloak's authorization
+        Hitting /oauth2/start must redirect (302) to Keycloak's authorization
         endpoint. The redirect Location must be a public URL.
-        """
-        sign_in_url = f"{PUBLIC_BASE}/oauth2/sign_in"
 
-        resp = requests.get(sign_in_url, timeout=10, verify=False, allow_redirects=False)
+        Note: /oauth2/sign_in renders an HTML page (200) with a login button,
+        whereas /oauth2/start directly initiates the OAuth2 flow with a 302.
+        """
+        start_url = f"{PUBLIC_BASE}/oauth2/start"
+
+        resp = requests.get(start_url, timeout=10, verify=False, allow_redirects=False)
 
         # Expect a 302 redirect
         assert resp.status_code == 302, \
-            f"Expected 302 redirect from /oauth2/sign_in, got {resp.status_code}"
+            f"Expected 302 redirect from /oauth2/start, got {resp.status_code}"
 
         location = resp.headers.get("Location", "")
         assert location, "Redirect Location header is empty"
 
-    def test_sign_in_redirect_no_internal_hostname(self):
+    def test_start_redirect_no_internal_hostname(self):
         """
         The redirect Location must NOT contain internal Docker hostnames.
         """
-        sign_in_url = f"{PUBLIC_BASE}/oauth2/sign_in"
+        start_url = f"{PUBLIC_BASE}/oauth2/start"
 
-        resp = requests.get(sign_in_url, timeout=10, verify=False, allow_redirects=False)
+        resp = requests.get(start_url, timeout=10, verify=False, allow_redirects=False)
         location = resp.headers.get("Location", "")
 
         forbidden = ["keycloak:", "localhost:8080", "172.", "192.168."]
@@ -292,25 +295,25 @@ class TestSignInRedirect:
             assert pattern not in location, \
                 f"Redirect contains internal hostname '{pattern}': {location}"
 
-    def test_sign_in_redirect_points_to_auth_endpoint(self):
+    def test_start_redirect_points_to_auth_endpoint(self):
         """
         The redirect Location must point to Keycloak's authorization endpoint.
         """
-        sign_in_url = f"{PUBLIC_BASE}/oauth2/sign_in"
+        start_url = f"{PUBLIC_BASE}/oauth2/start"
 
-        resp = requests.get(sign_in_url, timeout=10, verify=False, allow_redirects=False)
+        resp = requests.get(start_url, timeout=10, verify=False, allow_redirects=False)
         location = resp.headers.get("Location", "")
 
         assert "/protocol/openid-connect/auth" in location or "/auth/realms/" in location, \
             f"Redirect must point to Keycloak auth endpoint: {location}"
 
-    def test_sign_in_redirect_is_public_https(self):
+    def test_start_redirect_is_public_https(self):
         """
         The redirect Location must start with https://out-customer.com.
         """
-        sign_in_url = f"{PUBLIC_BASE}/oauth2/sign_in"
+        start_url = f"{PUBLIC_BASE}/oauth2/start"
 
-        resp = requests.get(sign_in_url, timeout=10, verify=False, allow_redirects=False)
+        resp = requests.get(start_url, timeout=10, verify=False, allow_redirects=False)
         location = resp.headers.get("Location", "")
 
         assert location.startswith("https://out-customer.com"), \
