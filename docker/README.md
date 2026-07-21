@@ -3,11 +3,22 @@
 ## Architecture
 
 ```
-Browser → Caddy (443) → frontend:80 → /api/* proxied to backend:8000
-                                    → all other routes → static SPA
+Browser → Caddy (443) → oauth2-proxy (oidc-main:4182) → Caddy internal (8000)
+                                                 ├─ static assets → frontend:80 (always allowed)
+                                                 ├─ /settings → deny if group "all"
+                                                 ├─ !/settings → deny if group "single"
+                                                 └─ allow → frontend:80
+                                                              → /api/* proxied to backend:8000
+                                                              → all other routes → static SPA
 ```
 
-- **Caddy**: Reverse proxy and HTTPS terminator (internal CA)
+- **Caddy (https-server)**: Reverse proxy and HTTPS terminator (internal CA), routes `/auth/*` to Keycloak and all other traffic to oauth2-proxy
+- **Caddy (internal-server)**: Internal server on port 8000 that enforces group-based access control using `X-Forwarded-Groups` header from oauth2-proxy:
+  - Static assets (`.css`, `.js`, fonts, images) are always allowed through to frontend
+  - Users in group `single`: access only `/settings` (403 on all other paths)
+  - Users in group `all`: access all pages (403 on `/settings`)
+- **oauth2-proxy (oidc-main)**: Handles OIDC authentication with Keycloak, passes user groups via `X-Forwarded-Groups` header
+- **Keycloak**: OIDC identity provider (realms: `testing`, `production`; users: `user1`→single, `user2`→all)
 - **Frontend**: Node.js static file server with built-in API proxy to backend
 - **Backend**: FastAPI application (not directly accessible from outside Docker network)
 
@@ -131,17 +142,100 @@ ports:
 Then access via `https://out-customer.com:8443`.
 
 ## Accepted tradeoff
-server.js is needed because without it caddy would have to serve the static files thus "/api/*" has to be exposed as well. Since the purpose of this feature is to secure FastAPI and expose only frontend, server.js was created.
 
-## Keycloak setup:
-They keycloak admin can be found at:
+`server.js` is needed because without it Caddy would have to serve the static files, thus `/api/*` would have to be exposed as well. Since the purpose of this setup is to secure FastAPI and expose only the frontend, `server.js` was created as a lightweight static file server with built-in API proxy.
+
+## Keycloak Setup
+
+The Keycloak admin console is available at:
 ```
 https://out-customer.com/auth/admin#/master
 ```
 
-To populate keycloak with users run:
+### Initial Keycloak Configuration
+
+Run the setup script from **inside the Docker network** to provision realms, users, groups, and clients:
+
+```bash
+docker run --rm --network docker_app-network \
+  -v "$(pwd)/docker":/work python:3.12-slim \
+  bash -c "cd /work && pip install requests -q && python3 keycloak_setup.py keycloak 8080"
 ```
-python keycloak_setup.py localhost 8080
-python update_oidc_secret.py localhost 8080
-docker compose restart oidc-main oidc-settings
+
+This creates:
+- **Realms**: `testing`, `production`
+- **Groups**: `single` (settings-only access), `all` (full access)
+- **Users**: `user1` (password: `password1`, group: `single`), `user2` (password: `password2`, group: `all`)
+- **Client**: `concierge` (confidential, PKCE S256, groups claim in ID token)
+
+**Important:** Keycloak 26 always generates a random client secret (ignoring any value passed in the request). The `keycloak_setup.py` script handles this automatically by reading back the generated secret after client creation and writing it to `oidc-main.toml`. No manual secret synchronization is needed.
+
+### Restart Services After Setup
+
+After running the setup script, restart oauth2-proxy to pick up the updated client secret:
+
+```bash
+docker compose restart oidc-main
 ```
+
+### Regenerating the Keycloak Configuration
+
+To completely reset and regenerate the Keycloak configuration from scratch:
+
+1. **Stop all services:**
+   ```bash
+   docker compose down
+   ```
+
+2. **Remove the Keycloak data volume** (this will delete all Keycloak data):
+   ```bash
+   docker volume rm docker_keycloak_data
+   ```
+   > Note: Check `docker volume ls` for the exact volume name. If you're using default Docker Compose volumes, the Keycloak container state is ephemeral (no persistent volume), so simply restarting is sufficient.
+
+3. **Reset the `oidc-main.toml` client secret** to `changeme` (placeholder value):
+   ```bash
+   sed -i.bak 's/client_secret = .*/client_secret = "changeme"/' docker/oidc-main.toml
+   ```
+
+4. **Start services fresh:**
+   ```bash
+   docker compose up -d
+   ```
+
+5. **Wait for Keycloak to start** (check logs):
+   ```bash
+   docker compose logs -f keycloak
+   ```
+   Wait until you see `KEYCLOAK_SKIP_INITIAL_HEALTH_CHECK=false` and the server is ready.
+
+6. **Run the setup script:**
+   ```bash
+   docker run --rm --network docker_app-network \
+     -v "$(pwd)/docker":/work python:3.12-slim \
+     bash -c "cd /work && pip install requests -q && python3 keycloak_setup.py keycloak 8080"
+   ```
+
+7. **Restart oauth2-proxy:**
+   ```bash
+   docker compose restart oidc-main
+   ```
+
+### Diagnostic Script
+
+To inspect Keycloak configuration (realms, users, groups, clients):
+
+```bash
+docker run --rm --network docker_app-network \
+  -v "$(pwd)/docker":/work python:3.12-slim \
+  bash -c "cd /work && pip install requests -q && python3 keycloak_diagnose.py"
+```
+
+### Users and Access Control
+
+| User   | Password  | Group    | Access                         |
+|--------|-----------|----------|--------------------------------|
+| user1  | password1 | single   | `/settings` only               |
+| user2  | password2 | all      | All pages (except `/settings`) |
+
+Access control is enforced by Caddy's internal server (port 8000) using the `X-Forwarded-Groups` header set by oauth2-proxy.

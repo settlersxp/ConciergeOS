@@ -59,38 +59,6 @@
 									"handler": "reverse_proxy",
 									"upstreams": [
 										{
-											"dial": "oidc-settings:4181"
-										}
-									],
-									"headers": {
-										"request": {
-											"set": {
-												"X-Forwarded-By": ["out-customer.com"],
-												"X-Forwarded-Proto": ["https"]
-											}
-										}
-									}
-								}
-							],
-							"match": [
-								{
-									"host": [
-										"out-customer.com"
-									],
-									"path": [
-										"/settings",
-										"/settings/*"
-									]
-								}
-							],
-							"terminal": true
-						},
-						{
-							"handle": [
-								{
-									"handler": "reverse_proxy",
-									"upstreams": [
-										{
 											"dial": "oidc-main:4182"
 										}
 									],
@@ -136,6 +104,112 @@
 											"https://{http.request.host}{http.request.uri}"
 										]
 									}
+								}
+							]
+						}
+					]
+				},
+				"internal-server": {
+					"listen": [
+						":8000"
+					],
+					"routes": [
+						{
+							"handle": [
+								{
+									"handler": "reverse_proxy",
+									"upstreams": [
+										{
+											"dial": "frontend:80"
+										}
+									]
+								}
+							],
+							"match": [
+								{
+									"path": [
+										"/assets/*",
+										"/favicon.svg",
+										"/icons.svg",
+										"/vite.svg",
+										"/react.svg",
+										"/hero.png",
+										"/*.css",
+										"/*.js",
+										"/*.map",
+										"/*.svg",
+										"/*.png",
+										"/*.jpg",
+										"/*.gif",
+										"/*.ico",
+										"/*.woff",
+										"/*.woff2",
+										"/*.ttf",
+										"/*.eot"
+									]
+								}
+							],
+							"terminal": true
+						},
+						{
+							"handle": [
+								{
+									"handler": "static_response",
+									"status_code": "403",
+									"body": "Access denied: /settings is not available for your account."
+								}
+							],
+							"match": [
+								{
+									"path": [
+										"/settings",
+										"/settings/*"
+									],
+									"header_regexp": {
+										"X-Forwarded-Groups": {
+											"pattern": ".*all.*"
+										}
+									}
+								}
+							],
+							"terminal": true
+						},
+						{
+							"handle": [
+								{
+									"handler": "static_response",
+									"status_code": "403",
+									"body": "Access denied: this page is not available for your account."
+								}
+							],
+							"match": [
+								{
+									"not": [
+										{
+											"path": [
+												"/settings",
+												"/settings/*"
+											]
+										}
+									],
+									"header_regexp": {
+										"X-Forwarded-Groups": {
+											"pattern": ".*single.*"
+										}
+									}
+								}
+							],
+							"terminal": true
+						},
+						{
+							"handle": [
+								{
+									"handler": "reverse_proxy",
+									"upstreams": [
+										{
+											"dial": "frontend:80"
+										}
+									]
 								}
 							]
 						}

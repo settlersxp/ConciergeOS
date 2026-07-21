@@ -74,7 +74,16 @@ For a complete list of documentation, see [docs/DOCUMENTATION.md](docs/DOCUMENTA
 | Backend | [backend/README.md](backend/README.md) | Overview, quick start, project structure |
 | Backend | [backend/DEVELOPMENT.md](backend/DEVELOPMENT.md) | Server setup, migrations, data generation scripts |
 | Frontend | [frontend/DEVELOPMENT.md](frontend/DEVELOPMENT.md) | React app, components, build process |
+| Docker | [docker/README.md](docker/README.md) | Docker Compose setup, Caddy reverse proxy, Keycloak OIDC, oauth2-proxy authentication |
 
 ## 📄 License
 
 This project is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.
+
+## Credits
+
+ConciergeOS uses the following open-source projects for authentication and reverse proxy in the Docker deployment:
+
+- **[Caddy](https://caddyserver.com/)** — Automatic HTTPS reverse proxy (GPLv2)
+- **[Keycloak](https://www.keycloak.org/)** — Open-source identity and access management (Apache 2.0)
+- **[oauth2-proxy](https://github.com/oauth2-proxy/oauth2-proxy)** — OAuth2/OIDC reverse proxy (Apache 2.0)

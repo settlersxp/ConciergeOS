@@ -14,23 +14,7 @@ services:
     depends_on:
       - frontend
       - keycloak
-      - oidc-settings
       - oidc-main
-    networks:
-      - app-network
-
-  oidc-settings:
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
-    container_name: oidc-settings
-    restart: unless-stopped
-    extra_hosts:
-      - "out-customer.com:host-gateway"
-    volumes:
-      - ./oidc-settings.toml:/cfg.toml
-    command: oauth2-proxy --config /cfg.toml
-    depends_on:
-      - keycloak
-      - frontend
     networks:
       - app-network
 
