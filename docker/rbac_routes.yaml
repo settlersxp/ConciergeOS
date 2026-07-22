@@ -1,0 +1,75 @@
+# Role-to-Path Mapping for RBAC Sync Service
+# Each role maps to one or more path patterns protected by that role.
+#
+# Format:
+#   role: "<role_name>"
+#   paths:
+#     - "<path_pattern>"
+#   message: "Optional custom 403 message"
+#
+# The sync service reads this file to generate Caddy deny rules.
+# Only roles that exist in both this file AND Keycloak will generate rules.
+
+- role: "settings:view"
+  paths:
+    - "/settings"
+    - "/settings/*"
+    - "/api/settings"
+    - "/api/settings/*"
+  message: "Access denied: /settings requires the settings:view role."
+
+- role: "models:admin"
+  paths:
+    - "/api/models"
+    - "/api/models/*"
+  message: "Access denied: /api/models requires the models:admin role."
+
+- role: "prompts:admin"
+  paths:
+    - "/prompt-management"
+    - "/prompt-groups"
+    - "/prompt-chain-page*"
+    - "/api/prompts"
+    - "/api/prompts/*"
+    - "/api/prompt-groups"
+    - "/api/prompt-groups/*"
+  message: "Access denied: prompt resources require the prompts:admin role."
+
+- role: "performance:view"
+  paths:
+    - "/performance-testing"
+    - "/performance-dashboard"
+    - "/api/performance-testing"
+    - "/api/performance-testing/*"
+  message: "Access denied: performance resources require the performance:view role."
+
+- role: "performance:run"
+  paths:
+    - "/api/performance-testing/batch/*"
+    - "/api/performance-testing/result/*"
+    - "/api/performance-testing/setup-guests"
+    - "/api/performance-testing/generate-*"
+    - "/api/performance-testing/validate-guests"
+  message: "Access denied: performance test execution requires the performance:run role."
+
+- role: "reservations:view"
+  paths:
+    - "/reservations"
+    - "/api/reservations"
+    - "/api/reservations/*"
+  message: "Access denied: /reservations requires the reservations:view role."
+
+- role: "reservations:write"
+  paths:
+    - "/api/reservations/shift"
+  message: "Access denied: shifting reservations requires the reservations:write role."
+
+- role: "guest-search:view"
+  paths:
+    - "/api/guest-search"
+  message: "Access denied: guest search requires the guest-search:view role."
+
+- role: "guest-search:extract"
+  paths:
+    - "/api/guest-search/extract-name"
+  message: "Access denied: name extraction requires the guest-search:extract role."
