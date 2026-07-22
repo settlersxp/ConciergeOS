@@ -7,9 +7,11 @@ Example: python keycloak_setup.py localhost 8080
 """
 
 import argparse
+import os
 import sys
 
 import requests
+import yaml
 
 from settings import settings
 
@@ -32,25 +34,79 @@ DOMAIN_WILD_CARD = f"{APP_DOMAIN}/*"
 _actual_client_secret = ""
 
 # ------------------------------------------------------------------
-# Role Definitions
+# Role Definitions (loaded from rbac_routes.yaml)
 # ------------------------------------------------------------------
 
-ROLES = {
-    "reservations:view":        "Read-only reservation access",
-    "reservations:write":       "Modify reservation data",
-    "guest-search:view":        "Search for guests",
-    "guest-search:extract":     "Extract names from media",
-    "performance:view":         "View performance results",
-    "performance:run":          "Execute/manage performance tests",
-    "settings:view":            "View and edit application settings",
-    "models:admin":             "Full LLM model management",
-    "prompts:admin":            "Full prompt management",
-}
 
-# Composite role that inherits all granular roles
-COMPOSITE_ROLES = {
-    "full-access": list(ROLES.keys()),
-}
+def _load_roles_from_mapping() -> dict[str, str]:
+    """Load role definitions from the RBAC mapping YAML file.
+
+    Reads 'rbac_routes.yaml' and extracts the unique role names, deriving a
+    human-readable description from each entry's *message* field.
+
+    Returns
+    -------
+    dict[str, str]
+        {role_name: description} suitable for Keycloak role creation.
+
+    Notes
+    -----
+    Tries the following locations in order:
+    1. MAPPING_FILE environment variable (set by settings.MAPPING_FILE)
+    2. rbac_routes.yaml relative to this script's directory (local dev)
+    """
+    # Try the configured path first (works inside Docker containers)
+    mapping_file = settings.MAPPING_FILE
+    if not os.path.exists(mapping_file):
+        # Fallback: look for rbac_routes.yaml next to this script (local dev)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        fallback = os.path.join(script_dir, "rbac_routes.yaml")
+        if os.path.exists(fallback):
+            mapping_file = fallback
+        else:
+            raise FileNotFoundError(
+                f"RBAC mapping file not found. Searched:\n"
+                f"  1. {settings.MAPPING_FILE} (MAPPING_FILE env var)\n"
+                f"  2. {fallback} (next to this script)\n"
+                "Set MAPPING_FILE to point to rbac_routes.yaml."
+            )
+
+    with open(mapping_file, "r") as f:
+        data = yaml.safe_load(f) or []
+
+    roles: dict[str, str] = {}
+    for entry in data:
+        role_name = entry.get("role", "")
+        if not role_name:
+            continue
+
+        # Derive a clean description from the YAML's 'message' field.
+        # Example input : "Access denied: /settings requires the settings:view role."
+        # Example output: "/settings requires settings:view"
+        msg = entry.get("message", f"Role: {role_name}")
+        description = (
+            msg.replace("Access denied: ", "")
+               .replace(" role.", "")
+               .replace(" requires the ", " requires ")
+        )
+        roles[role_name] = description
+
+    return roles
+
+
+# Roles are loaded from rbac_routes.yaml — single source of truth.
+ROLES = _load_roles_from_mapping()
+
+
+# Composite role that inherits all granular roles defined in the mapping file.
+# Updated dynamically so new roles in rbac_routes.yaml are automatically included.
+def _get_composite_roles() -> dict[str, list[str]]:
+    return {
+        "full-access": list(ROLES.keys()),
+    }
+
+
+COMPOSITE_ROLES = _get_composite_roles()
 
 USERS = {
     "user1": {

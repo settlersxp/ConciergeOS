@@ -26,7 +26,15 @@ os.environ.setdefault("KEYCLOAK_ADMIN_USER", settings.KEYCLOAK_ADMIN_USER)
 os.environ.setdefault("KEYCLOAK_ADMIN_PASSWORD", settings.KEYCLOAK_ADMIN_PASSWORD)
 os.environ.setdefault("CADDY_ADMIN_URL", settings.CADDY_ADMIN_URL)
 os.environ.setdefault("SYNC_INTERVAL", str(settings.SYNC_INTERVAL))
-os.environ.setdefault("MAPPING_FILE", settings.MAPPING_FILE)
+# Use a local-aware MAPPING_FILE: prefer the Docker path if it exists
+# (inside containers), otherwise fall back to the rbac_routes.yaml next
+# to the docker/ directory (local development).
+_default_mapping = settings.MAPPING_FILE
+if not os.path.exists(_default_mapping):
+    _local_mapping = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "rbac_routes.yaml")
+    if os.path.exists(_local_mapping):
+        _default_mapping = _local_mapping
+os.environ.setdefault("MAPPING_FILE", _default_mapping)
 os.environ.setdefault("VALKEY_URL", settings.VALKEY_URL)
 os.environ.setdefault("SESSION_COOKIE_NAME", settings.SESSION_COOKIE_NAME)
 
