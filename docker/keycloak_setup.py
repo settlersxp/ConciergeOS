@@ -688,15 +688,66 @@ def configure_all_role_claims(
 # ------------------------------------------------------------------
 
 
-def update_oidc_configs(actual_secret: str) -> None:
-    """Print the actual Keycloak client secret for manual env var configuration.
+def _find_env_file() -> str | None:
+    """Find the docker .env file.
 
-    The oauth2-proxy is now configured via environment variables instead of a
-    TOML file. The caller must set OAUTH2_PROXY_CLIENT_SECRET in the .env file
-    or docker-compose environment.
+    Searches:
+    1. Same directory as this script
+    2. Parent directory (project root .env)
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(script_dir, ".env"),
+        os.path.join(script_dir, "..", ".env"),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return os.path.abspath(path)
+    return None
+
+
+def _update_env_file(env_path: str, secret: str) -> None:
+    """Update OIDC_CLIENT_SECRET in the .env file in place."""
+    try:
+        with open(env_path, "r") as f:
+            lines = f.readlines()
+
+        new_lines: list[str] = []
+        updated = False
+        for line in lines:
+            if line.startswith("OIDC_CLIENT_SECRET="):
+                new_lines.append(f"OIDC_CLIENT_SECRET={secret}\n")
+                updated = True
+            else:
+                new_lines.append(line)
+
+        if not updated:
+            # Append if not found
+            new_lines.append(f"\n# -- OIDC --\nOIDC_CLIENT_SECRET={secret}\n")
+
+        with open(env_path, "w") as f:
+            f.writelines(new_lines)
+
+        print(f"  ✓ Updated OIDC_CLIENT_SECRET in {env_path}")
+    except OSError as e:
+        print(f"  ⚠ Failed to update {env_path}: {e}")
+
+
+def update_oidc_configs(actual_secret: str) -> None:
+    """Print and automatically update the Keycloak client secret in .env files.
+
+    The oauth2-proxy is configured via environment variables. After generating
+    a new client secret, this function writes it to the .env file(s) so the
+    caller does not have to update them manually.
     """
     print(f"  ✓ Client secret: {actual_secret}")
-    print("  → Set OAUTH2_PROXY_CLIENT_SECRET in docker/.env or docker-compose.yaml")
+
+    # Auto-update .env files
+    env_path = _find_env_file()
+    if env_path:
+        _update_env_file(env_path, actual_secret)
+    else:
+        print("  ⚠ No .env file found. Set OIDC_PROXY_CLIENT_SECRET manually.")
 
 
 def print_summary(base_url: str, admin_user: str, admin_pass: str, actual_secret: str) -> None:

@@ -27,32 +27,32 @@ services:
       - "out-customer.com:host-gateway"
     environment:
       # Provider
-      - OAUTH2_PROXY_PROVIDER=keycloak-oidc
+      - OAUTH2_PROXY_PROVIDER=${OAUTH2_PROXY_PROVIDER:-keycloak-oidc}
       - OAUTH2_PROXY_OIDC_ISSUER_URL=${APP_DOMAIN:-https://out-customer.com}/auth/realms/${OIDC_REALM:-production}
       - OAUTH2_PROXY_CLIENT_ID=${OIDC_CLIENT_ID:-concierge}
       - OAUTH2_PROXY_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
       - OAUTH2_PROXY_REDIRECT_URL=${APP_DOMAIN:-https://out-customer.com}/oauth2/callback
-      - OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=true
+      - OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=${OAUTH2_PROXY_SKIP_PROVIDER_BUTTON:-true}
       # Cookie
       - OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_COOKIE_SECRET:-}
-      - OAUTH2_PROXY_COOKIE_SECURE=false
-      - OAUTH2_PROXY_COOKIE_REFRESH=5m
-      - OAUTH2_PROXY_COOKIE_EXPIRE=1h
+      - OAUTH2_PROXY_COOKIE_SECURE=${OAUTH2_PROXY_COOKIE_SECURE:-false}
+      - OAUTH2_PROXY_COOKIE_REFRESH=${OAUTH2_PROXY_COOKIE_REFRESH:-5m}
+      - OAUTH2_PROXY_COOKIE_EXPIRE=${OAUTH2_PROXY_COOKIE_EXPIRE:-1h}
       # Upstreams
-      - OAUTH2_PROXY_UPSTREAMS=http://frontend:80/
+      - OAUTH2_PROXY_UPSTREAMS=${OAUTH2_PROXY_UPSTREAMS:-http://frontend:80/}
       # Server
-      - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4182
-      - OAUTH2_PROXY_REVERSE_PROXY=true
+      - OAUTH2_PROXY_HTTP_ADDRESS=${OAUTH2_PROXY_HTTP_ADDRESS:-0.0.0.0:4182}
+      - OAUTH2_PROXY_REVERSE_PROXY=${OAUTH2_PROXY_REVERSE_PROXY:-true}
       # OIDC
-      - OAUTH2_PROXY_SCOPE=openid profile email roles
-      - OAUTH2_PROXY_EMAIL_DOMAINS=*
-      - OAUTH2_PROXY_OIDC_GROUPS_CLAIM=realm_access.roles
-      - OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY=true
-      - OAUTH2_PROXY_CODE_CHALLENGE_METHOD=S256
-      - OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES=account
+      - OAUTH2_PROXY_SCOPE=${OAUTH2_PROXY_SCOPE:-openid profile email roles}
+      - OAUTH2_PROXY_EMAIL_DOMAINS=${OAUTH2_PROXY_EMAIL_DOMAINS:-*}
+      - OAUTH2_PROXY_OIDC_GROUPS_CLAIM=${OAUTH2_PROXY_OIDC_GROUPS_CLAIM:-realm_access.roles}
+      - OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY=${OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY:-true}
+      - OAUTH2_PROXY_CODE_CHALLENGE_METHOD=${OAUTH2_PROXY_CODE_CHALLENGE_METHOD:-S256}
+      - OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES=${OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES:-account}
       # Session storage (Valkey/Redis)
-      - OAUTH2_PROXY_SESSION_STORE_TYPE=redis
-      - OAUTH2_PROXY_REDIS_CONNECTION_URL=redis://valkey:6379/0
+      - OAUTH2_PROXY_SESSION_STORE_TYPE=${OAUTH2_PROXY_SESSION_STORE_TYPE:-redis}
+      - OAUTH2_PROXY_REDIS_CONNECTION_URL=${VALKEY_URL:-redis://valkey:6379/0}
     depends_on:
       - keycloak
       - frontend
@@ -70,14 +70,14 @@ services:
     env_file:
       - .env
     environment:
-      - KEYCLOAK_URL=http://keycloak:8080/auth
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080/auth}
       - KEYCLOAK_REALM=${OIDC_REALM:-production}
-      - KEYCLOAK_ADMIN_USER=admin
-      - KEYCLOAK_ADMIN_PASSWORD=admin
-      - CADDY_ADMIN_URL=http://caddy:2019
-      - SYNC_INTERVAL=10
-      - VALKEY_URL=redis://valkey:6379/0
-      - SESSION_COOKIE_NAME=_oauth2_proxy
+      - KEYCLOAK_ADMIN_USER=${KEYCLOAK_ADMIN_USER:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      - CADDY_ADMIN_URL=${CADDY_ADMIN_URL:-http://caddy:2019}
+      - SYNC_INTERVAL=${SYNC_INTERVAL:-30}
+      - VALKEY_URL=${VALKEY_URL:-redis://valkey:6379/0}
+      - SESSION_COOKIE_NAME=${SESSION_COOKIE_NAME:-_oauth2_proxy}
     depends_on:
       - keycloak
       - caddy
@@ -119,11 +119,11 @@ services:
     volumes:
       - keycloak_data:/opt/keycloak/data
     environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
-      KC_HOSTNAME: "https://out-customer.com/auth"
-      KC_HTTP_RELATIVE_PATH: /auth
-      KC_HTTP_ENABLED: "true"
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HOSTNAME: "${APP_DOMAIN:-https://out-customer.com}/auth"
+      KC_HTTP_RELATIVE_PATH: ${KC_HTTP_PATH:-/auth}
+      KC_HTTP_ENABLED: "${KC_HTTP_ENABLED:-true}"
     command: start-dev
     ports:
       - "8080:8080"
