@@ -22,6 +22,7 @@ Usage:
 import os
 import sys
 import tempfile
+import time
 
 import pytest
 import requests
@@ -38,6 +39,7 @@ os.environ.setdefault("MAPPING_FILE", "/app/rbac_routes.yaml")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import role_sync
+import keycloak_setup
 
 
 # ======================================================================
@@ -134,6 +136,68 @@ def sample_caddy_config():
             "listen": "tcp/2019"
         }
     }
+
+
+# ======================================================================
+# Fixtures: Live Keycloak role lifecycle (create + cleanup)
+# ======================================================================
+
+
+@pytest.fixture
+def live_test_role(live_token):
+    """Create a real role in Keycloak for integration testing, then delete it.
+
+    Yields the role name after creation, and guarantees cleanup.
+    Also temporarily adds a mapping entry for the role so the sync
+    service can generate a deny rule for it.
+    """
+    role_name = "test:cof-integration-role"
+    realm = role_sync.KEYCLOAK_REALM
+    base = role_sync.KEYCLOAK_URL
+    headers = {"Authorization": f"Bearer {live_token}"}
+
+    # ── CREATE role in Keycloak (reuse keycloak_setup.create_role) ──
+    keycloak_setup.create_role(base, live_token, realm, role_name, "CI integration test role")
+
+    # ── Load existing mapping and add a temporary entry ──────────
+    original_mapping_path = role_sync.MAPPING_FILE
+    mapping_entry = {
+        "role": role_name,
+        "paths": ["/test-cof", "/test-cof/*"],
+        "message": f"Access denied: this resource requires the {role_name} role.",
+    }
+
+    # Read existing mapping (if any)
+    existing_mapping = []
+    if os.path.exists(original_mapping_path):
+        with open(original_mapping_path, "r") as f:
+            existing_mapping = yaml.safe_load(f) or []
+
+    # Write temporary mapping file with our test entry
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        yaml.dump(existing_mapping + [mapping_entry], f)
+        temp_mapping = f.name
+
+    role_sync.MAPPING_FILE = temp_mapping
+
+    # ── Initial sync so the new role's deny rule is pushed ───────
+    # (done by the test itself after yield)
+
+    yield role_name
+
+    # ── CLEANUP: delete role from Keycloak ───────────────────────
+    try:
+        resp = requests.delete(
+            f"{base}/admin/realms/{realm}/roles/{role_name}",
+            headers=headers,
+        )
+        # 204 = success, 404 = already gone
+        assert resp.status_code in (204, 404), \
+            f"Failed to delete role {role_name}: {resp.status_code}"
+    finally:
+        # Always restore mapping file path and delete temp file
+        role_sync.MAPPING_FILE = original_mapping_path
+        os.unlink(temp_mapping)
 
 
 # ======================================================================
@@ -657,7 +721,391 @@ class TestFullSyncFlow:
         """verify_caddy_routes should return a list from the live Caddy instance."""
         result = role_sync.verify_caddy_routes()
         assert isinstance(result, list)
+
+
 # ======================================================================
+# Integration: Live Create -> Sync -> Validate / Delete -> Sync -> Validate
+# ======================================================================
+
+
+class TestLiveRoleLifecycleSync:
+    """End-to-end tests: create a role in Keycloak, sync to Caddy, validate;
+    then delete the role, sync, and validate the deny rule is removed.
+
+    These tests use the LIVE Keycloak and Caddy instances.
+    """
+
+    def _find_deny_rule_for_role(self, routes: list, role_name: str) -> dict | None:
+        """Search Caddy routes for a deny rule referencing the given role."""
+        for route in routes:
+            route_str = str(route)
+            if f"role:{role_name}" in route_str:
+                return route
+        return None
+
+    def test_create_role_sync_and_validate(self, live_token, live_test_role):
+        """CREATE role -> sync -> validate deny rule exists in Caddy.
+
+        Steps:
+        1. Role is already created in Keycloak (live_test_role fixture)
+        2. Mapping entry is already added (live_test_role fixture)
+        3. Run initial_sync to push routes to Caddy
+        4. Verify the deny rule for the test role appears in Caddy
+        """
+        # Step 1: Verify the role exists in Keycloak
+        roles = role_sync.fetch_all_roles(live_token)
+        assert live_test_role in roles, \
+            f"Test role '{live_test_role}' should exist in Keycloak"
+
+        # Step 2: Run initial sync (pushes routes to Caddy)
+        success = role_sync.initial_sync()
+        assert success, "initial_sync() should succeed"
+
+        # Step 3: Verify the deny rule for the test role exists in Caddy
+        routes = role_sync.verify_caddy_routes()
+        assert isinstance(routes, list)
+        assert len(routes) > 0, "Caddy should have routes after sync"
+
+        deny_rule = self._find_deny_rule_for_role(routes, live_test_role)
+        assert deny_rule is not None, \
+            f"Deny rule for role '{live_test_role}' should exist in Caddy routes"
+
+        # Step 4: Validate the deny rule structure
+        assert deny_rule.get("terminal") is True, "Deny rule must be terminal"
+        handle = deny_rule.get("handle", [{}])[0]
+        assert handle.get("handler") == "static_response", \
+            "Deny rule handler must be static_response"
+        assert handle.get("status_code") == "403", \
+            "Deny rule status_code must be 403"
+
+        # Validate the path match includes our test paths
+        match_block = deny_rule.get("match", [{}])[0]
+        paths = match_block.get("path", [])
+        assert "/test-cof" in paths, "/test-cof should be in deny rule paths"
+        assert "/test-cof/*" in paths, "/test-cof/* should be in deny rule paths"
+
+        # Validate the NOT condition with X-Forwarded-Groups header_regexp
+        not_block = match_block.get("not", [{}])[0]
+        header_regexp = not_block.get("header_regexp", {})
+        assert "X-Forwarded-Groups" in header_regexp, \
+            "Deny rule must check X-Forwarded-Groups header"
+        pattern = header_regexp["X-Forwarded-Groups"].get("pattern", "")
+        assert f"role:{live_test_role}" in pattern, \
+            f"Pattern must contain 'role:{live_test_role}'"
+
+    def test_delete_role_sync_and_validate(self, live_token, live_test_role):
+        """DELETE role -> sync -> validate deny rule is removed from Caddy.
+
+        This test manually controls the lifecycle (does NOT rely on the
+        fixture's auto-sync) to test the delete flow end-to-end.
+        """
+        realm = role_sync.KEYCLOAK_REALM
+        base = role_sync.KEYCLOAK_URL
+        headers = {"Authorization": f"Bearer {live_token}"}
+
+        # ── Step 0: The fixture already created the role and mapping ──
+
+        # Step 1: Verify role exists before we start
+        roles = role_sync.fetch_all_roles(live_token)
+        assert live_test_role in roles, \
+            f"Test role '{live_test_role}' must exist before delete test"
+
+        # Step 2: Sync so the deny rule is present
+        success = role_sync.initial_sync()
+        assert success, "initial_sync() should succeed before deletion"
+
+        # Step 3: Verify deny rule exists BEFORE deletion
+        routes_before = role_sync.verify_caddy_routes()
+        deny_rule_before = self._find_deny_rule_for_role(routes_before, live_test_role)
+        assert deny_rule_before is not None, \
+            f"Deny rule for '{live_test_role}' must exist BEFORE deletion"
+
+        # Step 4: DELETE the role from Keycloak
+        resp = requests.delete(
+            f"{base}/admin/realms/{realm}/roles/{live_test_role}",
+            headers=headers,
+        )
+        assert resp.status_code in (204, 404), \
+            f"DELETE role should succeed, got {resp.status_code}"
+
+        # Step 5: Verify role is gone from Keycloak
+        roles_after = role_sync.fetch_all_roles(live_token)
+        assert live_test_role not in roles_after, \
+            f"Test role '{live_test_role}' should be deleted from Keycloak"
+
+        # Step 6: Run sync again — the deny rule should be removed
+        success = role_sync.initial_sync()
+        assert success, "initial_sync() should succeed after role deletion"
+
+        # Step 7: Verify deny rule is REMOVED from Caddy
+        routes_after = role_sync.verify_caddy_routes()
+        deny_rule_after = self._find_deny_rule_for_role(routes_after, live_test_role)
+        assert deny_rule_after is None, \
+            f"Deny rule for '{live_test_role}' should be REMOVED from Caddy after deletion"
+
+
+    def test_full_lifecycle_create_sync_validate_delete_sync_validate(self, live_token):
+        """Complete end-to-end lifecycle in a single test:
+
+        1. Create a new test role in Keycloak
+        2. Add mapping entry for it
+        3. Sync -> validate deny rule exists
+        4. Delete the role from Keycloak
+        5. Sync -> validate deny rule is removed
+        6. Cleanup mapping
+        """
+        role_name = "test:cof-full-lifecycle"
+        realm = role_sync.KEYCLOAK_REALM
+        base = role_sync.KEYCLOAK_URL
+        headers = {"Authorization": f"Bearer {live_token}"}
+
+        # Save original mapping path
+        original_mapping_path = role_sync.MAPPING_FILE
+
+        # Load existing mapping
+        existing_mapping = []
+        if os.path.exists(original_mapping_path):
+            with open(original_mapping_path, "r") as f:
+                existing_mapping = yaml.safe_load(f) or []
+
+        # Create temp mapping with test role entry
+        mapping_entry = {
+            "role": role_name,
+            "paths": ["/lifecycle-test", "/lifecycle-test/*"],
+            "message": f"Access denied: this resource requires the {role_name} role.",
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(existing_mapping + [mapping_entry], f)
+            temp_mapping = f.name
+
+        role_sync.MAPPING_FILE = temp_mapping
+
+        try:
+            # ── PHASE 1: CREATE role (reuse keycloak_setup) ──────
+            keycloak_setup.create_role(base, live_token, realm, role_name, "Full lifecycle test role")
+
+            # Verify role exists
+            roles = role_sync.fetch_all_roles(live_token)
+            assert role_name in roles
+
+            # ── PHASE 2: SYNC & VALIDATE (role present) ─────────
+            success = role_sync.initial_sync()
+            assert success, "initial_sync() after role creation should succeed"
+
+            routes = role_sync.verify_caddy_routes()
+            deny_rule = self._find_deny_rule_for_role(routes, role_name)
+            assert deny_rule is not None, \
+                f"Deny rule for '{role_name}' should exist after sync"
+            assert deny_rule.get("terminal") is True
+            assert deny_rule.get("handle", [{}])[0].get("status_code") == "403"
+
+            # ── PHASE 3: DELETE ─────────────────────────────────
+            resp = requests.delete(
+                f"{base}/admin/realms/{realm}/roles/{role_name}",
+                headers=headers,
+            )
+            assert resp.status_code in (204, 404)
+
+            # Verify role is gone
+            roles_after = role_sync.fetch_all_roles(live_token)
+            assert role_name not in roles_after
+
+            # Small delay to ensure Keycloak processes the deletion
+            time.sleep(0.5)
+
+            # ── PHASE 4: SYNC & VALIDATE (role removed) ─────────
+            success = role_sync.initial_sync()
+            assert success, "initial_sync() after role deletion should succeed"
+
+            routes_after = role_sync.verify_caddy_routes()
+            deny_rule_after = self._find_deny_rule_for_role(routes_after, role_name)
+            assert deny_rule_after is None, \
+                f"Deny rule for '{role_name}' should be removed after role deletion"
+
+        finally:
+            # ── CLEANUP ──────────────────────────────────────────
+            role_sync.MAPPING_FILE = original_mapping_path
+            os.unlink(temp_mapping)
+
+            # Ensure role is deleted (idempotent)
+            requests.delete(
+                f"{base}/admin/realms/{realm}/roles/{role_name}",
+                headers=headers,
+            )
+
+
+# ======================================================================
+# Role Event Types
+# ======================================================================
+
+
+# ======================================================================
+# Integration: Live User Lifecycle (create → validate → delete → validate)
+# ======================================================================
+
+
+class TestLiveUserLifecycle:
+    """End-to-end tests for user creation and deletion against live Keycloak.
+
+    Similar pattern to TestLiveRoleLifecycleSync: use live containers,
+    create resources, validate via API, delete, and validate cleanup.
+    """
+
+    def test_create_user_validate_delete_validate(self, live_token):
+        """CREATE user → validate exists → DELETE user → validate gone.
+
+        Steps:
+        1. Create a test user in Keycloak
+        2. Verify the user exists via the users API
+        3. Delete the user
+        4. Verify the user is gone
+        5. Cleanup (idempotent delete)
+        """
+        username = "cof-test-user-lifecycle"
+        realm = role_sync.KEYCLOAK_REALM
+        base = role_sync.KEYCLOAK_URL
+        headers = {"Authorization": f"Bearer {live_token}"}
+
+        # ── PHASE 1: CREATE user (reuse keycloak_setup) ──────────
+        user_id = keycloak_setup.create_user(base, live_token, realm, username, "TestPass123!")
+        assert user_id, "Failed to create test user"
+
+        # ── PHASE 2: VALIDATE user exists ────────────────────────
+        resp = requests.get(
+            f"{base}/admin/realms/{realm}/users",
+            params={"username": username, "max": 1},
+            headers=headers,
+        )
+        resp.raise_for_status()
+        users = resp.json()
+        assert len(users) == 1, f"Expected 1 user, got {len(users)}"
+        assert users[0]["username"] == username
+        assert users[0]["email"] == f"{username}@conciergeos.local"
+        assert users[0]["enabled"] is True
+        saved_user_id = users[0]["id"]
+
+        # ── PHASE 3: DELETE user ─────────────────────────────────
+        resp = requests.delete(
+            f"{base}/admin/realms/{realm}/users/{saved_user_id}",
+            headers=headers,
+        )
+        assert resp.status_code in (204, 200), \
+            f"Delete user failed: {resp.status_code}"
+
+        # ── PHASE 4: VALIDATE user is gone ───────────────────────
+        resp = requests.get(
+            f"{base}/admin/realms/{realm}/users",
+            params={"username": username, "max": 1},
+            headers=headers,
+        )
+        resp.raise_for_status()
+        users_after = resp.json()
+        assert len(users_after) == 0, \
+            f"User '{username}' should be deleted but still found: {users_after}"
+
+
+class TestLiveSessionLifecycle:
+    """End-to-end tests for session creation and deletion against live Keycloak.
+
+    Pattern: authenticate a user to create a session, validate it exists,
+    delete it, and validate it's gone.
+    """
+
+    def _ensure_test_user(self, live_token, username: str, password: str) -> str | None:
+        """Create or find a test user using keycloak_setup.create_user.
+
+        keycloak_setup.create_user handles idempotency (finds existing users),
+        sets firstName/lastName, and clears required actions so password grant works.
+        """
+        realm = role_sync.KEYCLOAK_REALM
+        base = role_sync.KEYCLOAK_URL
+        return keycloak_setup.create_user(base, live_token, realm, username, password) or None
+
+    def test_create_session_validate_delete_validate(self, live_token):
+        """CREATE session (via user login) → validate exists → DELETE session → validate gone.
+
+        Steps:
+        1. Ensure test user exists
+        2. Authenticate as user to create a session
+        3. Find the session via admin API
+        4. Delete the session via admin API
+        5. Validate the session is gone
+        6. Cleanup user
+        """
+        username = "cof-test-session-user"
+        password = "SessionTest123!"
+        realm = role_sync.KEYCLOAK_REALM
+        base = role_sync.KEYCLOAK_URL
+        headers = {"Authorization": f"Bearer {live_token}"}
+
+        user_id = self._ensure_test_user(live_token, username, password)
+        assert user_id, "Failed to create/find test user"
+
+        try:
+            # ── PHASE 1: CREATE session (authenticate as user) ───
+            resp = requests.post(
+                f"{base}/realms/{realm}/protocol/openid-connect/token",
+                data={
+                    "grant_type": "password",
+                    "client_id": "admin-cli",
+                    "username": username,
+                    "password": password,
+                },
+            )
+            assert resp.status_code == 200, \
+                f"User login failed: {resp.status_code} {resp.text}"
+            user_token = resp.json().get("access_token")
+            assert user_token, "No access_token from user login"
+
+            # ── PHASE 2: VALIDATE session exists ─────────────────
+            resp = requests.get(
+                f"{base}/admin/realms/{realm}/users/{user_id}/sessions",
+                headers=headers,
+            )
+            resp.raise_for_status()
+            sessions = resp.json()
+            assert len(sessions) >= 1, \
+                f"Expected at least 1 session for user, got {len(sessions)}"
+
+            # Collect session IDs
+            session_ids = [s["id"] for s in sessions]
+            assert len(session_ids) >= 1, "No session IDs found"
+
+            # ── PHASE 3: DELETE session(s) ───────────────────────
+            for session_id in session_ids:
+                resp = requests.delete(
+                    f"{base}/admin/realms/{realm}/sessions/{session_id}",
+                    headers=headers,
+                )
+                assert resp.status_code in (204, 200), \
+                    f"Delete session {session_id} failed: {resp.status_code}"
+
+            # Small delay for Keycloak to process
+            time.sleep(0.5)
+
+            # ── PHASE 4: VALIDATE session is gone ────────────────
+            resp = requests.get(
+                f"{base}/admin/realms/{realm}/users/{user_id}/sessions",
+                headers=headers,
+            )
+            resp.raise_for_status()
+            sessions_after = resp.json()
+            assert len(sessions_after) == 0, \
+                f"Sessions should be deleted but still found: {len(sessions_after)} sessions"
+
+        finally:
+            # ── CLEANUP: delete test user ────────────────────────
+            try:
+                resp = requests.delete(
+                    f"{base}/admin/realms/{realm}/users/{user_id}",
+                    headers=headers,
+                )
+                # 204 = success, 404 = already gone (session deletion may have cascaded)
+                assert resp.status_code in (204, 200, 404), \
+                    f"Cleanup delete user failed: {resp.status_code}"
+            except Exception:
+                pass  # Best-effort cleanup
 
 
 class TestRoleEventTypes:

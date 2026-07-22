@@ -41,11 +41,13 @@ KEYCLOAK_REALM = os.environ.get("KEYCLOAK_REALM", "production")
 KEYCLOAK_ADMIN_USER = os.environ.get("KEYCLOAK_ADMIN_USER", "admin")
 KEYCLOAK_ADMIN_PASSWORD = os.environ.get("KEYCLOAK_ADMIN_PASSWORD", "admin")
 CADDY_ADMIN_URL = os.environ.get("CADDY_ADMIN_URL", "http://caddy:2019")
-SYNC_INTERVAL = int(os.environ.get("SYNC_INTERVAL", "30"))
+SYNC_INTERVAL = int(os.environ.get("SYNC_INTERVAL", "1"))
 MAPPING_FILE = os.environ.get("MAPPING_FILE", "/app/rbac_routes.yaml")
 
 # Admin events we care about
 ROLE_EVENT_TYPES = ["CREATE", "UPDATE", "DELETE"]
+USER_EVENT_TYPES = ["DELETE"]
+SESSION_EVENT_TYPES = ["DELETE"]
 
 # Valkey session invalidation
 VALKEY_URL = os.environ.get("VALKEY_URL", "redis://valkey:6379/0")
@@ -89,18 +91,18 @@ def fetch_all_roles(token: str) -> set[str]:
 def poll_admin_events(token: str, since: datetime) -> list[dict]:
     """Poll Keycloak admin events since the given timestamp.
 
-    Note: Keycloak 26 does NOT accept 'type=ADMIN' as a valid EventType enum value.
-    The /admin/realms/{realm}/events endpoint returns both user and admin events.
-    We filter admin events by their 'resourceType' field in the response.
+    Keycloak 26 has two separate endpoints:
+    - /events: Returns user events (LOGIN, LOGOUT, CODE_TO_TOKEN, etc.) with 'type' field
+    - /admin-events: Returns admin events (role/user/session CRUD) with 'operationType'/'resourceType'
+
+    We use /admin-events for detecting role changes, user deletions, and session invalidations.
     """
     # Keycloak 26 expects dates in yyyy-MM-dd format (not milliseconds).
     date_from = since.strftime("%Y-%m-%d")
     date_to = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    # Do NOT pass type=ADMIN — it causes IllegalArgumentException in Keycloak 26.
-    # The endpoint returns all events; we filter client-side by resourceType.
     resp = requests.get(
-        f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/events",
+        f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/admin-events",
         params={
             "dateFrom": date_from,
             "dateTo": date_to,
@@ -108,38 +110,32 @@ def poll_admin_events(token: str, since: datetime) -> list[dict]:
         headers={"Authorization": f"Bearer {token}"},
     )
     resp.raise_for_status()
-    all_events = resp.json()
-
-    # Filter to admin-only events: admin events have operationType but no userId/clientId
-    # (they are performed by the admin console, not end users)
-    admin_events = [
-        e for e in all_events
-        if e.get("resourceType") in ("ROLE", "CLIENT", "REALM", "USER", "GROUP", "IDENTITY_PROVIDER", "SCOPE")
-        or e.get("operationType") in ("CREATE", "UPDATE", "DELETE", "LOGIN", "VIEW")
-        and "authServer" in str(e.get("representation", "")).lower()
-        or e.get("resourceType") == "ROLE"
-    ]
-
-    # Return all events; has_role_events() will further filter for ROLE events
-    return all_events
+    return resp.json()
 
 
 def has_role_events(events: list[dict]) -> bool:
-    """Check if any event is a role-related admin event."""
+    """Check if any event is a role-related admin event.
+
+    Keycloak uses resourceType 'REALM_ROLE' for realm-level roles
+    and 'CLIENT_ROLE' for client-level roles. The legacy 'ROLE' type
+    is included for compatibility.
+    """
     for event in events:
         operation = event.get("operationType", "")
         resource_type = event.get("resourceType", "")
-        if resource_type == "ROLE" and operation in ROLE_EVENT_TYPES:
+        if resource_type in ("ROLE", "REALM_ROLE", "CLIENT_ROLE") and operation in ROLE_EVENT_TYPES:
             return True
     return False
 
 
 def has_user_delete_events(events: list[dict]) -> bool:
-    """Check if any event is a user DELETE event."""
+    """Check if any event is a user DELETE or USER_SESSION DELETE event."""
     for event in events:
-        operation = event.get("operationType", "")
+        operation_type = event.get("operationType", "")
         resource_type = event.get("resourceType", "")
-        if resource_type == "USER" and operation == "DELETE":
+        if resource_type == "USER" and operation_type in USER_EVENT_TYPES:
+            return True
+        if resource_type == "USER_SESSION" and operation_type in SESSION_EVENT_TYPES:
             return True
     return False
 
