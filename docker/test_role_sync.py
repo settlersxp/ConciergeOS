@@ -448,28 +448,34 @@ class TestBuildCaddyRoutes:
         assert last["handle"][0]["upstreams"][0]["dial"] == "frontend:80"
 
     def test_empty_produces_two_routes(self):
+        """Empty deny rules produces 3 routes: static_assets, full_access_bypass, catch-all."""
         routes = role_sync.build_caddy_routes([])
-        assert len(routes) == 2
+        assert len(routes) == 3
 
     def test_deny_rules_inserted_correctly(self):
+        """Deny rules inserted between full_access_bypass and catch-all."""
         deny = [{"rule": 1}, {"rule": 2}]
         routes = role_sync.build_caddy_routes(deny)
-        assert len(routes) == 4
-        assert routes[1] == {"rule": 1}
-        assert routes[2] == {"rule": 2}
+        # static_assets + full_access_bypass + deny_rules + catch-all
+        assert len(routes) == 5
+        assert routes[2] == {"rule": 1}
+        assert routes[3] == {"rule": 2}
 
     def test_route_order_static_deny_catch_all(self):
-        """Verify the route order: static assets, deny rules, catch-all."""
+        """Verify the route order: static assets, full_access_bypass, deny rules, catch-all."""
         deny = [{"deny": "rule"}]
         routes = role_sync.build_caddy_routes(deny)
         # First route is static assets (terminal)
         assert routes[0]["terminal"] is True
         assert routes[0]["handle"][0]["handler"] == "reverse_proxy"
-        # Middle route is deny rule
-        assert routes[1] == {"deny": "rule"}
+        # Second route is full_access_bypass (terminal)
+        assert routes[1]["terminal"] is True
+        assert "role:full-access" in str(routes[1])
+        # Third route is deny rule
+        assert routes[2] == {"deny": "rule"}
         # Last route is catch-all (no terminal, no match)
-        assert "terminal" not in routes[2]
-        assert "match" not in routes[2]
+        assert "terminal" not in routes[3]
+        assert "match" not in routes[3]
 
 
 class TestPushRoutesToCaddyConfigPreservation:
@@ -607,9 +613,9 @@ class TestFullSyncFlow:
             deny_rules = role_sync.generate_deny_rules(mapping, roles)
             routes = role_sync.build_caddy_routes(deny_rules)
 
-            # Should have at least static + deny rules for matching roles + catch-all
+            # Should have: static + full_access_bypass + deny rules for matching roles + catch-all
             matching = [e for e in mapping if e["role"] in roles]
-            assert len(routes) == len(matching) + 2
+            assert len(routes) == len(matching) + 3
             assert routes[0]["terminal"] is True  # static
             assert "terminal" not in routes[-1]   # catch-all
         finally:

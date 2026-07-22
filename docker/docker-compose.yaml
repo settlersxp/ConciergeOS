@@ -6,7 +6,6 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "2019:2019"
     volumes:
       - ./Caddyfile.json:/etc/caddy/Caddyfile.json
       - caddy_data:/data
@@ -35,6 +34,7 @@ services:
     depends_on:
       - keycloak
       - frontend
+      - valkey
     networks:
       - app-network
 
@@ -52,11 +52,21 @@ services:
       - KEYCLOAK_ADMIN_PASSWORD=admin
       - CADDY_ADMIN_URL=http://caddy:2019
       - SYNC_INTERVAL=30
+      - VALKEY_URL=redis://valkey:6379/0
+      - SESSION_COOKIE_NAME=_oauth2_proxy
     command: >
-      sh -c "pip install requests pyyaml -q && python3 -u /app/role_sync.py"
+      sh -c "pip install requests pyyaml valkey -q && python3 -u /app/role_sync.py"
     depends_on:
       - keycloak
       - caddy
+      - valkey
+    networks:
+      - app-network
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: valkey
+    restart: unless-stopped
     networks:
       - app-network
 

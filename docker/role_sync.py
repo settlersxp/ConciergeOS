@@ -28,6 +28,7 @@ if hasattr(sys.stderr, 'reconfigure'):
 from datetime import datetime, timedelta, timezone
 
 import requests
+import valkey
 import yaml
 
 
@@ -45,6 +46,11 @@ MAPPING_FILE = os.environ.get("MAPPING_FILE", "/app/rbac_routes.yaml")
 
 # Admin events we care about
 ROLE_EVENT_TYPES = ["CREATE", "UPDATE", "DELETE"]
+
+# Valkey session invalidation
+VALKEY_URL = os.environ.get("VALKEY_URL", "redis://valkey:6379/0")
+SESSION_COOKIE_NAME = os.environ.get("SESSION_COOKIE_NAME", "_oauth2_proxy")
+SESSION_KEY_PREFIX = SESSION_COOKIE_NAME + "-"  # e.g., "_oauth2_proxy-"
 
 
 # ------------------------------------------------------------------
@@ -126,6 +132,51 @@ def has_role_events(events: list[dict]) -> bool:
         if resource_type == "ROLE" and operation in ROLE_EVENT_TYPES:
             return True
     return False
+
+
+def has_user_delete_events(events: list[dict]) -> bool:
+    """Check if any event is a user DELETE event."""
+    for event in events:
+        operation = event.get("operationType", "")
+        resource_type = event.get("resourceType", "")
+        if resource_type == "USER" and operation == "DELETE":
+            return True
+    return False
+
+
+# ------------------------------------------------------------------
+# Valkey Session Invalidation
+# ------------------------------------------------------------------
+
+
+def invalidate_all_sessions() -> int:
+    """Delete all oauth2-proxy sessions from Valkey.
+
+    Since sessions are keyed by random ticket IDs and encrypted per-session,
+    we cannot target a specific user. This invalidates ALL sessions, forcing
+    all users to re-authenticate. Acceptable for rare admin operations.
+    """
+    try:
+        r = valkey.from_url(VALKEY_URL)
+        r.ping()
+    except Exception as e:
+        print(f"  WARNING: Cannot connect to Valkey: {e}")
+        return 0
+
+    deleted = 0
+    cursor = 0
+    batch_size = 100
+    pattern = f"{SESSION_KEY_PREFIX}*"
+
+    while True:
+        cursor, keys = r.scan(cursor=cursor, match=pattern, count=batch_size)
+        if keys:
+            deleted += r.delete(*keys)
+        if cursor == 0:
+            break
+
+    print(f"  ✓ Invalidated {deleted} session(s) from Valkey")
+    return deleted
 
 
 # ------------------------------------------------------------------
@@ -417,6 +468,15 @@ def poll_and_sync() -> bool:
     except Exception as e:
         print(f"  ERROR: Failed to poll admin events: {e}")
         return False
+
+    # Check for user delete events → invalidate sessions
+    if has_user_delete_events(events):
+        print("  → User deletion detected! Invalidating all sessions...")
+        invalidated = invalidate_all_sessions()
+        if invalidated > 0:
+            print("  ✓ Session invalidation complete!")
+        else:
+            print("  ℹ No active sessions found to invalidate.")
 
     if not has_role_events(events):
         return True  # No role changes, nothing to do
