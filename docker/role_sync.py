@@ -18,18 +18,32 @@ Environment Variables:
 import os
 import sys
 import time
-
-# Disable stdout buffering so logs appear immediately in Docker
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(line_buffering=True)
-if hasattr(sys.stderr, 'reconfigure'):
-    sys.stderr.reconfigure(line_buffering=True)
+import logging
 
 from datetime import datetime, timedelta, timezone
 
 import requests
 import valkey
 import yaml
+
+# ------------------------------------------------------------------
+# Logging Configuration
+# ------------------------------------------------------------------
+# Use logging module for structured, timestamped, level-filtered output
+# that works correctly with Docker logs (unbuffered, one JSON-like line per message).
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)-8s] %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S%z",
+    stream=sys.stdout,
+    force=True,
+)
+# Ensure stdout is unbuffered so logs appear immediately in docker logs
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(line_buffering=True)
+
+logger = logging.getLogger("role_sync")
 
 
 # ------------------------------------------------------------------
@@ -123,21 +137,33 @@ def has_role_events(events: list[dict]) -> bool:
     for event in events:
         operation = event.get("operationType", "")
         resource_type = event.get("resourceType", "")
+        logger.debug("  Checking event: resourceType=%s, operationType=%s", resource_type, operation)
         if resource_type in ("ROLE", "REALM_ROLE", "CLIENT_ROLE") and operation in ROLE_EVENT_TYPES:
+            logger.debug("  → Role event MATCHED: %s %s", operation, resource_type)
             return True
+    logger.debug("  → No role events found in %d event(s)", len(events))
     return False
 
 
 def has_user_delete_events(events: list[dict]) -> bool:
     """Check if any event is a user DELETE or USER_SESSION DELETE event."""
+    found = False
     for event in events:
         operation_type = event.get("operationType", "")
         resource_type = event.get("resourceType", "")
+        event_id = event.get("id", "unknown")
+        realm = event.get("realmId", "unknown")
+        userId = event.get("userId", "")
+
         if resource_type == "USER" and operation_type in USER_EVENT_TYPES:
-            return True
+            logger.info("USER DELETE event detected: eventId=%s, userId=%s, realm=%s", event_id, userId, realm)
+            found = True
         if resource_type == "USER_SESSION" and operation_type in SESSION_EVENT_TYPES:
-            return True
-    return False
+            logger.info("USER_SESSION DELETE event detected: eventId=%s, userId=%s, realm=%s", event_id, userId, realm)
+            found = True
+    if not found:
+        logger.debug("No user/session delete events found in %d event(s)", len(events))
+    return found
 
 
 # ------------------------------------------------------------------
@@ -152,26 +178,36 @@ def invalidate_all_sessions() -> int:
     we cannot target a specific user. This invalidates ALL sessions, forcing
     all users to re-authenticate. Acceptable for rare admin operations.
     """
+    logger.info("Starting session invalidation from Valkey (URL: %s, pattern: %s*)", VALKEY_URL, SESSION_KEY_PREFIX)
+
     try:
         r = valkey.from_url(VALKEY_URL)
         r.ping()
+        logger.debug("Valkey connection established (PING OK)")
     except Exception as e:
-        print(f"  WARNING: Cannot connect to Valkey: {e}")
+        logger.warning("Cannot connect to Valkey (%s): %s", VALKEY_URL, e)
         return 0
 
     deleted = 0
     cursor = 0
     batch_size = 100
     pattern = f"{SESSION_KEY_PREFIX}*"
+    scan_iter = 0
 
     while True:
+        scan_iter += 1
         cursor, keys = r.scan(cursor=cursor, match=pattern, count=batch_size)
+        logger.debug("Valkey SCAN iter=%d cursor=%d keys_found=%d", scan_iter, cursor, len(keys))
         if keys:
-            deleted += r.delete(*keys)
+            key_names = [k.decode("utf-8", errors="replace") for k in keys]
+            logger.debug("  Keys to delete: %s", key_names)
+            del_count = r.delete(*keys)
+            deleted += del_count
+            logger.info("  Deleted %d session key(s): %s", del_count, key_names)
         if cursor == 0:
             break
 
-    print(f"  ✓ Invalidated {deleted} session(s) from Valkey")
+    logger.info("Session invalidation complete: %d total session(s) deleted from Valkey", deleted)
     return deleted
 
 
@@ -183,15 +219,17 @@ def invalidate_all_sessions() -> int:
 def load_mapping() -> list[dict]:
     """Load the role-to-path mapping YAML file."""
     if not os.path.exists(MAPPING_FILE):
-        print(f"WARNING: Mapping file not found: {MAPPING_FILE}")
+        logger.warning("Mapping file not found: %s", MAPPING_FILE)
         return []
 
     with open(MAPPING_FILE, "r") as f:
         data = yaml.safe_load(f)
 
     if not data:
+        logger.debug("Mapping file %s is empty", MAPPING_FILE)
         return []
 
+    logger.debug("Loaded %d mapping entry/entries from %s", len(data), MAPPING_FILE)
     return data
 
 
@@ -217,7 +255,7 @@ def generate_deny_rules(mapping: list[dict], available_roles: set[str]) -> list[
             continue
 
         if role_name not in available_roles:
-            print(f"  WARNING: Role '{role_name}' in mapping file does not exist in Keycloak. Skipping.")
+            logger.warning("Role '%s' in mapping file does not exist in Keycloak. Skipping.", role_name)
             continue
 
         # Generate deny rule: deny access unless user has the matching role
@@ -246,7 +284,7 @@ def generate_deny_rules(mapping: list[dict], available_roles: set[str]) -> list[
             "terminal": True,
         }
         deny_rules.append(rule)
-        print(f"  ✓ Generated deny rule for role '{role_name}' on {len(paths)} path(s)")
+        logger.info("Generated deny rule for role '%s' on %d path(s): %s", role_name, len(paths), paths)
 
     return deny_rules
 
@@ -359,12 +397,11 @@ def push_routes_to_caddy(routes: list[dict]) -> bool:
         headers={"Content-Type": "application/json"},
     )
     if resp.status_code != 200:
-        print(f"  ERROR: Failed to fetch current Caddy config: HTTP {resp.status_code}")
-        print(f"  Response: {resp.text}")
+        logger.error("Failed to fetch current Caddy config: HTTP %d, response: %s", resp.status_code, resp.text)
         return False
 
     full_config = resp.json()
-    print(f"  ✓ Fetched current Caddy config")
+    logger.debug("Fetched current Caddy config from %s", CADDY_ADMIN_URL)
 
     # 2. Walk the config down to the internal-server and update its routes.
     #    Create intermediate keys if they don't already exist.
@@ -382,11 +419,10 @@ def push_routes_to_caddy(routes: list[dict]) -> bool:
     )
 
     if resp.status_code == 200:
-        print(f"  ✓ Routes pushed to Caddy ({len(routes)} total routes)")
+        logger.info("Routes pushed to Caddy successfully (%d total routes)", len(routes))
         return True
     else:
-        print(f"  ERROR: Failed to push routes to Caddy: HTTP {resp.status_code}")
-        print(f"  Response: {resp.text}")
+        logger.error("Failed to push routes to Caddy: HTTP %d, response: %s", resp.status_code, resp.text)
         return False
 
 
@@ -411,85 +447,102 @@ def initial_sync() -> bool:
     Fetches all roles from Keycloak, loads mapping file, generates routes,
     and pushes to Caddy. This ensures idempotent behavior on restart.
     """
-    print("=" * 60)
-    print("Initial Sync: Building routes from scratch")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("Initial Sync: Building routes from scratch")
+    logger.info("=" * 60)
 
     try:
         token = authenticate_keycloak()
+        logger.debug("Keycloak admin authentication successful")
     except Exception as e:
-        print(f"  ERROR: Failed to authenticate to Keycloak: {e}")
+        logger.error("Failed to authenticate to Keycloak: %s", e, exc_info=True)
         return False
 
     # Fetch all roles from Keycloak
     available_roles = fetch_all_roles(token)
-    print(f"  Found {len(available_roles)} roles in realm '{KEYCLOAK_REALM}':")
-    for role in sorted(available_roles):
-        print(f"    - {role}")
+    logger.info("Found %d role(s) in realm '%s': %s", len(available_roles), KEYCLOAK_REALM, sorted(available_roles))
 
     # Load mapping file
     mapping = load_mapping()
-    print(f"  Loaded {len(mapping)} role-to-path mappings from {MAPPING_FILE}")
+    logger.info("Loaded %d role-to-path mapping(s) from %s", len(mapping), MAPPING_FILE)
 
     # Generate deny rules
     deny_rules = generate_deny_rules(mapping, available_roles)
-    print(f"  Generated {len(deny_rules)} deny rules")
+    logger.info("Generated %d deny rule(s)", len(deny_rules))
 
     # Build full routes
     routes = build_caddy_routes(deny_rules)
+    logger.debug("Built %d total route(s) for Caddy", len(routes))
 
     # Push to Caddy
     if push_routes_to_caddy(routes):
-        print("  ✓ Initial sync complete!\n")
+        logger.info("Initial sync complete!")
         return True
     else:
-        print("  ✗ Initial sync failed.\n")
+        logger.error("Initial sync failed!")
         return False
 
 
 def poll_and_sync() -> bool:
     """Poll Keycloak for role changes and sync if needed."""
+    logger.debug("— Poll cycle started —")
+
     try:
         token = authenticate_keycloak()
+        logger.debug("Keycloak admin authentication successful for poll cycle")
     except Exception as e:
-        print(f"  ERROR: Failed to authenticate to Keycloak: {e}")
+        logger.error("Failed to authenticate to Keycloak during poll: %s", e, exc_info=True)
         return False
 
     # Calculate "since" as SYNC_INTERVAL seconds ago
     since = datetime.now(timezone.utc)
+    since_offset = since - timedelta(seconds=SYNC_INTERVAL)
+    logger.debug("Polling admin events from %s to %s", since_offset.strftime("%Y-%m-%dT%H:%M:%S"), since.strftime("%Y-%m-%dT%H:%M:%S"))
 
     # Poll admin events
     try:
-        events = poll_admin_events(token, since - timedelta(seconds=SYNC_INTERVAL))
+        events = poll_admin_events(token, since_offset)
+        logger.debug("Fetched %d admin event(s) from Keycloak", len(events))
+        # Log each event's key fields for debugging
+        for evt in events:
+            logger.debug("  Event[id=%s, op=%s, resource=%s, realm=%s, user=%s]",
+                         evt.get("id", "?"),
+                         evt.get("operationType", "?"),
+                         evt.get("resourceType", "?"),
+                         evt.get("realmId", "?"),
+                         evt.get("userId", "?"))
     except Exception as e:
-        print(f"  ERROR: Failed to poll admin events: {e}")
+        logger.error("Failed to poll admin events: %s", e, exc_info=True)
         return False
 
     # Check for user delete events → invalidate sessions
     if has_user_delete_events(events):
-        print("  → User deletion detected! Invalidating all sessions...")
+        logger.info("User/session deletion detected! Invalidating all sessions from Valkey...")
         invalidated = invalidate_all_sessions()
         if invalidated > 0:
-            print("  ✓ Session invalidation complete!")
+            logger.info("Session invalidation complete: %d session(s) removed", invalidated)
         else:
-            print("  ℹ No active sessions found to invalidate.")
+            logger.info("No active sessions found in Valkey to invalidate.")
 
     if not has_role_events(events):
+        logger.debug("Poll cycle complete: no role changes detected")
         return True  # No role changes, nothing to do
 
     # Role events detected — perform full re-sync
-    print("  → Role change detected! Regenerating routes...")
+    logger.info("Role change detected! Regenerating Caddy routes...")
 
     available_roles = fetch_all_roles(token)
+    logger.info("Current roles in Keycloak: %s", sorted(available_roles))
+
     mapping = load_mapping()
     deny_rules = generate_deny_rules(mapping, available_roles)
     routes = build_caddy_routes(deny_rules)
 
     if push_routes_to_caddy(routes):
-        print("  ✓ Incremental sync complete!")
+        logger.info("Incremental sync complete!")
         return True
     else:
-        print("  ✗ Incremental sync failed.")
+        logger.error("Incremental sync failed!")
         return False
 
 
@@ -499,18 +552,19 @@ def poll_and_sync() -> bool:
 
 
 def main() -> None:
-    print("=" * 60)
-    print("Role Sync Service for ConciergeOS RBAC")
-    print("=" * 60)
-    print(f"  Keycloak URL:     {KEYCLOAK_URL}")
-    print(f"  Keycloak Realm:   {KEYCLOAK_REALM}")
-    print(f"  Caddy Admin URL:  {CADDY_ADMIN_URL}")
-    print(f"  Sync Interval:    {SYNC_INTERVAL}s")
-    print(f"  Mapping File:     {MAPPING_FILE}")
-    print()
+    logger.info("=" * 60)
+    logger.info("Role Sync Service for ConciergeOS RBAC")
+    logger.info("=" * 60)
+    logger.info("Keycloak URL:     %s", KEYCLOAK_URL)
+    logger.info("Keycloak Realm:   %s", KEYCLOAK_REALM)
+    logger.info("Caddy Admin URL:  %s", CADDY_ADMIN_URL)
+    logger.info("Sync Interval:    %ds", SYNC_INTERVAL)
+    logger.info("Mapping File:     %s", MAPPING_FILE)
+    logger.info("Valkey URL:       %s", VALKEY_URL)
+    logger.info("Session Key Prefix: %s", SESSION_KEY_PREFIX)
 
     # Wait for Keycloak and Caddy to be ready
-    print("Waiting for Keycloak and Caddy to be ready...")
+    logger.info("Waiting for Keycloak and Caddy to be ready...")
     max_retries = 60
     retry_delay = 2
     caddy_ready = False
@@ -522,45 +576,50 @@ def main() -> None:
             try:
                 resp = requests.get(f"{CADDY_ADMIN_URL}/config", timeout=3)
                 if resp.status_code == 200:
-                    print("  ✓ Caddy admin API is ready")
+                    logger.info("Caddy admin API is ready (HTTP 200)")
                     caddy_ready = True
-            except requests.RequestException:
-                pass
+            except requests.RequestException as e:
+                logger.debug("Caddy not reachable yet (attempt %d/%d): %s", attempt + 1, max_retries, e)
 
         # Check if Keycloak is reachable
         if not keycloak_ready:
             try:
                 resp = requests.get(f"{KEYCLOAK_URL}/realms/master", timeout=3)
                 if resp.status_code == 200:
-                    print("  ✓ Keycloak is ready")
+                    logger.info("Keycloak is ready (HTTP 200)")
                     keycloak_ready = True
-            except requests.RequestException:
-                pass
+            except requests.RequestException as e:
+                logger.debug("Keycloak not reachable yet (attempt %d/%d): %s", attempt + 1, max_retries, e)
 
         if caddy_ready and keycloak_ready:
             break
 
         if attempt % 5 == 0 and attempt > 0:
-            print(f"  Waiting... (attempt {attempt + 1}/{max_retries})")
+            logger.info("Still waiting for dependencies... (attempt %d/%d, caddy=%s, keycloak=%s)",
+                        attempt + 1, max_retries, caddy_ready, keycloak_ready)
 
         time.sleep(retry_delay)
     else:
+        errors = []
         if not caddy_ready:
-            print("  ERROR: Caddy admin API did not become ready in time.")
+            logger.error("Caddy admin API did not become ready in time (%d attempts)", max_retries)
+            errors.append("caddy")
         if not keycloak_ready:
-            print("  ERROR: Keycloak did not become ready in time.")
+            logger.error("Keycloak did not become ready in time (%d attempts)", max_retries)
+            errors.append("keycloak")
+        logger.error("Startup aborted: %s did not become ready", ", ".join(errors))
         sys.exit(1)
+
+    logger.info("All dependencies ready, proceeding with initial sync")
 
     # Perform initial sync
     if not initial_sync():
-        print("  WARNING: Initial sync failed. Will retry on next poll cycle.")
-        print()
+        logger.warning("Initial sync failed. Will retry on next poll cycle.")
 
     # Enter polling loop
-    print("=" * 60)
-    print(f"Entering polling loop (interval: {SYNC_INTERVAL}s)")
-    print("=" * 60)
-    print()
+    logger.info("=" * 60)
+    logger.info("Entering polling loop (interval: %ds)", SYNC_INTERVAL)
+    logger.info("=" * 60)
 
     while True:
         time.sleep(SYNC_INTERVAL)
@@ -568,8 +627,8 @@ def main() -> None:
         try:
             poll_and_sync()
         except Exception as e:
-            print(f"  ERROR during poll cycle: {e}")
-            print("  Retrying on next cycle...")
+            logger.error("Exception during poll cycle: %s", e, exc_info=True)
+            logger.warning("Retrying on next cycle...")
 
 
 if __name__ == "__main__":
