@@ -15,14 +15,20 @@ import pytest
 import requests
 import yaml
 
-# Set env before importing role_sync
-os.environ.setdefault("KEYCLOAK_URL", os.environ.get("KEYCLOAK_URL", "http://localhost:8080/auth"))
-os.environ.setdefault("KEYCLOAK_REALM", "production")
-os.environ.setdefault("KEYCLOAK_ADMIN_USER", "admin")
-os.environ.setdefault("KEYCLOAK_ADMIN_PASSWORD", "admin")
-os.environ.setdefault("CADDY_ADMIN_URL", "http://localhost:2019")
-os.environ.setdefault("SYNC_INTERVAL", "30")
-os.environ.setdefault("MAPPING_FILE", "/app/rbac_routes.yaml")
+# Load shared settings to ensure consistent defaults
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from settings import settings
+
+# Set env vars from shared settings (only if not already set)
+os.environ.setdefault("KEYCLOAK_URL", settings.KEYCLOAK_URL)
+os.environ.setdefault("KEYCLOAK_REALM", settings.KEYCLOAK_REALM)
+os.environ.setdefault("KEYCLOAK_ADMIN_USER", settings.KEYCLOAK_ADMIN_USER)
+os.environ.setdefault("KEYCLOAK_ADMIN_PASSWORD", settings.KEYCLOAK_ADMIN_PASSWORD)
+os.environ.setdefault("CADDY_ADMIN_URL", settings.CADDY_ADMIN_URL)
+os.environ.setdefault("SYNC_INTERVAL", str(settings.SYNC_INTERVAL))
+os.environ.setdefault("MAPPING_FILE", settings.MAPPING_FILE)
+os.environ.setdefault("VALKEY_URL", settings.VALKEY_URL)
+os.environ.setdefault("SESSION_COOKIE_NAME", settings.SESSION_COOKIE_NAME)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import role_sync

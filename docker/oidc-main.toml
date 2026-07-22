@@ -9,7 +9,6 @@ cookie_secure = false
 
 upstreams = ["http://caddy:8000/"]
 http_address = "0.0.0.0:4182"
-proxy_prefix = "/oauth2"
 reverse_proxy = true
 scope = "openid profile email roles"
 email_domains = ["*"]
@@ -18,10 +17,6 @@ email_domains = ["*"]
 # Tell oauth2-proxy to read from the correct location so that
 # X-Forwarded-Groups is populated for Caddy's RBAC deny rules.
 oidc_groups_claim = "realm_access.roles"
-pass_access_token = false
-pass_authorization_header = false
-pass_user_headers = true
-set_xauthrequest = false
 ssl_insecure_skip_verify = true
 code_challenge_method = "S256"
 oidc_extra_audiences = ["account"]

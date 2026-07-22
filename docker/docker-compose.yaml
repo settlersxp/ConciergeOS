@@ -40,12 +40,14 @@ services:
       - app-network
 
   role-sync:
-    image: python:3.12-slim
+    image: concos-role-sync:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.role-sync
     container_name: role-sync
     restart: unless-stopped
-    volumes:
-      - ./role_sync.py:/app/role_sync.py
-      - ./rbac_routes.yaml:/app/rbac_routes.yaml
+    env_file:
+      - .env
     environment:
       - KEYCLOAK_URL=http://keycloak:8080/auth
       - KEYCLOAK_REALM=${OIDC_REALM:-production}
@@ -55,8 +57,6 @@ services:
       - SYNC_INTERVAL=10
       - VALKEY_URL=redis://valkey:6379/0
       - SESSION_COOKIE_NAME=_oauth2_proxy
-    command: >
-      sh -c "pip install requests pyyaml valkey -q && python3 -u /app/role_sync.py"
     depends_on:
       - keycloak
       - caddy
