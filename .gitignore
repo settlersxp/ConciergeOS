@@ -15,6 +15,7 @@ env.bak/
 venv.bak/
 .env
 .envrc
+docker/.env
 
 # Distribution / packaging
 .Python

@@ -15,14 +15,28 @@ import pytest
 import requests
 import yaml
 
-# Set env before importing role_sync
-os.environ.setdefault("KEYCLOAK_URL", os.environ.get("KEYCLOAK_URL", "http://localhost:8080/auth"))
-os.environ.setdefault("KEYCLOAK_REALM", "production")
-os.environ.setdefault("KEYCLOAK_ADMIN_USER", "admin")
-os.environ.setdefault("KEYCLOAK_ADMIN_PASSWORD", "admin")
-os.environ.setdefault("CADDY_ADMIN_URL", "http://localhost:2019")
-os.environ.setdefault("SYNC_INTERVAL", "30")
-os.environ.setdefault("MAPPING_FILE", "/app/rbac_routes.yaml")
+# Load shared settings to ensure consistent defaults
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from settings import settings
+
+# Set env vars from shared settings (only if not already set)
+os.environ.setdefault("KEYCLOAK_URL", settings.KEYCLOAK_URL)
+os.environ.setdefault("KEYCLOAK_REALM", settings.KEYCLOAK_REALM)
+os.environ.setdefault("KEYCLOAK_ADMIN_USER", settings.KEYCLOAK_ADMIN_USER)
+os.environ.setdefault("KEYCLOAK_ADMIN_PASSWORD", settings.KEYCLOAK_ADMIN_PASSWORD)
+os.environ.setdefault("CADDY_ADMIN_URL", settings.CADDY_ADMIN_URL)
+os.environ.setdefault("SYNC_INTERVAL", str(settings.SYNC_INTERVAL))
+# Use a local-aware MAPPING_FILE: prefer the Docker path if it exists
+# (inside containers), otherwise fall back to the rbac_routes.yaml next
+# to the docker/ directory (local development).
+_default_mapping = settings.MAPPING_FILE
+if not os.path.exists(_default_mapping):
+    _local_mapping = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "rbac_routes.yaml")
+    if os.path.exists(_local_mapping):
+        _default_mapping = _local_mapping
+os.environ.setdefault("MAPPING_FILE", _default_mapping)
+os.environ.setdefault("VALKEY_URL", settings.VALKEY_URL)
+os.environ.setdefault("SESSION_COOKIE_NAME", settings.SESSION_COOKIE_NAME)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import role_sync

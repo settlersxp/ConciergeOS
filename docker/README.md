@@ -168,7 +168,7 @@ This creates:
 - **Users**: `user1` (password: `password1`, group: `single`), `user2` (password: `password2`, group: `all`)
 - **Client**: `concierge` (confidential, PKCE S256, groups claim in ID token)
 
-**Important:** Keycloak 26 always generates a random client secret (ignoring any value passed in the request). The `keycloak_setup.py` script handles this automatically by reading back the generated secret after client creation and writing it to `oidc-main.toml`. No manual secret synchronization is needed.
+**Important:** Keycloak 26 always generates a random client secret (ignoring any value passed in the request). The `keycloak_setup.py` script handles this automatically by reading back the generated secret after client creation and printing it to stdout. Set the `OIDC_CLIENT_SECRET` environment variable in `docker/.env` with the printed value.
 
 ### Restart Services After Setup
 
@@ -193,9 +193,9 @@ To completely reset and regenerate the Keycloak configuration from scratch:
    ```
    > Note: Check `docker volume ls` for the exact volume name. If you're using default Docker Compose volumes, the Keycloak container state is ephemeral (no persistent volume), so simply restarting is sufficient.
 
-3. **Reset the `oidc-main.toml` client secret** to `changeme` (placeholder value):
+3. **Clear the `OIDC_CLIENT_SECRET`** in `docker/.env` (or set to any placeholder):
    ```bash
-   sed -i.bak 's/client_secret = .*/client_secret = "changeme"/' docker/oidc-main.toml
+   sed -i.bak 's/OIDC_CLIENT_SECRET=.*/OIDC_CLIENT_SECRET=changeme/' docker/.env
    ```
 
 4. **Start services fresh:**
