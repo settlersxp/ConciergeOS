@@ -43,6 +43,15 @@
     - "/api/performance-testing/*"
   message: "Access denied: performance resources require the performance:view role."
 
+- role: "performance:run"
+  paths:
+    - "/api/performance-testing/batch/*"
+    - "/api/performance-testing/result/*"
+    - "/api/performance-testing/setup-guests"
+    - "/api/performance-testing/generate-*"
+    - "/api/performance-testing/validate-guests"
+  message: "Access denied: performance test execution requires the performance:run role."
+
 - role: "reservations:view"
   paths:
     - "/reservations"
