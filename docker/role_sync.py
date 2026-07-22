@@ -112,8 +112,12 @@ def poll_admin_events(token: str, since: datetime) -> list[dict]:
     We use /admin-events for detecting role changes, user deletions, and session invalidations.
     """
     # Keycloak 26 expects dates in yyyy-MM-dd format (not milliseconds).
+    # Important: dateTo must be set to the NEXT day, not today.
+    # When dateTo equals dateFrom (same day), Keycloak interprets it as midnight
+    # of that day (00:00:00), creating a zero-width range that matches NO events.
+    # Using tomorrow ensures the entire current day is covered.
     date_from = since.strftime("%Y-%m-%d")
-    date_to = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date_to = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
 
     resp = requests.get(
         f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/admin-events",
