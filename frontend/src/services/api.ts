@@ -32,6 +32,15 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   }
   // Some endpoints may return an empty body (e.g. 204)
   const text = await resp.text();
+
+  // Session was invalidated server-side (e.g., Valkey session deleted).
+  // oauth2-proxy returns an HTML redirect page instead of the expected JSON.
+  // Detect this and redirect the SPA to the login flow.
+  if (text.startsWith('<')) {
+    window.location.href = '/oauth2/sign_in';
+    throw new Error('Session expired');
+  }
+
   return text ? (JSON.parse(text) as T) : ({} as T);
 }
 
