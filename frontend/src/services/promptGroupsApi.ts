@@ -2,21 +2,8 @@
  * API client for Prompt Group CRUD, execution, and scheduling.
  */
 
+import { request } from './api';
 import type { ChainExecutionRequest, ChainExecutionResult, ChainStepRequest, ChainStepResult, PromptGroup, PromptGroupItemCreate, PromptGroupResult, PromptGroupScheduleCreate } from '../types/prompt';
-
-/** Generic fetch helper that parses JSON responses */
-async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const resp = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  if (!resp.ok) {
-    const body = await resp.text().catch(() => '');
-    throw new Error(resp.statusText + (body ? `: ${body}` : ''));
-  }
-  const text = await resp.text();
-  return text ? (JSON.parse(text) as T) : ({} as T);
-}
 
 /** List all prompt groups */
 export function listGroups(): Promise<PromptGroup[]> {
@@ -119,7 +106,8 @@ export function executeChainStep(
   accumulatedContext?: string,
   mediaFile?: File | null,
 ): Promise<ChainStepResult> {
-  // When a file is attached, use FormData (multipart/form-data)
+  // When a file is attached, use FormData (multipart/form-data).
+  // `request()` auto-detects FormData and omits Content-Type: application/json.
   if (mediaFile) {
     const formData = new FormData();
     formData.append("position", String(position));
@@ -128,18 +116,9 @@ export function executeChainStep(
     formData.append("inputs_json", JSON.stringify(inputs));
     formData.append("file", mediaFile);
 
-    const resp = fetch(`/api/prompt-groups/${groupId}/execute-chain-step`, {
+    return request<ChainStepResult>(`/api/prompt-groups/${groupId}/execute-chain-step`, {
       method: "POST",
       body: formData,
-    });
-
-    return resp.then(async (r) => {
-      if (!r.ok) {
-        const body = await r.text().catch(() => "");
-        throw new Error(r.statusText + (body ? `: ${body}` : ""));
-      }
-      const text = await r.text();
-      return text ? (JSON.parse(text) as ChainStepResult) : ({} as ChainStepResult);
     });
   }
 

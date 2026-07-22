@@ -3,6 +3,7 @@ import Card from "./Card";
 import PlaceholderCategorySection from "./PlaceholderCategorySection";
 import { Button, Input } from "./";
 import FieldBrowser from "./FieldBrowser";
+import { getFieldSchema } from "../../services/promptsApi";
 import type { FieldSchema } from "../../types";
 
 type Item = { key: string; description: string; category: string; dynamic: boolean; example: string };
@@ -73,13 +74,12 @@ export default function PlaceholderPalette({
   /** Callback when runtime variables change. */
   onRuntimeVariablesChange?: (vars: Record<string, string>) => void;
 }) {
-  // Fetch field schema from the backend
+  // Fetch field schema from the backend (uses request() for session expiry detection)
   const [fieldSchema, setFieldSchema] = useState<FieldSchema>({});
   const [showFieldBrowser, setShowFieldBrowser] = useState(false);
 
   useEffect(() => {
-    fetch("/api/prompts/field-schema")
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
+    getFieldSchema()
       .then(setFieldSchema)
       .catch(() => {});
   }, []);

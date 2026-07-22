@@ -20,16 +20,34 @@ import type {
   ValidateGuestsResponse,
 } from '../types';
 
-/** Generic fetch helper that parses JSON responses */
-async function request<T>(url: string, options?: RequestInit): Promise<T> {
+/**
+ * Generic fetch helper that parses JSON responses and detects session expiry.
+ *
+ * When `options.body` is a `FormData` instance, the `Content-Type: application/json`
+ * header is **not** set so the browser can automatically apply
+ * `multipart/form-data` with the correct boundary.
+ *
+ * If oauth2-proxy returns an HTML response (session invalidated server-side),
+ * the browser is redirected to `/oauth2/sign_in` and an error is thrown.
+ */
+export async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  const isFormData = options?.body instanceof FormData;
+
+  const headers: Record<string, string> = {};
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   const resp = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: { ...headers, ...options?.headers },
   });
+
   if (!resp.ok) {
     const body = await resp.text().catch(() => '');
     throw new Error(resp.statusText + (body ? `: ${body}` : ''));
   }
+
   // Some endpoints may return an empty body (e.g. 204)
   const text = await resp.text();
 
@@ -91,9 +109,10 @@ export const guestSearchApi = {
 
   /**
    * Extract a guest name from an image or audio file.
-   * Uses fetch directly to avoid Content-Type: application/json conflict with multipart/form-data.
+   * Uses FormData (multipart/form-data) — `request()` auto-detects FormData
+   * and omits the `Content-Type: application/json` header.
    */
-  extractName: async (
+  extractName: (
     file: File,
     crop?: CropRegion,
     modelId?: number,
@@ -112,17 +131,10 @@ export const guestSearchApi = {
       formData.append('model_id', String(modelId));
     }
 
-    const resp = await fetch('/api/guest-search/extract-name', {
+    return request<NameExtractionResponse>('/api/guest-search/extract-name', {
       method: 'POST',
       body: formData,
     });
-
-    if (!resp.ok) {
-      const body = await resp.text().catch(() => '');
-      throw new Error(resp.statusText + (body ? `: ${body}` : ''));
-    }
-
-    return resp.json() as Promise<NameExtractionResponse>;
   },
 };
 
