@@ -7,7 +7,6 @@ Example: python keycloak_setup.py localhost 8080
 """
 
 import argparse
-import os
 import sys
 
 import requests
@@ -470,7 +469,8 @@ def create_client(base_url: str, token: str, realm: str) -> str:
     """Create the conciergeos client in a realm. Returns the client UUID.
 
     Keycloak 26 always generates a random secret. After creation, the actual
-    secret is stored in _actual_client_secret and written to oidc-main.toml.
+    secret is stored in _actual_client_secret and printed to stdout so the
+    caller can set the OAUTH2_PROXY_CLIENT_SECRET environment variable.
     """
     global _actual_client_secret
     print(f"  Creating client: {CLIENT_ID} in {realm}...")
@@ -633,22 +633,14 @@ def configure_all_role_claims(
 
 
 def update_oidc_configs(actual_secret: str) -> None:
-    """Update oidc-main.toml with the actual Keycloak client secret."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    for toml_file in ["oidc-main.toml"]:
-        filepath = os.path.join(script_dir, toml_file)
-        if not os.path.exists(filepath):
-            continue
-        with open(filepath, "r") as f:
-            content = f.read()
-        lines = content.split("\n")
-        for i, line in enumerate(lines):
-            if line.startswith("client_secret = "):
-                lines[i] = f'client_secret = "{actual_secret}"'
-                break
-        with open(filepath, "w") as f:
-            f.write("\n".join(lines))
-        print(f"  ✓ Updated {filepath} with actual secret")
+    """Print the actual Keycloak client secret for manual env var configuration.
+
+    The oauth2-proxy is now configured via environment variables instead of a
+    TOML file. The caller must set OAUTH2_PROXY_CLIENT_SECRET in the .env file
+    or docker-compose environment.
+    """
+    print(f"  ✓ Client secret: {actual_secret}")
+    print("  → Set OAUTH2_PROXY_CLIENT_SECRET in docker/.env or docker-compose.yaml")
 
 
 def print_summary(base_url: str, admin_user: str, admin_pass: str, actual_secret: str) -> None:
@@ -752,9 +744,9 @@ def main() -> None:
     # 7. Configure role claim (replaces groups claim)
     configure_all_role_claims(base_url, token, client_uuids)
 
-    # 7.5 Update oidc configs with actual secret
+    # 7.5 Display client secret for env var configuration
     actual_secret = _actual_client_secret
-    print("[7.5/8] Updating oidc-main.toml with actual Keycloak secret...")
+    print("[7.5/8] Client secret (set OAUTH2_PROXY_CLIENT_SECRET env var)...")
     update_oidc_configs(actual_secret)
     print()
 

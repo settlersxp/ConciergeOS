@@ -3,12 +3,11 @@
 test_oidc_config.py - Unit tests for OIDC configuration consistency and reachability.
 
 Validates that:
-1. The oidc_issuer_url in oidc-main.toml uses the public HTTPS domain
-2. The docker-compose.yaml --oidc-issuer-url flag matches the TOML config
-3. Both configs are consistent with each other
-4. The Keycloak OIDC discovery endpoint is reachable via the public domain
-5. The discovery endpoint returns HTTPS URLs (not internal Docker hostnames)
-6. The oauth2-proxy /oauth2/start endpoint redirects to Keycloak (not internal hostname)
+1. The OAUTH2_PROXY_OIDC_ISSUER_URL in docker-compose.yaml uses the public HTTPS domain
+2. The configuration is consistent with the public Keycloak endpoint
+3. The Keycloak OIDC discovery endpoint is reachable via the public domain
+4. The discovery endpoint returns HTTPS URLs (not internal Docker hostnames)
+5. The oauth2-proxy /oauth2/start endpoint redirects to Keycloak (not internal hostname)
 
 These tests make REAL HTTP calls — no mocking. The Docker stack must be running.
 
@@ -25,8 +24,7 @@ from typing import Any
 import pytest
 import requests
 
-DOCKER_DIR = os.path.dirname(os.path.abspath(__file__))
-TOML_PATH = os.path.join(DOCKER_DIR, "oidc-main.toml")
+DOCKER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 COMPOSE_PATH = os.path.join(DOCKER_DIR, "docker-compose.yaml")
 
 PUBLIC_ISSUER_URL = "https://out-customer.com/auth/realms/production"
@@ -46,13 +44,6 @@ SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
 @pytest.fixture(scope="session")
-def toml_content() -> str:
-    """Read oidc-main.toml once per session."""
-    with open(TOML_PATH, "r") as f:
-        return f.read()
-
-
-@pytest.fixture(scope="session")
 def compose_content() -> str:
     """Read docker-compose.yaml once per session."""
     with open(COMPOSE_PATH, "r") as f:
@@ -60,22 +51,53 @@ def compose_content() -> str:
 
 
 @pytest.fixture(scope="session")
-def toml_issuer_url(toml_content: str) -> str | None:
-    """Extract oidc_issuer_url from the TOML config."""
-    match = re.search(r'oidc_issuer_url\s*=\s*"([^"]+)"', toml_content)
-    return match.group(1) if match else None
-
-
-@pytest.fixture(scope="session")
 def compose_issuer_url(compose_content: str) -> str | None:
-    """Extract --oidc-issuer-url from the docker-compose.yaml command."""
-    match = re.search(r'--oidc-issuer-url\s*=\s*(https?://[^\s]+)', compose_content)
+    """Extract OAUTH2_PROXY_OIDC_ISSUER_URL from the docker-compose.yaml environment."""
+    # Match the env var line like: - OAUTH2_PROXY_OIDC_ISSUER_URL=${APP_DOMAIN:-https://out-customer.com}/auth/realms/${OIDC_REALM:-production}
+    match = re.search(
+        r'OAUTH2_PROXY_OIDC_ISSUER_URL\s*=\s*(.+)',
+        compose_content,
+    )
     if match:
         url = match.group(1)
-        url = re.sub(r'\$\{OIDC_REALM:-production\}', 'production', url)
+        # Resolve ${APP_DOMAIN:-https://out-customer.com}
+        url = re.sub(r'\$\{APP_DOMAIN:-([^}]+)\}', r'\1', url)
+        url = re.sub(r'\$\{APP_DOMAIN\}', 'https://out-customer.com', url)
+        # Resolve ${OIDC_REALM:-production}
+        url = re.sub(r'\$\{OIDC_REALM:-([^}]+)\}', r'\1', url)
         url = re.sub(r'\$\{OIDC_REALM\}', 'production', url)
         return url
     return None
+
+
+@pytest.fixture(scope="session")
+def compose_ssl_insecure_skip_verify(compose_content: str) -> str | None:
+    """Extract OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY from docker-compose.yaml."""
+    match = re.search(
+        r'OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY\s*=\s*(\S+)',
+        compose_content,
+    )
+    return match.group(1).strip('"\'') if match else None
+
+
+@pytest.fixture(scope="session")
+def compose_session_store_type(compose_content: str) -> str | None:
+    """Extract OAUTH2_PROXY_SESSION_STORE_TYPE from docker-compose.yaml."""
+    match = re.search(
+        r'OAUTH2_PROXY_SESSION_STORE_TYPE\s*=\s*(\S+)',
+        compose_content,
+    )
+    return match.group(1).strip('"\'') if match else None
+
+
+@pytest.fixture(scope="session")
+def compose_redis_connection_url(compose_content: str) -> str | None:
+    """Extract OAUTH2_PROXY_REDIS_CONNECTION_URL from docker-compose.yaml."""
+    match = re.search(
+        r'OAUTH2_PROXY_REDIS_CONNECTION_URL\s*=\s*(\S+)',
+        compose_content,
+    )
+    return match.group(1).strip('"\'') if match else None
 
 
 @pytest.fixture(scope="session")
@@ -101,32 +123,11 @@ def discovery_config_direct() -> dict[str, Any]:
 # ======================================================================
 
 
-class TestTOMLIssuerURL:
-
-    def test_issuer_url_exists(self, toml_issuer_url: str | None):
-        assert toml_issuer_url is not None, "oidc_issuer_url not found in oidc-main.toml"
-
-    def test_issuer_url_is_https_public(self, toml_issuer_url: str | None):
-        assert toml_issuer_url is not None
-        assert toml_issuer_url.startswith("https://out-customer.com"), \
-            f"Must start with https://out-customer.com, got: {toml_issuer_url}"
-
-    def test_issuer_url_no_internal_hostname(self, toml_issuer_url: str | None):
-        assert toml_issuer_url is not None
-        assert "keycloak:" not in toml_issuer_url, \
-            f"Must NOT contain internal Docker hostname, got: {toml_issuer_url}"
-        assert "localhost" not in toml_issuer_url, \
-            f"Must NOT contain localhost, got: {toml_issuer_url}"
-
-    def test_issuer_url_matches_public(self, toml_issuer_url: str | None):
-        assert toml_issuer_url == PUBLIC_ISSUER_URL
-
-
 class TestComposeIssuerURL:
 
     def test_issuer_url_exists(self, compose_issuer_url: str | None):
         assert compose_issuer_url is not None, \
-            "--oidc-issuer-url not found in docker-compose.yaml"
+            "OAUTH2_PROXY_OIDC_ISSUER_URL not found in docker-compose.yaml"
 
     def test_issuer_url_is_https_public(self, compose_issuer_url: str | None):
         assert compose_issuer_url is not None
@@ -144,23 +145,25 @@ class TestComposeIssuerURL:
         assert compose_issuer_url == PUBLIC_ISSUER_URL
 
 
-class TestConfigConsistency:
+class TestComposeSessionConfig:
 
-    def test_toml_and_compose_urls_match(
-        self,
-        toml_issuer_url: str | None,
-        compose_issuer_url: str | None,
-    ):
-        assert toml_issuer_url is not None
-        assert compose_issuer_url is not None
-        assert toml_issuer_url == compose_issuer_url, \
-            f"TOML: {toml_issuer_url} != Compose: {compose_issuer_url}"
+    def test_ssl_insecure_skip_verify_enabled(self, compose_ssl_insecure_skip_verify: str | None):
+        assert compose_ssl_insecure_skip_verify is not None, \
+            "OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY not found in docker-compose.yaml"
+        assert compose_ssl_insecure_skip_verify.lower() == "true", \
+            f"OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY must be true, got {compose_ssl_insecure_skip_verify}"
 
-    def test_ssl_insecure_skip_verify_enabled(self, toml_content: str):
-        match = re.search(r'ssl_insecure_skip_verify\s*=\s*(\S+)', toml_content)
-        assert match is not None, "ssl_insecure_skip_verify not found in oidc-main.toml"
-        assert match.group(1).lower() == "true", \
-            f"ssl_insecure_skip_verify must be true, got {match.group(1)}"
+    def test_session_store_type_redis(self, compose_session_store_type: str | None):
+        assert compose_session_store_type is not None, \
+            "OAUTH2_PROXY_SESSION_STORE_TYPE not found in docker-compose.yaml"
+        assert compose_session_store_type == "redis", \
+            f"OAUTH2_PROXY_SESSION_STORE_TYPE must be redis, got {compose_session_store_type}"
+
+    def test_redis_connection_url_set(self, compose_redis_connection_url: str | None):
+        assert compose_redis_connection_url is not None, \
+            "OAUTH2_PROXY_REDIS_CONNECTION_URL not found in docker-compose.yaml"
+        assert compose_redis_connection_url.startswith("redis://"), \
+            f"OAUTH2_PROXY_REDIS_CONNECTION_URL must start with redis://, got {compose_redis_connection_url}"
 
 
 # ======================================================================
