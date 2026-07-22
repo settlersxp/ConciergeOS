@@ -55,7 +55,7 @@ KEYCLOAK_REALM = os.environ.get("KEYCLOAK_REALM", "production")
 KEYCLOAK_ADMIN_USER = os.environ.get("KEYCLOAK_ADMIN_USER", "admin")
 KEYCLOAK_ADMIN_PASSWORD = os.environ.get("KEYCLOAK_ADMIN_PASSWORD", "admin")
 CADDY_ADMIN_URL = os.environ.get("CADDY_ADMIN_URL", "http://caddy:2019")
-SYNC_INTERVAL = int(os.environ.get("SYNC_INTERVAL", "1"))
+SYNC_INTERVAL = int(os.environ.get("SYNC_INTERVAL", "10"))
 MAPPING_FILE = os.environ.get("MAPPING_FILE", "/app/rbac_routes.yaml")
 
 # Admin events we care about
@@ -67,6 +67,10 @@ SESSION_EVENT_TYPES = ["DELETE"]
 VALKEY_URL = os.environ.get("VALKEY_URL", "redis://valkey:6379/0")
 SESSION_COOKIE_NAME = os.environ.get("SESSION_COOKIE_NAME", "_oauth2_proxy")
 SESSION_KEY_PREFIX = SESSION_COOKIE_NAME + "-"  # e.g., "_oauth2_proxy-"
+
+# Keycloak admin-events only support date-level granularity (yyyy-MM-dd),
+# so every poll returns the full day's history.  We store today's processed
+# event IDs in Valkey so restarts don't re-trigger synchronization.
 
 
 # ------------------------------------------------------------------
@@ -213,6 +217,128 @@ def invalidate_all_sessions() -> int:
 
     logger.info("Session invalidation complete: %d total session(s) deleted from Valkey", deleted)
     return deleted
+
+
+# ------------------------------------------------------------------
+# Event Persistence (Valkey-backed)
+# ------------------------------------------------------------------
+#
+# Keycloak admin-events only support date-level granularity, so every poll
+# returns the *entire* day's history.  To avoid re-processing on restart we
+# store two pieces of state in Valkey:
+#
+#   role_sync:sync_ts    — UNIX timestamp of the last successful sync
+#   role_sync:seen       — SET of event IDs processed *today*
+#
+# On restart:
+#   • If sync_ts < 2×SYNC_INTERVAL ago → Caddy routes are current, skip
+#     the expensive initial_sync.
+#   • Otherwise → run initial_sync and then load today's seen set.
+#
+# During steady-state polling:
+#   • filter_new_events() drops anything already in the seen set.
+#   • After a successful poll cycle all fetched IDs are added to seen.
+#
+# Graceful degradation: if Valkey is unreachable the service falls back
+# to the original behaviour (full re-sync on every poll).
+
+_CHECKPOINT_KEY = "role_sync:sync_ts"
+_SEEN_KEY = "role_sync:seen"
+
+
+def _get_valkey_client():
+    """Return a Valkey client or None if unreachable."""
+    try:
+        r = valkey.from_url(VALKEY_URL)
+        r.ping()
+        return r
+    except Exception as e:
+        logger.debug("Valkey unreachable: %s", e)
+        return None
+
+
+# ---- checkpoint (last successful sync timestamp) --------------------
+
+def load_sync_timestamp() -> float | None:
+    """Return the last-sync UNIX timestamp, or None."""
+    r = _get_valkey_client()
+    if r is None:
+        return None
+    raw = r.get(_CHECKPOINT_KEY)
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def save_sync_timestamp() -> None:
+    """Record that a successful sync just completed."""
+    r = _get_valkey_client()
+    if r is None:
+        return
+    r.set(_CHECKPOINT_KEY, str(time.time()))
+
+
+def sync_is_current() -> bool:
+    """True if a successful sync happened within the last 2×SYNC_INTERVAL."""
+    ts = load_sync_timestamp()
+    if ts is None:
+        return False
+    age = time.time() - ts
+    ok = age < SYNC_INTERVAL * 2
+    if not ok:
+        logger.info("Last sync was %.0fs ago (threshold %ds) — routes may be stale", age, SYNC_INTERVAL * 2)
+    return ok
+
+
+# ---- seen event IDs -------------------------------------------------
+
+def load_seen_ids() -> set[str]:
+    """Load today's set of already-processed event IDs."""
+    r = _get_valkey_client()
+    if r is None:
+        return set()
+    raw = r.smembers(_SEEN_KEY)
+    if not raw:
+        return set()
+    return {m.decode("utf-8") for m in raw}
+
+
+def save_seen_ids(ids: set[str]) -> None:
+    """Replace today's seen set.
+
+    We use DEL + SADD (upsert) so that old IDs from a previous day are
+    not carried forward if the key somehow survives a date rollover.
+    """
+    if not ids:
+        return
+    r = _get_valkey_client()
+    if r is None:
+        return
+    r.delete(_SEEN_KEY)
+    r.sadd(_SEEN_KEY, *ids)
+    logger.debug("Stored %d seen event ID(s)", len(ids))
+
+
+# ---- high-level helpers ---------------------------------------------
+
+def filter_new_events(events: list[dict], seen: set[str]) -> list[dict]:
+    """Return only events whose IDs are not in *seen*."""
+    new: list[dict] = []
+    for evt in events:
+        evt_id = evt.get("id", "")
+        if evt_id and evt_id in seen:
+            logger.debug("Skipping already-seen event: %s", evt_id)
+            continue
+        new.append(evt)
+    return new
+
+
+def collect_event_ids(events: list[dict]) -> set[str]:
+    """Extract every event ID from a list of events."""
+    return {evt["id"] for evt in events if evt.get("id")}
 
 
 # ------------------------------------------------------------------
@@ -448,9 +574,16 @@ def verify_caddy_routes() -> list[dict]:
 def initial_sync() -> bool:
     """Perform initial full sync on startup.
 
-    Fetches all roles from Keycloak, loads mapping file, generates routes,
-    and pushes to Caddy. This ensures idempotent behavior on restart.
+    If sync_is_current() is True (last sync happened within 2×SYNC_INTERVAL),
+    the Caddy routes are already in sync and we skip the expensive
+    Keycloak → Caddy regeneration.
+
+    After a successful sync the timestamp checkpoint is written.
     """
+    if sync_is_current():
+        logger.info("Initial Sync: Last sync is current — skipping full re-sync")
+        return True
+
     logger.info("=" * 60)
     logger.info("Initial Sync: Building routes from scratch")
     logger.info("=" * 60)
@@ -462,25 +595,21 @@ def initial_sync() -> bool:
         logger.error("Failed to authenticate to Keycloak: %s", e, exc_info=True)
         return False
 
-    # Fetch all roles from Keycloak
     available_roles = fetch_all_roles(token)
     logger.info("Found %d role(s) in realm '%s': %s", len(available_roles), KEYCLOAK_REALM, sorted(available_roles))
 
-    # Load mapping file
     mapping = load_mapping()
     logger.info("Loaded %d role-to-path mapping(s) from %s", len(mapping), MAPPING_FILE)
 
-    # Generate deny rules
     deny_rules = generate_deny_rules(mapping, available_roles)
     logger.info("Generated %d deny rule(s)", len(deny_rules))
 
-    # Build full routes
     routes = build_caddy_routes(deny_rules)
     logger.debug("Built %d total route(s) for Caddy", len(routes))
 
-    # Push to Caddy
     if push_routes_to_caddy(routes):
         logger.info("Initial sync complete!")
+        save_sync_timestamp()
         return True
     else:
         logger.error("Initial sync failed!")
@@ -488,7 +617,12 @@ def initial_sync() -> bool:
 
 
 def poll_and_sync() -> bool:
-    """Poll Keycloak for role changes and sync if needed."""
+    """Poll Keycloak for role changes and sync if needed.
+
+    Loads the set of already-seen event IDs from Valkey, filters them out,
+    and only reacts to genuinely new events.  After the cycle all fetched
+    IDs are persisted so the next restart won't re-process history.
+    """
     logger.debug("— Poll cycle started —")
 
     try:
@@ -498,18 +632,24 @@ def poll_and_sync() -> bool:
         logger.error("Failed to authenticate to Keycloak during poll: %s", e, exc_info=True)
         return False
 
-    # Calculate "since" as SYNC_INTERVAL seconds ago
     since = datetime.now(timezone.utc)
     since_offset = since - timedelta(seconds=SYNC_INTERVAL)
     logger.debug("Polling admin events from %s to %s", since_offset.strftime("%Y-%m-%dT%H:%M:%S"), since.strftime("%Y-%m-%dT%H:%M:%S"))
 
-    # Poll admin events
+    # -- Load already-seen IDs from Valkey --------------------------------
+    seen = load_seen_ids()
+    logger.debug("Loaded %d seen event ID(s) from Valkey", len(seen))
+
+    # -- Poll -------------------------------------------------------------
     try:
         events = poll_admin_events(token, since_offset)
         logger.debug("Fetched %d admin event(s) from Keycloak", len(events))
-        # Log each event's key fields for debugging
-        for evt in events:
-            logger.debug("  Event[id=%s, op=%s, resource=%s, realm=%s, user=%s]",
+
+        new_events = filter_new_events(events, seen)
+        logger.debug("New (unprocessed) event(s): %d / %d total", len(new_events), len(events))
+
+        for evt in new_events:
+            logger.debug("  [NEW] Event[id=%s, op=%s, resource=%s, realm=%s, user=%s]",
                          evt.get("id", "?"),
                          evt.get("operationType", "?"),
                          evt.get("resourceType", "?"),
@@ -519,8 +659,18 @@ def poll_and_sync() -> bool:
         logger.error("Failed to poll admin events: %s", e, exc_info=True)
         return False
 
-    # Check for user delete events → invalidate sessions
-    if has_user_delete_events(events):
+    # -- Persist all fetched IDs so the next cycle / restart skips them ---
+    all_ids = collect_event_ids(events) | seen
+    save_seen_ids(all_ids)
+
+    # -- Work only with new events ----------------------------------------
+    if not new_events:
+        logger.debug("Poll cycle complete: no new events")
+        save_sync_timestamp()
+        return True
+
+    # User / session deletions → invalidate sessions
+    if has_user_delete_events(new_events):
         logger.info("User/session deletion detected! Invalidating all sessions from Valkey...")
         invalidated = invalidate_all_sessions()
         if invalidated > 0:
@@ -528,11 +678,12 @@ def poll_and_sync() -> bool:
         else:
             logger.info("No active sessions found in Valkey to invalidate.")
 
-    if not has_role_events(events):
+    if not has_role_events(new_events):
         logger.debug("Poll cycle complete: no role changes detected")
-        return True  # No role changes, nothing to do
+        save_sync_timestamp()
+        return True
 
-    # Role events detected — perform full re-sync
+    # Role events — full re-sync
     logger.info("Role change detected! Regenerating Caddy routes...")
 
     available_roles = fetch_all_roles(token)
@@ -544,6 +695,7 @@ def poll_and_sync() -> bool:
 
     if push_routes_to_caddy(routes):
         logger.info("Incremental sync complete!")
+        save_sync_timestamp()
         return True
     else:
         logger.error("Incremental sync failed!")

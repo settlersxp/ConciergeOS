@@ -52,7 +52,7 @@ services:
       - KEYCLOAK_ADMIN_USER=admin
       - KEYCLOAK_ADMIN_PASSWORD=admin
       - CADDY_ADMIN_URL=http://caddy:2019
-      - SYNC_INTERVAL=1
+      - SYNC_INTERVAL=10
       - VALKEY_URL=redis://valkey:6379/0
       - SESSION_COOKIE_NAME=_oauth2_proxy
     command: >
