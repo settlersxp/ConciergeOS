@@ -268,7 +268,12 @@ def create_all_roles(base_url: str, token: str) -> dict[str, dict[str, str]]:
 
 
 def create_user(base_url: str, token: str, realm: str, username: str, password: str) -> str:
-    """Create a user in a realm. Returns the user ID."""
+    """Create a user in a realm. Returns the user ID.
+
+    Keycloak blocks password grant for users with pending required actions
+    (e.g., UPDATE_PASSWORD, VERIFY_EMAIL) with "Account is not fully set up".
+    We set firstName/lastName and clear requiredActions to avoid this.
+    """
     # Check if user exists
     resp = requests.get(
         f"{base_url}/admin/realms/{realm}/users",
@@ -279,7 +284,10 @@ def create_user(base_url: str, token: str, realm: str, username: str, password: 
 
     if resp.json():
         print(f"    ⏭ User {username} already exists")
-        return resp.json()[0]["id"]
+        user_id = resp.json()[0]["id"]
+        # Ensure existing users also have required actions cleared
+        _clear_required_actions(base_url, token, realm, user_id)
+        return user_id
 
     resp = api_request(
         "POST",
@@ -287,6 +295,8 @@ def create_user(base_url: str, token: str, realm: str, username: str, password: 
         token,
         {
             "username": username,
+            "firstName": username,
+            "lastName": "User",
             "enabled": True,
             "email": f"{username}@conciergeos.local",
             "credentials": [
@@ -297,6 +307,7 @@ def create_user(base_url: str, token: str, realm: str, username: str, password: 
                 }
             ],
             "emailVerified": True,
+            "requiredActions": [],
         },
     )
     resp.raise_for_status()
@@ -313,8 +324,36 @@ def create_user(base_url: str, token: str, realm: str, username: str, password: 
         resp.raise_for_status()
         user_id = resp.json()[0]["id"]
 
+    # Clear any required actions that Keycloak may have added
+    _clear_required_actions(base_url, token, realm, user_id)
+
     print(f"    ✓ User {username} created")
     return user_id
+
+
+def _clear_required_actions(base_url: str, token: str, realm: str, user_id: str) -> None:
+    """Clear required actions on a user so password grant authentication works.
+
+    Keycloak blocks password grant for users with pending required actions
+    (e.g., UPDATE_PASSWORD, VERIFY_EMAIL) with "Account is not fully set up".
+    We fetch the user, clear requiredActions, and PUT back.
+    """
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = requests.get(
+        f"{base_url}/admin/realms/{realm}/users/{user_id}",
+        headers=headers,
+    )
+    resp.raise_for_status()
+    user_data = resp.json()
+    user_data["requiredActions"] = []
+
+    resp = requests.put(
+        f"{base_url}/admin/realms/{realm}/users/{user_id}",
+        headers=headers,
+        json=user_data,
+    )
+    resp.raise_for_status()
 
 
 def create_all_users(base_url: str, token: str) -> dict[str, dict[str, str]]:

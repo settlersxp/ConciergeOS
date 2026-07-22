@@ -2,6 +2,7 @@
  * API client for prompt version CRUD operations.
  */
 
+import { request } from './api';
 import type {
   CreatePromptRequest,
   DuplicatePromptRequest,
@@ -9,20 +10,6 @@ import type {
   PromptVersion,
   UpdatePromptRequest,
 } from '../types/prompt';
-
-/** Generic fetch helper that parses JSON responses */
-async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const resp = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  if (!resp.ok) {
-    const body = await resp.text().catch(() => '');
-    throw new Error(resp.statusText + (body ? `: ${body}` : ''));
-  }
-  const text = await resp.text();
-  return text ? (JSON.parse(text) as T) : ({} as T);
-}
 
 /**
  * Fetch summary of all prompt IDs.
