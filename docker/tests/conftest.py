@@ -144,6 +144,36 @@ def sample_caddy_config():
 # ======================================================================
 
 
+@pytest.fixture(autouse=True)
+def _clear_sync_checkpoint(monkeypatch, pytestconfig):
+    """Clear the Valkey sync timestamp and disable sync_is_current() so initial_sync() never skips.
+
+    This fixture does two things:
+    1. Deletes the role_sync:sync_ts key from Valkey
+    2. Monkeypatches role_sync.sync_is_current to always return False
+
+    This ensures that every call to initial_sync() in tests will actually
+    rebuild the routes from scratch, which is required for tests that call
+    initial_sync() multiple times within the same test (e.g., create -> sync ->
+    validate -> delete -> sync -> validate).
+
+    NOTE: The monkeypatch is skipped for test_event_persistence.py because those
+    tests directly assert on sync_is_current() behavior.
+    """
+    import valkey as valkey_lib
+    try:
+        r = valkey_lib.from_url(role_sync.VALKEY_URL)
+        r.delete("role_sync:sync_ts")
+    except Exception:
+        pass
+
+    # Only monkeypatch sync_is_current for non-event-persistence tests
+    # (test_event_persistence.py tests sync_is_current() directly)
+    current_test = os.environ.get("PYTEST_CURRENT_TEST", "")
+    if "test_event_persistence" not in current_test:
+        monkeypatch.setattr(role_sync, "sync_is_current", lambda: False)
+
+
 @pytest.fixture
 def live_test_role(live_token):
     """Create a real role in Keycloak for integration testing, then delete it.

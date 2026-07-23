@@ -6,7 +6,6 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "2019:2019"
     volumes:
       - ./Caddyfile.json:/etc/caddy/Caddyfile.json
       - caddy_data:/data
@@ -129,6 +128,26 @@ services:
       - "8080:8080"
     networks:
       - app-network
+
+  pytest:
+    image: concos-pytest:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.pytest
+    container_name: pytest
+    env_file:
+      - .env
+    environment:
+      - SYNC_INTERVAL=${SYNC_INTERVAL}
+    depends_on:
+      - keycloak
+      - caddy
+      - valkey
+    networks:
+      - app-network
+    extra_hosts:
+      - "host-gateway:host-gateway"
+      - "out-customer.com:host-gateway"
 
 volumes:
   caddy_data:

@@ -116,6 +116,55 @@ Add-Content -Path "C:\Windows\System32\drivers\etc\hosts" -Value "127.0.0.1 out-
 
 Then visit: `https://out-customer.com`
 
+## Running Tests
+
+The test suite is located in `docker/tests/` and runs inside a Docker container connected to the `app-network`, allowing it to reach Keycloak, Caddy, and Valkey.
+
+### Run All Tests
+
+```bash
+cd docker
+docker compose run --rm pytest
+```
+
+This builds the `concos-pytest:latest` image on first run, then executes all tests.
+
+### Run Specific Tests
+
+```bash
+# Run a single test file
+docker compose run --rm pytest pytest tests/test_pure_functions.py -v
+
+# Run a specific test class
+docker compose run --rm pytest pytest tests/test_keycloak_auth.py::TestLiveKeycloakAuth -v
+
+# Run a single test method
+docker compose run --rm pytest pytest tests/test_pure_functions.py::TestHasRoleEvents::test_detects_create_role_event -v
+
+# Run tests matching a pattern
+docker compose run --rm pytest pytest tests/ -k "test_issuer" -v
+```
+
+### Local Development Override
+
+By default, the tests use Docker container names for service discovery (e.g., `keycloak:8080`). To run tests against a locally running Keycloak instance:
+
+```bash
+OIDC_CONFIG_HOST=localhost docker compose run --rm pytest
+```
+
+### Test Categories
+
+| Test File | Description | Requires Running Stack |
+|-----------|-------------|----------------------|
+| `test_pure_functions.py` | Unit tests for role_sync pure functions | No |
+| `test_event_persistence.py` | Valkey-backed event persistence | Valkey only |
+| `test_keycloak_auth.py` | Keycloak authentication & role fetching | Keycloak |
+| `test_keycloak_events.py` | Keycloak events API & realm config | Keycloak |
+| `test_oidc_config.py` | OIDC config consistency & reachability | Keycloak + Caddy |
+| `test_sync_flow.py` | Full sync flow (Keycloak → Caddy) | Keycloak + Caddy |
+| `test_valkey_session.py` | Valkey session storage & invalidation | Keycloak + Caddy + Valkey |
+
 ## Troubleshooting
 
 ### Certificate not trusted

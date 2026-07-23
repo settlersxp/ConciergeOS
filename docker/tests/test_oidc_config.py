@@ -29,8 +29,10 @@ COMPOSE_PATH = os.path.join(DOCKER_DIR, "docker-compose.yaml")
 
 PUBLIC_ISSUER_URL = "https://out-customer.com/auth/realms/production"
 PUBLIC_BASE = "https://out-customer.com"
-HOST = "localhost"
-PORT = 8080
+# Configurable via environment variables for Docker vs local development.
+# Defaults: "keycloak" container name in Docker, "localhost" locally.
+HOST = os.environ.get("OIDC_CONFIG_HOST", "keycloak")
+PORT = int(os.environ.get("OIDC_CONFIG_PORT", "8080"))
 
 # SSL context for self-signed Caddy CA
 SSL_CTX = ssl.create_default_context()
@@ -70,6 +72,15 @@ def compose_issuer_url(compose_content: str) -> str | None:
     return None
 
 
+def _resolve_env_defaults(raw: str) -> str:
+    """Resolve ${VAR:-default} and ${VAR} patterns to their default values."""
+    # Resolve ${VAR:-default} -> default
+    raw = re.sub(r'\$\{[^}:]+:-([^}]+)\}', r'\1', raw)
+    # Resolve ${VAR} (no default) -> empty string
+    raw = re.sub(r'\$\{[^}]+\}', '', raw)
+    return raw
+
+
 @pytest.fixture(scope="session")
 def compose_ssl_insecure_skip_verify(compose_content: str) -> str | None:
     """Extract OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY from docker-compose.yaml."""
@@ -77,7 +88,10 @@ def compose_ssl_insecure_skip_verify(compose_content: str) -> str | None:
         r'OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY\s*=\s*(\S+)',
         compose_content,
     )
-    return match.group(1).strip('"\'') if match else None
+    if not match:
+        return None
+    raw = match.group(1).strip('"\'')
+    return _resolve_env_defaults(raw)
 
 
 @pytest.fixture(scope="session")
@@ -87,7 +101,10 @@ def compose_session_store_type(compose_content: str) -> str | None:
         r'OAUTH2_PROXY_SESSION_STORE_TYPE\s*=\s*(\S+)',
         compose_content,
     )
-    return match.group(1).strip('"\'') if match else None
+    if not match:
+        return None
+    raw = match.group(1).strip('"\'')
+    return _resolve_env_defaults(raw)
 
 
 @pytest.fixture(scope="session")
@@ -97,7 +114,10 @@ def compose_redis_connection_url(compose_content: str) -> str | None:
         r'OAUTH2_PROXY_REDIS_CONNECTION_URL\s*=\s*(\S+)',
         compose_content,
     )
-    return match.group(1).strip('"\'') if match else None
+    if not match:
+        return None
+    raw = match.group(1).strip('"\'')
+    return _resolve_env_defaults(raw)
 
 
 @pytest.fixture(scope="session")
