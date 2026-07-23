@@ -1,0 +1,28 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN pip install pytest requests pyyaml valkey --no-cache-dir
+
+# Copy source modules
+COPY role_sync.py keycloak_setup.py settings.py rbac_routes.yaml ./
+
+# Copy docker-compose.yaml (read by test_oidc_config.py)
+COPY docker-compose.yaml ./
+
+# Copy tests
+COPY tests/ tests/
+
+# Default environment for Docker (overridden by docker compose env_file)
+ENV KEYCLOAK_URL=http://keycloak:8080/auth
+ENV KEYCLOAK_REALM=production
+ENV KEYCLOAK_ADMIN_USER=admin
+ENV KEYCLOAK_ADMIN_PASSWORD=admin
+ENV CADDY_ADMIN_URL=http://caddy:2019
+ENV SYNC_INTERVAL=10
+ENV VALKEY_URL=redis://valkey:6379/0
+ENV SESSION_COOKIE_NAME=_oauth2_proxy
+ENV OIDC_CONFIG_HOST=keycloak
+ENV OIDC_CONFIG_PORT=8080
+
+CMD ["pytest", "tests/", "-v"]
