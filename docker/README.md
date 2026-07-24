@@ -260,14 +260,12 @@ To completely reset and regenerate the Keycloak configuration from scratch:
 
 6. **Run the setup script:**
    ```bash
-   docker run --rm --network docker_app-network \
-     -v "$(pwd)/docker":/work python:3.12-slim \
-     bash -c "cd /work && pip install requests -q && python3 keycloak_setup.py keycloak 8080"
+   python3 keycloak_setup.py keycloak 8080"
    ```
 
 7. **Restart oauth2-proxy:**
    ```bash
-   docker compose restart oidc-main
+   docker compose up -d --force-recreate oidc-main
    ```
 
 ### Diagnostic Script
