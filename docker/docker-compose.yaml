@@ -129,26 +129,6 @@ services:
     networks:
       - app-network
 
-  pytest:
-    image: concos-pytest:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.pytest
-    container_name: pytest
-    env_file:
-      - .env
-    environment:
-      - SYNC_INTERVAL=${SYNC_INTERVAL}
-    depends_on:
-      - keycloak
-      - caddy
-      - valkey
-    networks:
-      - app-network
-    extra_hosts:
-      - "host-gateway:host-gateway"
-      - "out-customer.com:host-gateway"
-
 volumes:
   caddy_data:
   caddy_config:

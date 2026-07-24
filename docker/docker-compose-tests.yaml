@@ -1,0 +1,27 @@
+services:
+  pytest:
+    image: concos-pytest:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.pytest
+    container_name: pytest
+    env_file:
+      - .env
+    environment:
+      - SYNC_INTERVAL=${SYNC_INTERVAL}
+    depends_on:
+      keycloak:
+        condition: service_started
+      caddy:
+        condition: service_started
+      valkey:
+        condition: service_started
+    networks:
+      - app-network
+    extra_hosts:
+      - "host-gateway:host-gateway"
+      - "out-customer.com:host-gateway"
+
+networks:
+  app-network:
+    external: true
