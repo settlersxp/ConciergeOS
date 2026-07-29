@@ -25,7 +25,8 @@ CLIENT_ID = settings.OIDC_CLIENT_ID
 
 # Derived from APP_DOMAIN - no hardcoded URLs
 APP_DOMAIN = settings.APP_DOMAIN  # e.g., "https://out-customer.com"
-OIDC_MAIN_REDIRECT_URI = f"{APP_DOMAIN}/oauth2/callback"
+OIDC_APP1_REDIRECT_URI = f"{APP_DOMAIN}/app1/oauth2/callback"
+OIDC_APP2_REDIRECT_URI = f"{APP_DOMAIN}/app2/oauth2/callback"
 POST_LOGOUT_URI = f"{APP_DOMAIN}/"
 LOCAL_REDIRECT_URI = "http://localhost:*/*"
 LOCAL_WEB_ORIGIN = "http://localhost:*"
@@ -557,7 +558,8 @@ def create_client(base_url: str, token: str, realm: str) -> str:
                 "directAccessGrantsEnabled": True,
                 "serviceAccountsEnabled": False,
                 "redirectUris": [
-                    OIDC_MAIN_REDIRECT_URI,
+                    OIDC_APP1_REDIRECT_URI,
+                    OIDC_APP2_REDIRECT_URI,
                     DOMAIN_WILD_CARD,
                     LOCAL_REDIRECT_URI,
                 ],
@@ -770,7 +772,8 @@ def print_summary(base_url: str, admin_user: str, admin_pass: str, actual_secret
     print(f"Client: {CLIENT_ID} (confidential, PKCE enabled)")
     print(f"Client Secret: {actual_secret}")
     print("Redirect URIs:")
-    print(f"  Main:     {OIDC_MAIN_REDIRECT_URI}")
+    print(f"  App1:     {OIDC_APP1_REDIRECT_URI}")
+    print(f"  App2:     {OIDC_APP2_REDIRECT_URI}")
     print()
     print(f"Keycloak Admin Console:")
     print(f"  URL: {base_url}/admin")

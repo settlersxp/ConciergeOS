@@ -56,6 +56,78 @@
 						{
 							"handle": [
 								{
+									"handler": "rewrite",
+									"uri": "{http.regexp.app2.1}"
+								},
+								{
+									"handler": "reverse_proxy",
+									"upstreams": [
+										{
+											"dial": "oidc-two:4183"
+										}
+									],
+									"headers": {
+										"request": {
+											"set": {
+												"X-Forwarded-By": ["out-customer.com"],
+												"X-Forwarded-Proto": ["https"]
+											}
+										}
+									}
+								}
+							],
+							"match": [
+								{
+									"host": [
+										"out-customer.com"
+									],
+									"path_regexp": {
+										"name": "app2",
+										"pattern": "^/app2(/.*)?$"
+									}
+								}
+							],
+							"terminal": true
+						},
+						{
+							"handle": [
+								{
+									"handler": "rewrite",
+									"uri": "{http.regexp.app1.1}"
+								},
+								{
+									"handler": "reverse_proxy",
+									"upstreams": [
+										{
+											"dial": "oidc-main:4182"
+										}
+									],
+									"headers": {
+										"request": {
+											"set": {
+												"X-Forwarded-By": ["out-customer.com"],
+												"X-Forwarded-Proto": ["https"]
+											}
+										}
+									}
+								}
+							],
+							"match": [
+								{
+									"host": [
+										"out-customer.com"
+									],
+									"path_regexp": {
+										"name": "app1",
+										"pattern": "^/app1(/.*)?$"
+									}
+								}
+							],
+							"terminal": true
+						},
+						{
+							"handle": [
+								{
 									"handler": "reverse_proxy",
 									"upstreams": [
 										{

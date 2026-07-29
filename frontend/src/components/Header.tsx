@@ -6,6 +6,7 @@ import { useChainPagesContext } from '../context/ChainPagesContext';
 export default function Header() {
   const location = useLocation();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
   const context = useChainPagesContext();
 
   const chainLinks = context?.chainPages
@@ -22,6 +23,11 @@ export default function Header() {
     { path: '/settings', label: 'Settings' },
   ];
 
+  const baseUrl = import.meta.env.BASE_URL;
+  const currentApp = baseUrl === '/app2' ? 'app2' : 'app1';
+  const otherApp = currentApp === 'app1' ? 'app2' : 'app1';
+  const switchUrl = `https://${window.location.host}/${otherApp}`;
+
   const handleShift = async () => {
     try {
       const data = await reservationsApi.shift(1);
@@ -35,6 +41,16 @@ export default function Header() {
       const msg = e instanceof Error ? e.message : String(e);
       alert('Error shifting reservations: ' + msg);
     }
+  };
+
+  const handleSwitchApp = () => {
+    window.location.href = switchUrl;
+  };
+
+  const handleLogout = () => {
+    // oauth2-proxy sign-out endpoint
+    const signOutUrl = `https://${window.location.host}/oauth2/sign_out`;
+    window.location.href = signOutUrl;
   };
 
   return (
@@ -63,7 +79,10 @@ export default function Header() {
             {/* Workflows Dropdown */}
             <div className="relative">
               <button
-                onClick={() => setDropdownOpen(!dropdownOpen)}
+                onClick={() => {
+                  setDropdownOpen(!dropdownOpen);
+                  setDebugOpen(false);
+                }}
                 className="rounded-md px-3 py-2 text-sm text-primary-300 transition-colors hover:bg-primary-800 hover:text-white flex items-center gap-1"
               >
                 Workflows
@@ -82,7 +101,10 @@ export default function Header() {
                     <Link
                       key={l.path}
                       to={l.path}
-                      onClick={() => setDropdownOpen(false)}
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        setDebugOpen(false);
+                      }}
                       className={`block px-4 py-2 text-sm transition-colors ${
                         location.pathname === l.path
                           ? 'bg-primary-700 text-white'
@@ -97,6 +119,51 @@ export default function Header() {
               {dropdownOpen && chainLinks.length === 0 && (
                 <div className="absolute right-0 z-50 mt-1 min-w-[180px] rounded-md bg-primary-800 shadow-lg ring-1 ring-black/10 px-4 py-2 text-sm text-primary-400">
                   No workflows available
+                </div>
+              )}
+            </div>
+
+            {/* Debug Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setDebugOpen(!debugOpen);
+                  setDropdownOpen(false);
+                }}
+                className="rounded-md px-3 py-2 text-sm text-yellow-300 transition-colors hover:bg-primary-800 hover:text-white flex items-center gap-1"
+              >
+                Debug
+                <svg
+                  className={`w-4 h-4 transition-transform ${debugOpen ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {debugOpen && (
+                <div className="absolute right-0 z-50 mt-1 min-w-[240px] rounded-md bg-primary-800 shadow-lg ring-1 ring-black/10 p-4 space-y-3">
+                  <div className="text-sm">
+                    <span className="text-primary-300">Base URL:</span>{' '}
+                    <code className="bg-primary-900 px-1 rounded text-yellow-300">{baseUrl}</code>
+                  </div>
+                  <div className="text-sm">
+                    <span className="text-primary-300">Current App:</span>{' '}
+                    <code className="bg-primary-900 px-1 rounded text-yellow-300">{currentApp}</code>
+                  </div>
+                  <button
+                    onClick={handleSwitchApp}
+                    className="w-full rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+                  >
+                    Switch to {otherApp}
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                  >
+                    Logout
+                  </button>
                 </div>
               )}
             </div>
