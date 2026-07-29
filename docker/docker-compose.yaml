@@ -54,6 +54,9 @@ services:
       # Session storage (Valkey/Redis)
       - OAUTH2_PROXY_SESSION_STORE_TYPE=${OAUTH2_PROXY_SESSION_STORE_TYPE:-redis}
       - OAUTH2_PROXY_REDIS_CONNECTION_URL=${VALKEY_URL:-redis://valkey:6379/0}
+      # Backend logout — server-side call to Keycloak (internal URL) to terminate SSO session
+      # {id_token} is replaced by oauth2-proxy with the user's ID token at logout time
+      - OAUTH2_PROXY_BACKEND_LOGOUT_URL=http://keycloak:8080/auth/realms/${OIDC_REALM:-production}/protocol/openid-connect/logout?id_token_hint={id_token}
     depends_on:
       - keycloak
       - frontend
@@ -150,6 +153,9 @@ services:
       # Session storage (Valkey/Redis)
       - OAUTH2_PROXY_SESSION_STORE_TYPE=${OAUTH2_PROXY_SESSION_STORE_TYPE:-redis}
       - OAUTH2_PROXY_REDIS_CONNECTION_URL=${VALKEY_URL:-redis://valkey:6379/0}
+      # Backend logout — server-side call to Keycloak (internal URL) to terminate SSO session
+      # {id_token} is replaced by oauth2-proxy with the user's ID token at logout time
+      - OAUTH2_PROXY_BACKEND_LOGOUT_URL=http://keycloak:8080/auth/realms/${OIDC_REALM:-production}/protocol/openid-connect/logout?id_token_hint={id_token}
     depends_on:
       - keycloak
       - frontend-two

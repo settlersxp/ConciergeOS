@@ -48,7 +48,9 @@ export default function Header() {
   };
 
   const handleLogout = () => {
-    // oauth2-proxy sign-out endpoint
+    // oauth2-proxy sign-out endpoint.
+    // The backend_logout_url config on oauth2-proxy will terminate the
+    // Keycloak SSO session before clearing the proxy session cookie.
     const signOutUrl = `https://${window.location.host}/oauth2/sign_out`;
     window.location.href = signOutUrl;
   };

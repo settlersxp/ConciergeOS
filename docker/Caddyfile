@@ -75,7 +75,16 @@ out-customer.com {
         }
     }
 
-    # 4. Default fallback — proxy to oidc-main
+    # 4. OAuth2-proxy endpoints (sign_out, callback, etc.) — scalable for any number of apps
+    @oauth2 path /oauth2/*
+    handle @oauth2 {
+        reverse_proxy oidc-main:4182 {
+            header_up X-Forwarded-By out-customer.com
+            header_up X-Forwarded-Proto https
+        }
+    }
+
+    # 5. Default fallback — proxy to oidc-main
     handle {
         reverse_proxy oidc-main:4182 {
             header_up X-Forwarded-By out-customer.com
