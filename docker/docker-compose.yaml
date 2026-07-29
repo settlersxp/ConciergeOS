@@ -7,10 +7,9 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile.json:/etc/caddy/Caddyfile.json
+      - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
-    command: caddy run --config /etc/caddy/Caddyfile.json
     depends_on:
       - frontend
       - frontend-two

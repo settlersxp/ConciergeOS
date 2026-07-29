@@ -432,7 +432,7 @@ cookie_expire = "1h"
 
 **Note:** The `scope` does not need `roles` because Keycloak includes `realm_access.roles` in the **access token** by default, and oauth2-proxy reads roles from the access token (not the ID token).
 
-### 5.3 Caddy Configuration (`docker/Caddyfile.json`)
+### 5.3 Caddy Configuration (`docker/Caddyfile`)
 
 #### Changes
 
@@ -716,7 +716,7 @@ A human-readable YAML file that maps Keycloak role names to the Caddy paths they
 
 ### Phase 3: Caddy Configuration
 
-1. Enable the Caddy Admin API: change `"admin": {"disabled": true}` to `"admin": {"listen": "0.0.0.0:2019"}` in `Caddyfile.json`
+1. Enable the Caddy Admin API: set `admin 0.0.0.0:2019` in the global options block of `Caddyfile`
 2. In `internal-server` routes, keep the static assets route and the default catch-all proxy route — deny rules will be injected by the sync service at runtime
 3. Validate JSON syntax
 
@@ -1013,7 +1013,7 @@ For organizations that prefer tier-based management (e.g., "receptionist", "mana
 |------|--------|-------------|
 | `docker/keycloak_setup.py` | Modify | Group → Role throughout |
 | `docker/oidc-main.toml` | Modify | Remove `oidc_groups_claim`, set `allowed_groups = ["*"]` |
-| `docker/Caddyfile.json` | Modify | Enable admin endpoint (`"listen": "0.0.0.0:2019"`), simplify routes (deny rules injected by sync service) |
+| `docker/Caddyfile` | Modify | Enable admin endpoint (`admin 0.0.0.0:2019`), simplify routes (deny rules injected by sync service) |
 | `docker/docker-compose.yaml` | Modify | Add `OIDC_REALM` env var to `oidc-main`; add `role-sync` service |
 | `docker/role_sync.py` | **Create** | Python sync service: polls Keycloak admin events, generates Caddy routes, pushes via Caddy Admin API |
 | `docker/rbac_routes.yaml` | **Create** | Role-to-path mapping: YAML file that maps role names to protected Caddy paths |

@@ -1,0 +1,106 @@
+# ============================================================================
+# Caddy Configuration for ConciergeOS
+# ============================================================================
+# This Caddyfile is adapted to JSON at runtime by Caddy.
+# To preview the adapted JSON:  caddy adapt --config Caddyfile --pretty
+# ============================================================================
+
+
+# ─── Global Options ─────────────────────────────────────────────────────────
+
+{
+    # Admin API (used by role-sync service)
+    admin 0.0.0.0:2019
+
+    # Port configuration
+    http_port 80
+    https_port 443
+
+    # Disable auto-HTTPS redirects — we handle the redirect manually
+    auto_https disable_redirects
+
+    # Do not auto-install/trust the internal CA certificate on the host
+    skip_install_trust
+
+    # Logging
+    log {
+        level DEBUG
+        output stdout
+    }
+}
+
+
+# ─── HTTP → HTTPS Redirect ──────────────────────────────────────────────────
+
+http://out-customer.com {
+    redir https://{host}{uri} 301
+}
+
+
+# ─── HTTPS Server — out-customer.com (:443) ─────────────────────────────────
+#
+# Routes are evaluated top-to-bottom; the first matching `handle` block wins.
+#
+
+out-customer.com {
+    # Use internal (self-signed) CA for this domain
+    tls internal
+
+    # 1. Keycloak authentication endpoints
+    @keycloak path /auth/*
+    handle @keycloak {
+        reverse_proxy keycloak:8080 {
+            header_up X-Forwarded-By out-customer.com
+            header_up X-Forwarded-Proto https
+        }
+    }
+
+    # 2. App2 — proxy to oidc-two with path rewrite
+    @app2 path_regexp app2 ^/app2(/.*)?$
+    handle @app2 {
+        rewrite {re.app2.1}
+        reverse_proxy oidc-two:4183 {
+            header_up X-Forwarded-By out-customer.com
+            header_up X-Forwarded-Proto https
+        }
+    }
+
+    # 3. App1 — proxy to oidc-main with path rewrite
+    @app1 path_regexp app1 ^/app1(/.*)?$
+    handle @app1 {
+        rewrite {re.app1.1}
+        reverse_proxy oidc-main:4182 {
+            header_up X-Forwarded-By out-customer.com
+            header_up X-Forwarded-Proto https
+        }
+    }
+
+    # 4. Default fallback — proxy to oidc-main
+    handle {
+        reverse_proxy oidc-main:4182 {
+            header_up X-Forwarded-By out-customer.com
+            header_up X-Forwarded-Proto https
+        }
+    }
+}
+
+
+# ─── Internal Server — :8000 (not exposed to the internet) ──────────────────
+#
+# Proxies all internal traffic to the frontend service.
+#
+
+:8000 {
+    # Static asset paths
+    @static_assets path /assets/* /favicon.svg /icons.svg /vite.svg /react.svg /hero.png /*.css /*.js /*.map /*.svg /*.png /*.jpg /*.gif /*.ico /*.woff /*.woff2 /*.ttf /*.eot
+
+    # Serve static assets from frontend
+    handle @static_assets {
+        reverse_proxy frontend:80
+    }
+
+    # Default: proxy everything else to frontend
+    handle {
+        reverse_proxy frontend:80
+    }
+}
