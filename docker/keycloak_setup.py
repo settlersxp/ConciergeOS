@@ -23,6 +23,10 @@ from settings import settings
 REALMS = ["testing", "production"]
 CLIENT_ID = settings.OIDC_CLIENT_ID
 
+# Second client: service-to-service (Client Credentials Grant)
+CLIENT_API_ID = "client-api"
+_client_api_secret = ""
+
 # Derived from APP_DOMAIN - no hardcoded URLs
 APP_DOMAIN = settings.APP_DOMAIN  # e.g., "https://out-customer.com"
 OIDC_APP1_REDIRECT_URI = f"{APP_DOMAIN}/app1/oauth2/callback"
@@ -522,6 +526,88 @@ def assign_all_users_to_roles(
 # ------------------------------------------------------------------
 
 
+def _create_client_in_realm(
+    base_url: str,
+    token: str,
+    realm: str,
+    client_id: str,
+    /,
+    service_account: bool = False,
+    redirect_uris: list[str] | None = None,
+    web_origins: list[str] | None = None,
+    post_logout_uris: list[str] | None = None,
+) -> tuple[str, str]:
+    """Create (or update) a Keycloak client. Returns (client_uuid, secret)."""
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}",
+    }
+
+    # Check if client exists
+    resp = requests.get(
+        f"{base_url}/admin/realms/{realm}/clients",
+        headers=headers,
+    )
+    resp.raise_for_status()
+    clients = resp.json()
+    match = [c for c in clients if c["clientId"] == client_id]
+
+    if match:
+        client_uuid = match[0]["id"]
+        print(f"    ⏭ Client {client_id} already exists in {realm}, updating secret...")
+    else:
+        payload: dict = {
+            "clientId": client_id,
+            "enabled": True,
+            "publicClient": False,
+            "standardFlowEnabled": not service_account,
+            "implicitFlowEnabled": False,
+            "directAccessGrantsEnabled": True,
+            "serviceAccountsEnabled": service_account,
+        }
+        if redirect_uris:
+            payload["redirectUris"] = redirect_uris
+        if web_origins:
+            payload["webOrigins"] = web_origins
+        if post_logout_uris:
+            payload["attributes"] = {
+                "post.logout.redirect.uris": "##".join(post_logout_uris),
+            }
+        if service_account:
+            payload["attributes"] = {
+                **(payload.get("attributes") or {}),
+                "client_credentials.use_refresh_token": "false",
+            }
+
+        resp = api_request(
+            "POST",
+            f"{base_url}/admin/realms/{realm}/clients",
+            token,
+            payload,
+        )
+        resp.raise_for_status()
+        client_uuid = resp.headers.get("Location", "").split("/")[-1]
+        if not client_uuid:
+            resp = requests.get(
+                f"{base_url}/admin/realms/{realm}/clients",
+                headers=headers,
+            )
+            resp.raise_for_status()
+            match = [c for c in resp.json() if c["clientId"] == client_id]
+            client_uuid = match[0]["id"]
+
+    # Regenerate secret
+    resp = requests.post(
+        f"{base_url}/admin/realms/{realm}/clients/{client_uuid}/client-secret",
+        headers=headers,
+    )
+    resp.raise_for_status()
+    secret_value = resp.json().get("value", "")
+    print(f"    ✓ Client {client_id} in {realm} (secret: {secret_value})")
+    return client_uuid, secret_value
+
+
 def create_client(base_url: str, token: str, realm: str) -> str:
     """Create the conciergeos client in a realm. Returns the client UUID.
 
@@ -530,7 +616,27 @@ def create_client(base_url: str, token: str, realm: str) -> str:
     caller can set the OAUTH2_PROXY_CLIENT_SECRET environment variable.
     """
     global _actual_client_secret
-    print(f"  Creating client: {CLIENT_ID} in {realm}...")
+
+    client_uuid, secret_value = _create_client_in_realm(
+        base_url,
+        token,
+        realm,
+        CLIENT_ID,
+        service_account=False,
+        redirect_uris=[
+            OIDC_APP1_REDIRECT_URI,
+            OIDC_APP2_REDIRECT_URI,
+            DOMAIN_WILD_CARD,
+            LOCAL_REDIRECT_URI,
+        ],
+        web_origins=[APP_DOMAIN, LOCAL_WEB_ORIGIN],
+        post_logout_uris=[POST_LOGOUT_URI, DOMAIN_WILD_CARD, LOCAL_REDIRECT_URI],
+    )
+    _actual_client_secret = secret_value
+    return client_uuid
+
+
+# Legacy dead code removed — _create_client_in_realm is the single implementation
 
     # Check if client exists
     resp = requests.get(
@@ -610,6 +716,24 @@ def create_client(base_url: str, token: str, realm: str) -> str:
     return client_uuid
 
 
+def create_client_api(base_url: str, token: str, realm: str) -> tuple[str, str]:
+    """Create the client-api service client (Client Credentials Grant).
+
+    Returns (client_uuid, secret).
+    """
+    global _client_api_secret
+
+    client_uuid, secret_value = _create_client_in_realm(
+        base_url,
+        token,
+        realm,
+        CLIENT_API_ID,
+        service_account=True,
+    )
+    _client_api_secret = secret_value
+    return client_uuid, secret_value
+
+
 def create_all_clients(base_url: str, token: str) -> dict[str, str]:
     """Create clients in all realms. Returns {realm: client_uuid}."""
     print("[6/8] Creating clients in realms...")
@@ -619,6 +743,21 @@ def create_all_clients(base_url: str, token: str) -> dict[str, str]:
         client_uuids[realm] = create_client(base_url, token, realm)
     print()
     return client_uuids
+
+
+def create_all_client_apis(base_url: str, token: str) -> dict[str, tuple[str, str]]:
+    """Create the client-api service client in all realms.
+
+    Returns {realm: (client_uuid, secret)}.
+    """
+    print("[6b/8] Creating client-api service client in realms...")
+    results: dict[str, tuple[str, str]] = {}
+
+    for realm in REALMS:
+        print(f"  Realm: {realm}")
+        results[realm] = create_client_api(base_url, token, realm)
+    print()
+    return results
 
 
 # ------------------------------------------------------------------
@@ -735,21 +874,51 @@ def _update_env_file(env_path: str, secret: str) -> None:
         print(f"  ⚠ Failed to update {env_path}: {e}")
 
 
-def update_oidc_configs(actual_secret: str) -> None:
-    """Print and automatically update the Keycloak client secret in .env files.
+def _update_env_file_client_api(env_path: str, secret: str) -> None:
+    """Update CLIENT_API_CLIENT_SECRET in the .env file in place."""
+    try:
+        with open(env_path, "r") as f:
+            lines = f.readlines()
 
-    The oauth2-proxy is configured via environment variables. After generating
-    a new client secret, this function writes it to the .env file(s) so the
-    caller does not have to update them manually.
+        new_lines: list[str] = []
+        updated = False
+        for line in lines:
+            if line.startswith("CLIENT_API_CLIENT_SECRET="):
+                new_lines.append(f"CLIENT_API_CLIENT_SECRET={secret}\n")
+                updated = True
+            else:
+                new_lines.append(line)
+
+        if not updated:
+            # Ensure previous line ends with newline before appending
+            if new_lines and not new_lines[-1].endswith("\n"):
+                new_lines[-1] += "\n"
+            new_lines.append(f"CLIENT_API_CLIENT_SECRET={secret}\n")
+
+        with open(env_path, "w") as f:
+            f.writelines(new_lines)
+
+        print(f"  ✓ Updated CLIENT_API_CLIENT_SECRET in {env_path}")
+    except OSError as e:
+        print(f"  ⚠ Failed to update {env_path}: {e}")
+
+
+def update_oidc_configs(actual_secret: str, client_api_secret: str) -> None:
+    """Print and automatically update the Keycloak client secrets in .env files.
+
+    Updates both OIDC_CLIENT_SECRET (for oauth2-proxy) and
+    CLIENT_API_CLIENT_SECRET (for the client-backend service).
     """
-    print(f"  ✓ Client secret: {actual_secret}")
+    print(f"  ✓ concierge client secret: {actual_secret}")
+    print(f"  ✓ client-api client secret: {client_api_secret}")
 
     # Auto-update .env files
     env_path = _find_env_file()
     if env_path:
         _update_env_file(env_path, actual_secret)
+        _update_env_file_client_api(env_path, client_api_secret)
     else:
-        print("  ⚠ No .env file found. Set OIDC_PROXY_CLIENT_SECRET manually.")
+        print("  ⚠ No .env file found. Set secrets manually.")
 
 
 def print_summary(base_url: str, admin_user: str, admin_pass: str, actual_secret: str) -> None:
@@ -774,6 +943,11 @@ def print_summary(base_url: str, admin_user: str, admin_pass: str, actual_secret
     print("Redirect URIs:")
     print(f"  App1:     {OIDC_APP1_REDIRECT_URI}")
     print(f"  App2:     {OIDC_APP2_REDIRECT_URI}")
+    print()
+    print(f"Client: {CLIENT_API_ID} (confidential, Client Credentials Grant)")
+    print(f"Client Secret: {_client_api_secret}")
+    print("  Grant Type: client_credentials (machine-to-machine)")
+    print("  Service Accounts: enabled")
     print()
     print(f"Keycloak Admin Console:")
     print(f"  URL: {base_url}/admin")
@@ -851,13 +1025,17 @@ def main() -> None:
     # 6. Create clients
     client_uuids = create_all_clients(base_url, token)
 
+    # 6b. Create the client-api service client
+    client_api_results = create_all_client_apis(base_url, token)
+
     # 7. Configure role claim (replaces groups claim)
     configure_all_role_claims(base_url, token, client_uuids)
 
-    # 7.5 Display client secret for env var configuration
+    # 7.5 Display client secrets for env var configuration
     actual_secret = _actual_client_secret
-    print("[7.5/8] Client secret (set OAUTH2_PROXY_CLIENT_SECRET env var)...")
-    update_oidc_configs(actual_secret)
+    client_api_secret = _client_api_secret
+    print("[7.5/8] Client secrets (set env vars)...")
+    update_oidc_configs(actual_secret, client_api_secret)
     print()
 
     # 8. Summary

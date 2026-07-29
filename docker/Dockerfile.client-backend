@@ -1,0 +1,32 @@
+# ---- Build stage ----
+FROM python:3.12-slim AS builder
+
+WORKDIR /app
+
+# Install uv for fast dependency management
+RUN pip install --no-cache-dir uv
+
+COPY pyproject.toml ./
+# Create a minimal pyproject.toml just for the client backend deps
+RUN echo '[project]\nname = "client-backend"\nversion = "0.1.0"\ndependencies = ["fastapi>=0.115", "uvicorn[standard]>=0.34", "httpx>=0.28"]' > pyproject.toml
+
+RUN uv sync --frozen 2>/dev/null || uv sync
+
+# ---- Runtime stage ----
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Copy virtual environment from builder (keep at /app/.venv)
+COPY --from=builder /app/.venv /app/.venv
+
+# Copy application code
+COPY client_backend/ ./client_backend/
+
+# Use the virtual environment
+ENV PATH="/app/.venv/bin:$PATH"
+
+EXPOSE 8000
+
+# Run the FastAPI app
+CMD ["uvicorn", "client_backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

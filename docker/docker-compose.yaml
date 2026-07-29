@@ -16,6 +16,8 @@ services:
       - keycloak
       - oidc-main
       - oidc-two
+      - client-backend
+      - backend
     networks:
       - app-network
 
@@ -170,6 +172,27 @@ services:
       dockerfile: docker/Dockerfile.backend
     container_name: backend
     restart: unless-stopped
+    networks:
+      - app-network
+
+  client-backend:
+    image: concos-client-backend:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.client-backend
+    container_name: client-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080/auth}
+      - KEYCLOAK_REALM=${OIDC_REALM:-production}
+      - CLIENT_API_CLIENT_ID=${CLIENT_API_CLIENT_ID:-client-api}
+      - CLIENT_API_CLIENT_SECRET=${CLIENT_API_CLIENT_SECRET:-}
+      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
+    depends_on:
+      - keycloak
+      - backend
     networks:
       - app-network
 

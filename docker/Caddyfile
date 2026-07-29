@@ -84,7 +84,25 @@ out-customer.com {
         }
     }
 
-    # 5. Default fallback — proxy to oidc-main
+    # 5. Client API — service-to-service proxy (no user auth, uses client credentials)
+    @clientapi path /client-api/*
+    handle @clientapi {
+        reverse_proxy client-backend:8000 {
+            header_up X-Forwarded-By out-customer.com
+            header_up X-Forwarded-Proto https
+        }
+    }
+
+    # 6. Backend API — internal API proxy
+    @backendapi path /api/*
+    handle @backendapi {
+        reverse_proxy backend:8000 {
+            header_up X-Forwarded-By out-customer.com
+            header_up X-Forwarded-Proto https
+        }
+    }
+
+    # 7. Default fallback — proxy to oidc-main
     handle {
         reverse_proxy oidc-main:4182 {
             header_up X-Forwarded-By out-customer.com
