@@ -13,19 +13,17 @@ import tempfile
 from pathlib import Path
 
 import pytest
-import requests
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from rbac_sync import (
-    role_operations,
-    routes_persistence,
-)
+from rbac_sync import routes_persistence
 from rbac_sync.role_operations import sync_all_roles
-from keycloak_common import authenticate, kc_request, get_role_by_name
+from keycloak_common import authenticate, get_role_by_name
 from keycloak_setup.roles import (
     create_role_with_attributes,
+    delete_role,
+    sync_role_to_keycloak,
     update_role_attributes,
 )
 from settings import settings
@@ -247,7 +245,7 @@ class TestSyncRoleToKeycloak:
             "message": "Sync test message",
         }
 
-        success, action = role_operations.sync_role_to_keycloak(
+        success, action = sync_role_to_keycloak(
             live_token, realm, test_role_name, config, create_if_missing=True
         )
 
@@ -275,7 +273,7 @@ class TestSyncRoleToKeycloak:
             "message": "Updated message",
         }
 
-        success, action = role_operations.sync_role_to_keycloak(
+        success, action = sync_role_to_keycloak(
             live_token, realm, test_role_name, new_config, create_if_missing=True
         )
 
@@ -296,7 +294,7 @@ class TestSyncRoleToKeycloak:
             "message": "Test",
         }
 
-        success, action = role_operations.sync_role_to_keycloak(
+        success, action = sync_role_to_keycloak(
             live_token, realm, test_role_name, config, create_if_missing=False
         )
 
@@ -339,14 +337,10 @@ class TestSyncAllRoles:
             role_data = get_role_by_name(live_token, realm, role_name)
             assert role_data is not None
 
-        # Cleanup: delete the test roles
-        headers = {"Authorization": f"Bearer {live_token}", "Content-Type": "application/json"}
+        # Cleanup: delete the test roles using keycloak_setup primitives
         for role_name in results:
             try:
-                resp = requests.delete(
-                    f"{settings.KEYCLOAK_URL}/admin/realms/{realm}/roles/{role_name}",
-                    headers=headers,
-                )
+                resp = delete_role(live_token, realm, role_name)
                 assert resp.status_code in (204, 404)
             except Exception:
                 pass

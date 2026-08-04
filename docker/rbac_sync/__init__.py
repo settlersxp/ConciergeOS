@@ -3,9 +3,15 @@
 This package provides modular functionality for synchronizing RBAC routes
 between Keycloak, Caddy, and YAML configuration files.
 
+Architecture:
+    This package depends on keycloak_setup for all Keycloak CRUD operations.
+    All Keycloak role/user management goes through keycloak_setup.roles,
+    keycloak_setup.users, etc. — this package only handles sync orchestration,
+    Caddy route generation, and session invalidation.
+
 Modules:
     - config: Configuration constants and settings
-    - role_operations: Keycloak role CRUD operations
+    - role_operations: Adapter that bridges rbac_sync to keycloak_setup.roles
     - routes_persistence: Routes file parsing and persistence
     - caddy_routes: Caddy route generation and pushing
     - event_polling: Keycloak admin event polling
@@ -27,9 +33,15 @@ from .config import (
     SESSION_EVENT_TYPES,
 )
 
-from .role_operations import (
-    sync_all_roles,
-    print_summary,
+# ── Keycloak Setup Dependency ────────────────────────────────────────
+# All Keycloak CRUD operations are delegated to keycloak_setup.
+# This section re-exports the primitives used by rbac_sync for convenience.
+from keycloak_setup.roles import (
+    list_roles,
+    list_roles_with_attrs,
+    upsert_role_with_attributes,
+    delete_role,
+    sync_role_to_keycloak,
 )
 
 from .routes_persistence import (
@@ -85,9 +97,12 @@ __all__ = [
     "ROLE_EVENT_TYPES",
     "USER_EVENT_TYPES",
     "SESSION_EVENT_TYPES",
-    # Role Operations
-    "sync_all_roles",
-    "print_summary",
+    # Keycloak Setup Dependency (re-exported from keycloak_setup.roles)
+    "list_roles",
+    "list_roles_with_attrs",
+    "upsert_role_with_attributes",
+    "delete_role",
+    "sync_role_to_keycloak",
     # RBAC Persistence
     "parse_rbac_routes",
     "load_existing_rbac_routes",

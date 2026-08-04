@@ -10,7 +10,6 @@ import os
 import sys
 
 import pytest
-import requests
 
 # Load shared settings to ensure consistent defaults
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -27,6 +26,8 @@ os.environ.setdefault("VALKEY_URL", settings.VALKEY_URL)
 os.environ.setdefault("SESSION_COOKIE_NAME", settings.SESSION_COOKIE_NAME)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from keycloak_common import authenticate
+from keycloak_setup.roles import delete_role, upsert_role_with_attributes
 from rbac_sync.config import (
     KEYCLOAK_URL,
     KEYCLOAK_REALM,
@@ -42,20 +43,12 @@ from settings import settings
 
 @pytest.fixture(scope="session")
 def live_token():
-    """Authenticate against the live Keycloak instance once per session."""
-    resp = requests.post(
-        f"{KEYCLOAK_URL}/realms/master/protocol/openid-connect/token",
-        data={
-            "grant_type": "password",
-            "client_id": "admin-cli",
-            "username": settings.KEYCLOAK_ADMIN_USER,
-            "password": settings.KEYCLOAK_ADMIN_PASSWORD,
-        },
-    )
-    resp.raise_for_status()
-    token = resp.json().get("access_token")
-    assert token, "No access_token from Keycloak"
-    return token
+    """Authenticate against the live Keycloak instance once per session.
+
+    Uses the shared keycloak_common.authenticate() helper as the single
+    source of truth for Keycloak admin authentication.
+    """
+    return authenticate()
 
 
 @pytest.fixture
@@ -154,55 +147,26 @@ def _clear_sync_checkpoint(monkeypatch, pytestconfig):
 def live_test_role(live_token):
     """Create a real role in Keycloak with paths/menus attributes for integration testing.
 
+    Uses keycloak_setup.roles primitives (upsert_role_with_attributes, delete_role)
+    as the single source of truth for Keycloak role CRUD operations.
+
     Yields the role name after creation, and guarantees cleanup.
-    Attributes are stored directly in Keycloak (no external YAML mapping needed).
     """
     role_name = "test:cof-integration-role"
     realm = KEYCLOAK_REALM
-    base = KEYCLOAK_URL
-    headers = {"Authorization": f"Bearer {live_token}", "Content-Type": "application/json"}
 
-    # ── CREATE role in Keycloak with attributes ───────────────────
-    # Step 1: Create role (idempotent)
-    resp = requests.get(
-        f"{base}/admin/realms/{realm}/roles/{role_name}",
-        headers=headers,
+    # Create role with attributes using keycloak_setup primitives
+    upsert_role_with_attributes(
+        live_token, realm, role_name,
+        paths=["/test-cof", "/test-cof/*"],
+        menus=["test-cof"],
     )
-    if resp.status_code != 200:
-        resp = requests.post(
-            f"{base}/admin/realms/{realm}/roles",
-            headers=headers,
-            json={"name": role_name, "description": "CI integration test role"},
-        )
-        resp.raise_for_status()
-
-    # Step 2: Fetch and update with attributes
-    resp = requests.get(
-        f"{base}/admin/realms/{realm}/roles/{role_name}",
-        headers=headers,
-    )
-    resp.raise_for_status()
-    role_data = resp.json()
-    role_data["attributes"] = {
-        "paths": ["/test-cof", "/test-cof/*"],
-        "menus": ["test-cof"],
-    }
-    resp = requests.put(
-        f"{base}/admin/realms/{realm}/roles/{role_name}",
-        headers=headers,
-        json=role_data,
-    )
-    resp.raise_for_status()
 
     yield role_name
 
-    # ── CLEANUP: delete role from Keycloak ───────────────────────
+    # Cleanup: delete role using keycloak_setup primitives
     try:
-        resp = requests.delete(
-            f"{base}/admin/realms/{realm}/roles/{role_name}",
-            headers=headers,
-        )
-        # 204 = success, 404 = already gone
+        resp = delete_role(live_token, realm, role_name)
         assert resp.status_code in (204, 404), \
             f"Failed to delete role {role_name}: {resp.status_code}"
     except Exception:

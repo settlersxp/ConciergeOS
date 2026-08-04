@@ -1,38 +1,47 @@
-"""Keycloak Role Operations module.
+"""RBAC Role Operations — Adapter Module.
 
-Handles creating, updating, and syncing roles to Keycloak with
-their associated path and message attributes.
+This module is a thin adapter that bridges `rbac_sync` to `keycloak_setup.roles`.
 
-This module reuses functionality from keycloak_setup.roles for role
-management, providing a thin wrapper for rbac_sync-specific operations.
+Architecture Note:
+    All Keycloak CRUD operations are delegated to `keycloak_setup.roles`.
+    This module only provides the `sync_all_roles()` convenience function
+    which parses a routes file and delegates each role to
+    `keycloak_setup.roles.sync_role_to_keycloak()`.
+
+    Direct role operations (create, update, delete, list) should go through
+    `keycloak_setup.roles` directly. This module is re-exported from
+    `rbac_sync.__init__` for backward compatibility.
 """
 
 import logging
+from pathlib import Path
 
 from keycloak_common import authenticate
-from keycloak_setup.roles import (
-    sync_role_to_keycloak,
-)
+from keycloak_setup.roles import sync_role_to_keycloak
 from settings import settings
 
 logger = logging.getLogger(__name__)
 
 
-def sync_all_roles(yaml_path, create_if_missing: bool = True) -> dict[str, str]:
-    """Sync all roles from YAML to Keycloak.
+def sync_all_roles(routes_path: Path, create_if_missing: bool = True) -> dict[str, str]:
+    """Sync all roles from a routes file (JSON) to Keycloak.
+
+    Parses the routes file, then delegates each role to
+    `keycloak_setup.roles.sync_role_to_keycloak()`.
 
     Args:
-        yaml_path: Path to the YAML file
-        create_if_missing: Whether to create roles that don't exist
+        routes_path: Path to the RBAC routes JSON file
+        create_if_missing: Whether to create roles that don't exist in Keycloak
 
     Returns:
         Dictionary mapping role names to their action status
+        ("created", "updated", "skipped", or "failed")
     """
     from .routes_persistence import parse_rbac_routes
 
-    # Parse YAML
-    logger.info("Parsing RBAC routes from: %s", yaml_path)
-    roles_config = parse_rbac_routes(yaml_path)
+    # Parse routes file
+    logger.info("Parsing RBAC routes from: %s", routes_path)
+    roles_config = parse_rbac_routes(routes_path)
     logger.info("Found %d roles to sync", len(roles_config))
 
     # Authenticate
@@ -40,7 +49,7 @@ def sync_all_roles(yaml_path, create_if_missing: bool = True) -> dict[str, str]:
     token = authenticate()
     logger.info("Authenticated successfully")
 
-    # Sync each role
+    # Sync each role via keycloak_setup.roles
     results = {}
     realm = settings.KEYCLOAK_REALM
 
@@ -57,35 +66,3 @@ def sync_all_roles(yaml_path, create_if_missing: bool = True) -> dict[str, str]:
             logger.info("  %s: %s", action, role_name)
 
     return results
-
-
-def print_summary(results: dict[str, str]) -> None:
-    """print a summary table of all operations."""
-    logger.info("\n" + "=" * 60)
-    logger.info("SYNC SUMMARY")
-    logger.info("=" * 60)
-
-    # Count by action
-    created = sum(1 for v in results.values() if v == "created")
-    updated = sum(1 for v in results.values() if v == "updated")
-    skipped = sum(1 for v in results.values() if v == "skipped")
-    failed = sum(1 for v in results.values() if v == "failed")
-
-    logger.info(f"{'Action':<12} {'Count':>6}")
-    logger.info("-" * 20)
-    logger.info(f"{'Created':<12} {created:>6}")
-    logger.info(f"{'Updated':<12} {updated:>6}")
-    logger.info(f"{'Skipped':<12} {skipped:>6}")
-    logger.info(f"{'Failed':<12} {failed:>6}")
-    logger.info("-" * 20)
-    logger.info(f"{'Total':<12} {len(results):>6}")
-
-    # Detailed table
-    logger.info("\n" + "-" * 60)
-    logger.info(f"{'Role Name':<40} {'Action':<10}")
-    logger.info("-" * 60)
-
-    for role_name, action in sorted(results.items()):
-        logger.info(f"{role_name:<40} {action:<10}")
-
-    logger.info("=" * 60)
