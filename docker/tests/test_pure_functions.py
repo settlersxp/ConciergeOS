@@ -2,18 +2,18 @@
 """
 test_pure_functions.py - Tests for pure functions in role_sync.
 
-Tests has_role_events, load_mapping, generate_deny_rules, build_caddy_routes,
+Tests has_role_events, generate_deny_rules, build_caddy_routes,
 push_routes_to_caddy config preservation, and role_event_types.
 No network calls, no mocking.
+
+The sync flow now uses Keycloak role attributes (paths, menus) instead of
+an external YAML mapping file.
 """
 
 import os
 import sys
-import tempfile
 import copy
 import inspect
-
-import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import role_sync
@@ -63,56 +63,48 @@ class TestHasRoleEvents:
 
 
 # ======================================================================
-# TestLoadMapping
-# ======================================================================
-
-
-class TestLoadMapping:
-
-    def test_loads_valid_mapping_file(self, sample_mapping):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(sample_mapping, f)
-            f.flush()
-            original = role_sync.MAPPING_FILE
-            role_sync.MAPPING_FILE = f.name
-            try:
-                result = role_sync.load_mapping()
-                assert len(result) == len(sample_mapping)
-            finally:
-                role_sync.MAPPING_FILE = original
-                os.unlink(f.name)
-
-    def test_returns_empty_for_missing_file(self):
-        original = role_sync.MAPPING_FILE
-        role_sync.MAPPING_FILE = "/nonexistent/path.yaml"
-        try:
-            result = role_sync.load_mapping()
-            assert result == []
-        finally:
-            role_sync.MAPPING_FILE = original
-
-
-# ======================================================================
-# TestGenerateDenyRules
+# TestGenerateDenyRules (attribute-based)
 # ======================================================================
 
 
 class TestGenerateDenyRules:
 
-    def test_generates_rules_for_matching_roles(self, sample_mapping):
-        roles = {"settings:view", "models:admin"}
-        rules = role_sync.generate_deny_rules(sample_mapping, roles)
+    def _make_roles_with_attrs(self, **kwargs) -> dict[str, dict[str, list[str]]]:
+        """Helper: build roles_with_attrs dict. Kwargs are role_name -> {paths, menus}."""
+        result: dict[str, dict[str, list[str]]] = {}
+        for role_name, attrs in kwargs.items():
+            result[role_name] = {
+                "paths": attrs.get("paths", []),
+                "menus": attrs.get("menus", []),
+            }
+        return result
+
+    def test_generates_rules_for_roles_with_paths(self):
+        roles_with_attrs = self._make_roles_with_attrs(
+            **{
+                "settings:view": {"paths": ["/settings", "/settings/*"], "menus": ["settings"]},
+                "models:admin": {"paths": ["/models", "/models/*"], "menus": ["models"]},
+            }
+        )
+        rules = role_sync.generate_deny_rules(roles_with_attrs)
         assert len(rules) == 2
 
-    def test_skips_roles_not_in_keycloak(self, sample_mapping):
-        roles = {"settings:view"}
-        rules = role_sync.generate_deny_rules(sample_mapping, roles)
+    def test_skips_roles_without_paths(self):
+        roles_with_attrs = self._make_roles_with_attrs(
+            **{
+                "full-access": {"paths": [], "menus": []},
+                "settings:view": {"paths": ["/settings"], "menus": ["settings"]},
+            }
+        )
+        rules = role_sync.generate_deny_rules(roles_with_attrs)
         assert len(rules) == 1
 
-    def test_rule_structure(self, sample_mapping):
+    def test_rule_structure(self):
         """Verify the deny rule structure uses header_regexp with X-Forwarded-Groups."""
-        roles = {"settings:view"}
-        rules = role_sync.generate_deny_rules(sample_mapping, roles)
+        roles_with_attrs = self._make_roles_with_attrs(
+            **{"settings:view": {"paths": ["/settings", "/settings/*"], "menus": ["settings"]}}
+        )
+        rules = role_sync.generate_deny_rules(roles_with_attrs)
         rule = rules[0]
 
         # Terminal flag
@@ -133,47 +125,80 @@ class TestGenerateDenyRules:
         assert "X-Forwarded-Groups" in not_block["header_regexp"]
         assert "role:settings:view" in not_block["header_regexp"]["X-Forwarded-Groups"]["pattern"]
 
-    def test_rule_uses_custom_message(self, sample_mapping):
-        """Verify custom message from mapping is used in the deny rule."""
-        roles = {"settings:view"}
-        rules = role_sync.generate_deny_rules(sample_mapping, roles)
+    def test_rule_uses_custom_message(self):
+        """Verify message from role name is used in the deny rule."""
+        roles_with_attrs = self._make_roles_with_attrs(
+            **{"settings:view": {"paths": ["/settings"], "menus": ["settings"]}}
+        )
+        rules = role_sync.generate_deny_rules(roles_with_attrs)
         rule = rules[0]
-        assert rule["handle"][0]["body"] == "Access denied: settings requires viewer role."
-
-    def test_rule_uses_default_message_when_not_provided(self):
-        """Verify default message is used when not in mapping."""
-        mapping = [
-            {"role": "models:admin", "paths": ["/models", "/models/*"]}
-        ]
-        roles = {"models:admin"}
-        rules = role_sync.generate_deny_rules(mapping, roles)
-        rule = rules[0]
-        assert "models:admin" in rule["handle"][0]["body"]
+        assert "settings:view" in rule["handle"][0]["body"]
         assert "Access denied" in rule["handle"][0]["body"]
 
-    def test_empty_mapping_returns_no_rules(self):
-        assert role_sync.generate_deny_rules([], {"some:role"}) == []
+    def test_empty_roles_returns_no_rules(self):
+        assert role_sync.generate_deny_rules({}) == []
 
-    def test_empty_roles_returns_no_rules(self, sample_mapping):
-        assert role_sync.generate_deny_rules(sample_mapping, set()) == []
+    def test_all_empty_paths_returns_no_rules(self):
+        roles_with_attrs = self._make_roles_with_attrs(
+            **{
+                "a:view": {"paths": [], "menus": ["a"]},
+                "b:view": {"paths": [], "menus": ["b"]},
+            }
+        )
+        assert role_sync.generate_deny_rules(roles_with_attrs) == []
 
-    def test_skips_entries_with_empty_role(self):
-        mapping = [
-            {"role": "", "paths": ["/path"]},
-            {"role": "valid:role", "paths": ["/valid"]},
-        ]
-        roles = {"valid:role"}
-        rules = role_sync.generate_deny_rules(mapping, roles)
-        assert len(rules) == 1
 
-    def test_skips_entries_with_empty_paths(self):
-        mapping = [
-            {"role": "valid:role", "paths": []},
-            {"role": "another:role", "paths": ["/path"]},
-        ]
-        roles = {"valid:role", "another:role"}
-        rules = role_sync.generate_deny_rules(mapping, roles)
-        assert len(rules) == 1
+# ======================================================================
+# TestGetMenusForRoles
+# ======================================================================
+
+
+class TestGetMenusForRoles:
+
+    def _make_roles_with_attrs(self, **kwargs) -> dict[str, dict[str, list[str]]]:
+        result: dict[str, dict[str, list[str]]] = {}
+        for role_name, attrs in kwargs.items():
+            result[role_name] = {
+                "paths": attrs.get("paths", []),
+                "menus": attrs.get("menus", []),
+            }
+        return result
+
+    def test_aggregates_menus_for_single_role(self):
+        roles_with_attrs = self._make_roles_with_attrs(
+            **{"settings:view": {"paths": ["/settings"], "menus": ["settings"]}}
+        )
+        menus = role_sync.get_menus_for_roles({"settings:view"}, roles_with_attrs)
+        assert menus == ["settings"]
+
+    def test_aggregates_menus_for_multiple_roles(self):
+        roles_with_attrs = self._make_roles_with_attrs(
+            **{
+                "reservations:view": {"paths": ["/"], "menus": ["reservations"]},
+                "settings:view": {"paths": ["/settings"], "menus": ["settings"]},
+            }
+        )
+        menus = role_sync.get_menus_for_roles(
+            {"reservations:view", "settings:view"}, roles_with_attrs
+        )
+        assert set(menus) == {"reservations", "settings"}
+
+    def test_returns_empty_for_unknown_role(self):
+        roles_with_attrs = self._make_roles_with_attrs(
+            **{"settings:view": {"paths": ["/settings"], "menus": ["settings"]}}
+        )
+        menus = role_sync.get_menus_for_roles({"unknown:role"}, roles_with_attrs)
+        assert menus == []
+
+    def test_deduplicates_menus(self):
+        roles_with_attrs = self._make_roles_with_attrs(
+            **{
+                "a:view": {"paths": [], "menus": ["shared"]},
+                "b:view": {"paths": [], "menus": ["shared"]},
+            }
+        )
+        menus = role_sync.get_menus_for_roles({"a:view", "b:view"}, roles_with_attrs)
+        assert menus == ["shared"]
 
 
 # ======================================================================
@@ -186,7 +211,6 @@ class TestBuildCaddyRoutes:
     def test_static_assets_first(self):
         routes = role_sync.build_caddy_routes([])
         assert routes[0]["terminal"] is True
-        # Verify static assets route uses reverse_proxy to frontend:80
         assert routes[0]["handle"][0]["handler"] == "reverse_proxy"
         assert routes[0]["handle"][0]["upstreams"][0]["dial"] == "frontend:80"
         assert "/assets/*" in routes[0]["match"][0]["path"]
@@ -208,11 +232,10 @@ class TestBuildCaddyRoutes:
         last = routes[-1]
         assert "terminal" not in last
         assert "match" not in last
-        # Catch-all uses reverse_proxy to frontend:80
         assert last["handle"][0]["handler"] == "reverse_proxy"
         assert last["handle"][0]["upstreams"][0]["dial"] == "frontend:80"
 
-    def test_empty_produces_two_routes(self):
+    def test_empty_produces_three_routes(self):
         """Empty deny rules produces 3 routes: static_assets, full_access_bypass, catch-all."""
         routes = role_sync.build_caddy_routes([])
         assert len(routes) == 3
@@ -221,7 +244,6 @@ class TestBuildCaddyRoutes:
         """Deny rules inserted between full_access_bypass and catch-all."""
         deny = [{"rule": 1}, {"rule": 2}]
         routes = role_sync.build_caddy_routes(deny)
-        # static_assets + full_access_bypass + deny_rules + catch-all
         assert len(routes) == 5
         assert routes[2] == {"rule": 1}
         assert routes[3] == {"rule": 2}
@@ -230,15 +252,11 @@ class TestBuildCaddyRoutes:
         """Verify the route order: static assets, full_access_bypass, deny rules, catch-all."""
         deny = [{"deny": "rule"}]
         routes = role_sync.build_caddy_routes(deny)
-        # First route is static assets (terminal)
         assert routes[0]["terminal"] is True
         assert routes[0]["handle"][0]["handler"] == "reverse_proxy"
-        # Second route is full_access_bypass (terminal)
         assert routes[1]["terminal"] is True
         assert "role:full-access" in str(routes[1])
-        # Third route is deny rule
         assert routes[2] == {"deny": "rule"}
-        # Last route is catch-all (no terminal, no match)
         assert "terminal" not in routes[3]
         assert "match" not in routes[3]
 
@@ -249,51 +267,30 @@ class TestBuildCaddyRoutes:
 
 
 class TestPushRoutesToCaddyConfigPreservation:
-    """Test that push_routes_to_caddy preserves existing Caddy config.
-
-    These tests verify the core logic: that when pushing routes, we:
-    1. Fetch the full current config
-    2. Update only the internal-server routes
-    3. Preserve all other config (http-server, https-server, TLS, PKI, logging)
-    """
 
     def test_config_structure_preserved(self, sample_caddy_config):
         """Verify the config manipulation preserves structure."""
-        # Simulate what push_routes_to_caddy does
         full_config = copy.deepcopy(sample_caddy_config)
         new_routes = [{"new": "route"}]
 
-        # The manipulation from push_routes_to_caddy
         apps = full_config.setdefault("apps", {})
         http_app = apps.setdefault("http", {})
         servers = http_app.setdefault("servers", {})
         internal = servers.setdefault("internal-server", {})
         internal["routes"] = new_routes
 
-        # Verify internal-server routes were updated
         assert full_config["apps"]["http"]["servers"]["internal-server"]["routes"] == new_routes
-
-        # Verify http-server was NOT touched
         assert full_config["apps"]["http"]["servers"]["http-server"]["routes"] == [
             {"handle": [{"handler": "static_response", "body": "HTTP"}]}
         ]
-
-        # Verify https-server was NOT touched
         assert full_config["apps"]["http"]["servers"]["https-server"]["routes"] == [
             {"handle": [{"handler": "static_response", "body": "HTTPS"}]}
         ]
-
-        # Verify TLS config preserved
         assert full_config["apps"]["tls"]["automation"]["cert_issuer"]["module"] == "acme"
-
-        # Verify logging config preserved
         assert full_config["logging"]["logs"]["default"]["level"] == "INFO"
-
-        # Verify admin config preserved
         assert full_config["admin"]["listen"] == "tcp/2019"
 
     def test_creates_missing_intermediate_keys(self):
-        """Verify setdefault creates keys that don't exist."""
         empty_config = {}
         new_routes = [{"route": 1}]
 
@@ -316,9 +313,7 @@ class TestPushRoutesToCaddyConfigPreservation:
         }
 
     def test_preserves_existing_internal_server_config(self, sample_caddy_config):
-        """Verify other internal-server keys (like listen) are preserved."""
         full_config = copy.deepcopy(sample_caddy_config)
-        # Add a listen key to internal-server
         full_config["apps"]["http"]["servers"]["internal-server"]["listen"] = [":9999"]
 
         new_routes = [{"new": "route"}]
@@ -329,9 +324,7 @@ class TestPushRoutesToCaddyConfigPreservation:
         internal = servers.setdefault("internal-server", {})
         internal["routes"] = new_routes
 
-        # Routes updated
         assert full_config["apps"]["http"]["servers"]["internal-server"]["routes"] == new_routes
-        # Listen preserved
         assert full_config["apps"]["http"]["servers"]["internal-server"]["listen"] == [":9999"]
 
     def test_patch_not_put_is_used(self):

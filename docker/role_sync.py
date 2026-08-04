@@ -2,16 +2,15 @@
 """Role Sync Service for ConciergeOS RBAC.
 
 Polls Keycloak's Admin Events API to detect role-related changes,
-then regenerates Caddy deny rules from the role-to-path mapping file
-and pushes them via the Caddy Admin API.
+then fetches role attributes (paths) from Keycloak and regenerates
+Caddy deny rules, pushing them via the Caddy Admin API.
 
 Environment Variables (see docker/settings.py for defaults):
     KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_ADMIN_USER, KEYCLOAK_ADMIN_PASSWORD
-    CADDY_ADMIN_URL, SYNC_INTERVAL, MAPPING_FILE, VALKEY_URL, SESSION_COOKIE_NAME
+    CADDY_ADMIN_URL, SYNC_INTERVAL, VALKEY_URL, SESSION_COOKIE_NAME
 """
 
 import logging
-import os
 import sys
 import time
 
@@ -19,8 +18,8 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 import valkey
-import yaml
 
+from keycloak_common import authenticate, fetch_all_roles_with_attrs, has_events, kc_request
 from settings import settings
 
 # ------------------------------------------------------------------
@@ -48,7 +47,6 @@ KEYCLOAK_ADMIN_USER = settings.KEYCLOAK_ADMIN_USER
 KEYCLOAK_ADMIN_PASSWORD = settings.KEYCLOAK_ADMIN_PASSWORD
 CADDY_ADMIN_URL = settings.CADDY_ADMIN_URL
 SYNC_INTERVAL = settings.SYNC_INTERVAL
-MAPPING_FILE = settings.MAPPING_FILE
 VALKEY_URL = settings.VALKEY_URL
 SESSION_COOKIE_NAME = settings.SESSION_COOKIE_NAME
 
@@ -61,36 +59,8 @@ SESSION_KEY_PREFIX = SESSION_COOKIE_NAME + "-"  # e.g., "_oauth2_proxy-"
 
 
 # ------------------------------------------------------------------
-# Keycloak API Helpers
+# Keycloak API Helpers (thin wrappers for domain-specific polling)
 # ------------------------------------------------------------------
-
-
-def authenticate_keycloak() -> str:
-    """Authenticate as admin to the master realm and return access token."""
-    resp = requests.post(
-        f"{KEYCLOAK_URL}/realms/master/protocol/openid-connect/token",
-        data={
-            "grant_type": "password",
-            "client_id": "admin-cli",
-            "username": KEYCLOAK_ADMIN_USER,
-            "password": KEYCLOAK_ADMIN_PASSWORD,
-        },
-    )
-    resp.raise_for_status()
-    token = resp.json().get("access_token")
-    if not token:
-        raise RuntimeError("Failed to authenticate to Keycloak admin.")
-    return token
-
-
-def fetch_all_roles(token: str) -> set[str]:
-    """Fetch all role names in the configured realm."""
-    resp = requests.get(
-        f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/roles",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    resp.raise_for_status()
-    return {role["name"] for role in resp.json()}
 
 
 def poll_admin_events(token: str, since: datetime) -> list[dict]:
@@ -105,13 +75,11 @@ def poll_admin_events(token: str, since: datetime) -> list[dict]:
     date_from = since.strftime("%Y-%m-%d")
     date_to = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
 
-    resp = requests.get(
-        f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/admin-events",
-        params={
-            "dateFrom": date_from,
-            "dateTo": date_to,
-        },
-        headers={"Authorization": f"Bearer {token}"},
+    resp = kc_request(
+        "GET",
+        f"/admin/realms/{KEYCLOAK_REALM}/admin-events",
+        token,
+        params={"dateFrom": date_from, "dateTo": date_to},
     )
     resp.raise_for_status()
     return resp.json()
@@ -119,36 +87,27 @@ def poll_admin_events(token: str, since: datetime) -> list[dict]:
 
 def has_role_events(events: list[dict]) -> bool:
     """Check if any event is a role-related admin event."""
-    for event in events:
-        operation = event.get("operationType", "")
-        resource_type = event.get("resourceType", "")
-        logger.debug("  Checking event: resourceType=%s, operationType=%s", resource_type, operation)
-        if resource_type in ("ROLE", "REALM_ROLE", "CLIENT_ROLE") and operation in ROLE_EVENT_TYPES:
-            logger.debug("  → Role event MATCHED: %s %s", operation, resource_type)
-            return True
-    logger.debug("  → No role events found in %d event(s)", len(events))
-    return False
+    return has_events(events, {"ROLE", "REALM_ROLE", "CLIENT_ROLE"}, set(ROLE_EVENT_TYPES))
 
 
 def has_user_delete_events(events: list[dict]) -> bool:
     """Check if any event is a user DELETE or USER_SESSION DELETE event."""
-    found = False
+    user_deleted = has_events(events, {"USER"}, set(USER_EVENT_TYPES))
+    session_deleted = has_events(events, {"USER_SESSION"}, set(SESSION_EVENT_TYPES))
+
     for event in events:
-        operation_type = event.get("operationType", "")
-        resource_type = event.get("resourceType", "")
         event_id = event.get("id", "unknown")
         realm = event.get("realmId", "unknown")
-        userId = event.get("userId", "")
+        user_id = event.get("userId", "")
+        op = event.get("operationType", "")
+        rt = event.get("resourceType", "")
 
-        if resource_type == "USER" and operation_type in USER_EVENT_TYPES:
-            logger.info("USER DELETE event detected: eventId=%s, userId=%s, realm=%s", event_id, userId, realm)
-            found = True
-        if resource_type == "USER_SESSION" and operation_type in SESSION_EVENT_TYPES:
-            logger.info("USER_SESSION DELETE event detected: eventId=%s, userId=%s, realm=%s", event_id, userId, realm)
-            found = True
-    if not found:
-        logger.debug("No user/session delete events found in %d event(s)", len(events))
-    return found
+        if rt == "USER" and op in USER_EVENT_TYPES:
+            logger.info("USER DELETE event detected: eventId=%s, userId=%s, realm=%s", event_id, user_id, realm)
+        elif rt == "USER_SESSION" and op in SESSION_EVENT_TYPES:
+            logger.info("USER_SESSION DELETE event detected: eventId=%s, userId=%s, realm=%s", event_id, user_id, realm)
+
+    return user_deleted or session_deleted
 
 
 # ------------------------------------------------------------------
@@ -172,18 +131,13 @@ def invalidate_all_sessions() -> int:
     cursor = 0
     batch_size = 100
     pattern = f"{SESSION_KEY_PREFIX}*"
-    scan_iter = 0
 
     while True:
-        scan_iter += 1
         cursor, keys = r.scan(cursor=cursor, match=pattern, count=batch_size)
-        logger.debug("Valkey SCAN iter=%d cursor=%d keys_found=%d", scan_iter, cursor, len(keys))
         if keys:
-            key_names = [k.decode("utf-8", errors="replace") for k in keys]
-            logger.debug("  Keys to delete: %s", key_names)
             del_count = r.delete(*keys)
             deleted += del_count
-            logger.info("  Deleted %d session key(s): %s", del_count, key_names)
+            logger.info("  Deleted %d session key(s)", del_count)
         if cursor == 0:
             break
 
@@ -233,14 +187,14 @@ def save_sync_timestamp() -> None:
 
 
 def sync_is_current() -> bool:
-    """True if a successful sync happened within the last 2×SYNC_INTERVAL."""
+    """True if a successful sync happened within the last 2xSYNC_INTERVAL."""
     ts = load_sync_timestamp()
     if ts is None:
         return False
     age = time.time() - ts
     ok = age < SYNC_INTERVAL * 2
     if not ok:
-        logger.info("Last sync was %.0fs ago (threshold %ds) — routes may be stale", age, SYNC_INTERVAL * 2)
+        logger.info("Last sync was %.0fs ago (threshold %ds) - routes may be stale", age, SYNC_INTERVAL * 2)
     return ok
 
 
@@ -273,7 +227,6 @@ def filter_new_events(events: list[dict], seen: set[str]) -> list[dict]:
     for evt in events:
         evt_id = evt.get("id", "")
         if evt_id and evt_id in seen:
-            logger.debug("Skipping already-seen event: %s", evt_id)
             continue
         new.append(evt)
     return new
@@ -285,47 +238,23 @@ def collect_event_ids(events: list[dict]) -> set[str]:
 
 
 # ------------------------------------------------------------------
-# Mapping File
+# Caddy Route Generation (from Keycloak role attributes)
 # ------------------------------------------------------------------
 
 
-def load_mapping() -> list[dict]:
-    """Load the role-to-path mapping YAML file."""
-    if not os.path.exists(MAPPING_FILE):
-        logger.warning("Mapping file not found: %s", MAPPING_FILE)
-        return []
+def generate_deny_rules(roles_with_attrs: dict[str, dict[str, list[str]]]) -> list[dict]:
+    """Generate Caddy deny rules from role attributes fetched from Keycloak.
 
-    with open(MAPPING_FILE, "r") as f:
-        data = yaml.safe_load(f)
-
-    if not data:
-        logger.debug("Mapping file %s is empty", MAPPING_FILE)
-        return []
-
-    logger.debug("Loaded %d mapping entry/entries from %s", len(data), MAPPING_FILE)
-    return data
-
-
-# ------------------------------------------------------------------
-# Caddy Route Generation
-# ------------------------------------------------------------------
-
-
-def generate_deny_rules(mapping: list[dict], available_roles: set[str]) -> list[dict]:
-    """Generate Caddy deny rules from the mapping file."""
+    Each role's 'paths' attribute is used to create a deny rule.
+    """
     deny_rules = []
 
-    for entry in mapping:
-        role_name = entry.get("role", "")
-        paths = entry.get("paths", [])
-        message = entry.get("message", f"Access denied: this resource requires the {role_name} role.")
-
-        if not role_name or not paths:
+    for role_name, attrs in roles_with_attrs.items():
+        paths = attrs.get("paths", [])
+        if not paths:
             continue
 
-        if role_name not in available_roles:
-            logger.warning("Role '%s' in mapping file does not exist in Keycloak. Skipping.", role_name)
-            continue
+        message = f"Access denied: this resource requires the {role_name} role."
 
         rule = {
             "handle": [
@@ -340,11 +269,11 @@ def generate_deny_rules(mapping: list[dict], available_roles: set[str]) -> list[
                     "path": paths,
                     "not": [
                         {
-                        "header_regexp": {
-                            "X-Forwarded-Groups": {
-                                "pattern": f".*role:{role_name}.*"
+                            "header_regexp": {
+                                "X-Forwarded-Groups": {
+                                    "pattern": f".*role:{role_name}.*"
+                                }
                             }
-                        }
                         }
                     ],
                 }
@@ -355,6 +284,19 @@ def generate_deny_rules(mapping: list[dict], available_roles: set[str]) -> list[
         logger.info("Generated deny rule for role '%s' on %d path(s): %s", role_name, len(paths), paths)
 
     return deny_rules
+
+
+def get_menus_for_roles(
+    role_names: set[str],
+    roles_with_attrs: dict[str, dict[str, list[str]]],
+) -> list[str]:
+    """Aggregate menu items for a set of role names."""
+    menus: set[str] = set()
+    for role_name in role_names:
+        attrs = roles_with_attrs.get(role_name, {})
+        for menu in attrs.get("menus", []):
+            menus.add(menu)
+    return sorted(menus)
 
 
 def build_caddy_routes(deny_rules: list[dict]) -> list[dict]:
@@ -480,27 +422,25 @@ def verify_caddy_routes() -> list[dict]:
 def initial_sync() -> bool:
     """Perform initial full sync on startup."""
     if sync_is_current():
-        logger.info("Initial Sync: Last sync is current — skipping full re-sync")
+        logger.info("Initial Sync: Last sync is current - skipping full re-sync")
         return True
 
     logger.info("=" * 60)
-    logger.info("Initial Sync: Building routes from scratch")
+    logger.info("Initial Sync: Building routes from Keycloak role attributes")
     logger.info("=" * 60)
 
     try:
-        token = authenticate_keycloak()
+        token = authenticate()
         logger.debug("Keycloak admin authentication successful")
     except Exception as e:
         logger.error("Failed to authenticate to Keycloak: %s", e, exc_info=True)
         return False
 
-    available_roles = fetch_all_roles(token)
+    roles_with_attrs = fetch_all_roles_with_attrs(token)
+    available_roles = set(roles_with_attrs.keys())
     logger.info("Found %d role(s) in realm '%s': %s", len(available_roles), KEYCLOAK_REALM, sorted(available_roles))
 
-    mapping = load_mapping()
-    logger.info("Loaded %d role-to-path mapping(s) from %s", len(mapping), MAPPING_FILE)
-
-    deny_rules = generate_deny_rules(mapping, available_roles)
+    deny_rules = generate_deny_rules(roles_with_attrs)
     logger.info("Generated %d deny rule(s)", len(deny_rules))
 
     routes = build_caddy_routes(deny_rules)
@@ -517,10 +457,10 @@ def initial_sync() -> bool:
 
 def poll_and_sync() -> bool:
     """Poll Keycloak for role changes and sync if needed."""
-    logger.debug("— Poll cycle started —")
+    logger.debug("- Poll cycle started -")
 
     try:
-        token = authenticate_keycloak()
+        token = authenticate()
         logger.debug("Keycloak admin authentication successful for poll cycle")
     except Exception as e:
         logger.error("Failed to authenticate to Keycloak during poll: %s", e, exc_info=True)
@@ -528,7 +468,8 @@ def poll_and_sync() -> bool:
 
     since = datetime.now(timezone.utc)
     since_offset = since - timedelta(seconds=SYNC_INTERVAL)
-    logger.debug("Polling admin events from %s to %s", since_offset.strftime("%Y-%m-%dT%H:%M:%S"), since.strftime("%Y-%m-%dT%H:%M:%S"))
+    logger.debug("Polling admin events from %s to %s",
+                 since_offset.strftime("%Y-%m-%dT%H:%M:%S"), since.strftime("%Y-%m-%dT%H:%M:%S"))
 
     seen = load_seen_ids()
     logger.debug("Loaded %d seen event ID(s) from Valkey", len(seen))
@@ -574,11 +515,11 @@ def poll_and_sync() -> bool:
 
     logger.info("Role change detected! Regenerating Caddy routes...")
 
-    available_roles = fetch_all_roles(token)
+    roles_with_attrs = fetch_all_roles_with_attrs(token)
+    available_roles = set(roles_with_attrs.keys())
     logger.info("Current roles in Keycloak: %s", sorted(available_roles))
 
-    mapping = load_mapping()
-    deny_rules = generate_deny_rules(mapping, available_roles)
+    deny_rules = generate_deny_rules(roles_with_attrs)
     routes = build_caddy_routes(deny_rules)
 
     if push_routes_to_caddy(routes):
@@ -603,7 +544,6 @@ def main() -> None:
     logger.info("Keycloak Realm:   %s", KEYCLOAK_REALM)
     logger.info("Caddy Admin URL:  %s", CADDY_ADMIN_URL)
     logger.info("Sync Interval:    %ds", SYNC_INTERVAL)
-    logger.info("Mapping File:     %s", MAPPING_FILE)
     logger.info("Valkey URL:       %s", VALKEY_URL)
     logger.info("Session Key Prefix: %s", SESSION_KEY_PREFIX)
 

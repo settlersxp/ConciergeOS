@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -34,6 +34,86 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------------------
+# Helper: Extract role names from X-Forwarded-Groups header
+# ---------------------------------------------------------------------------
+
+def _extract_roles(x_forwarded_groups: str | None) -> list[str]:
+    """Parse role names from oauth2-proxy X-Forwarded-Groups header.
+
+    Format: "role:reservations:view,role:settings:view"
+    """
+    if not x_forwarded_groups:
+        return []
+    roles: list[str] = []
+    for group in x_forwarded_groups.split(","):
+        group = group.strip()
+        if group.startswith("role:"):
+            roles.append(group[5:])
+    return roles
+
+
+# ---------------------------------------------------------------------------
+# Helper: Keycloak Admin API
+# ---------------------------------------------------------------------------
+
+def _authenticate_admin() -> str:
+    """Authenticate as admin to the master realm and return access token."""
+    import requests as sync_requests
+    resp = sync_requests.post(
+        f"{settings.KEYCLOAK_URL}/realms/master/protocol/openid-connect/token",
+        data={
+            "grant_type": "password",
+            "client_id": "admin-cli",
+            "username": settings.KEYCLOAK_ADMIN_USER,
+            "password": settings.KEYCLOAK_ADMIN_PASSWORD,
+        },
+    )
+    resp.raise_for_status()
+    token = resp.json().get("access_token")
+    if not token:
+        raise RuntimeError("Failed to authenticate to Keycloak admin.")
+    return token
+
+
+def _fetch_roles_with_attrs(token: str) -> dict[str, dict[str, list[str]]]:
+    """Fetch all roles with their attributes from Keycloak Admin API."""
+    import requests as sync_requests
+    resp = sync_requests.get(
+        f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/roles",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    resp.raise_for_status()
+    result: dict[str, dict[str, list[str]]] = {}
+    for role in resp.json():
+        name = role["name"]
+        attrs = role.get("attributes") or {}
+        result[name] = {
+            "paths": attrs.get("paths", []),
+            "menus": attrs.get("menus", []),
+        }
+    return result
+
+
+def _get_menus_for_roles(
+    role_names: list[str],
+    roles_with_attrs: dict[str, dict[str, list[str]]],
+) -> list[str]:
+    """Aggregate menu items for a set of role names."""
+    menus: set[str] = set()
+    for role_name in role_names:
+        attrs = roles_with_attrs.get(role_name, {})
+        for menu in attrs.get("menus", []):
+            menus.add(menu)
+    # full-access role gets all menus from all roles
+    if "full-access" in role_names:
+        for attrs in roles_with_attrs.values():
+            for menu in attrs.get("menus", []):
+                menus.add(menu)
+    return sorted(menus)
+
 
 # ---------------------------------------------------------------------------
 # Health & Token Endpoints
@@ -61,24 +141,57 @@ async def token_info():
     using the Client Credentials Grant.  The decoded JWT payload shows the
     ``azp`` (authorized party), ``client_id``, and ``realm_access.roles``.
     """
-    # This will fetch a new token if none is cached or if it is expired
     await keycloak_client.get_access_token()
     return keycloak_client.get_token_info()
 
 
 @app.post("/client-api/refresh-token")
 async def refresh_token():
-    """Force a token refresh.
-
-    Demonstrates that the service can re-authenticate at any time by
-    presenting its client_id + client_secret to Keycloak.
-    """
+    """Force a token refresh."""
     token = await keycloak_client.refresh_token()
     return {
         "status": "refreshed",
         "expires_in": token.expires_in,
         "scope": token.scope,
     }
+
+
+# ---------------------------------------------------------------------------
+# User Info Endpoint (RBAC menus)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/client-api/me")
+async def me(
+    request: Request,
+    x_forwarded_groups: str | None = Header(None),
+):
+    """Return the current user's roles and accessible menu items.
+
+    Reads role names from the X-Forwarded-Groups header (set by oauth2-proxy),
+    then queries the Keycloak Admin API to fetch role attributes (paths, menus),
+    and returns the aggregated menu items the user has access to.
+    """
+    roles = _extract_roles(x_forwarded_groups)
+
+    try:
+        admin_token = _authenticate_admin()
+        roles_with_attrs = _fetch_roles_with_attrs(admin_token)
+        menus = _get_menus_for_roles(roles, roles_with_attrs)
+    except Exception as e:
+        logger.error("Failed to fetch role attributes from Keycloak: %s", e, exc_info=True)
+        # Return roles but empty menus on failure
+        return {
+            "roles": roles,
+            "menus": [],
+            "error": "Failed to fetch role attributes from Keycloak",
+        }
+
+    return {
+        "roles": roles,
+        "menus": menus,
+    }
+
 
 # ---------------------------------------------------------------------------
 # Proxy: Call the Main Backend
@@ -140,11 +253,7 @@ async def backend_settings():
 
 @app.post("/client-api/backend/post/{path:path}")
 async def backend_post(path: str, body: dict | None = None):
-    """Generic POST proxy to any backend endpoint.
-
-    Demonstrates that the service can forward authenticated requests to
-    any endpoint on the main backend.
-    """
+    """Generic POST proxy to any backend endpoint."""
     target = f"/{path}"
     try:
         resp = await keycloak_client.call_backend(
@@ -162,4 +271,3 @@ async def backend_post(path: str, body: dict | None = None):
             status_code=502,
             content={"error": str(exc), "target": target},
         )
-

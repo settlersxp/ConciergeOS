@@ -10,6 +10,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import role_sync
+import keycloak_common
 import requests
 
 
@@ -17,7 +18,7 @@ class TestLiveKeycloakAuth:
 
     def test_authenticate_returns_valid_token(self):
         """Authenticate against live Keycloak and verify we get a token."""
-        token = role_sync.authenticate_keycloak()
+        token = keycloak_common.authenticate()
         assert isinstance(token, str)
         assert len(token) > 100  # JWT tokens are long
 

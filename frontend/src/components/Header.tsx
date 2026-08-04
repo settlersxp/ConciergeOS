@@ -1,27 +1,87 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { reservationsApi } from '../services/api';
 import { useChainPagesContext } from '../context/ChainPagesContext';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface MeResponse {
+  roles: string[];
+  menus: string[];
+  error?: string;
+}
+
+// Mapping from menu identifiers (set in Keycloak role attributes) to
+// the actual route paths used by React Router.
+const MENU_TO_PATH: Record<string, string> = {
+  reservations: '/',
+  'performance-dashboard': '/performance-dashboard',
+  prompts: '/prompts',
+  'prompt-groups': '/prompt-groups',
+  settings: '/settings',
+};
+
+// ---------------------------------------------------------------------------
+// Data fetching
+// ---------------------------------------------------------------------------
+
+async function fetchMe(): Promise<MeResponse> {
+  const host = window.location.host;
+  const resp = await fetch(`https://${host}/client-api/me`, {
+    credentials: 'include',
+  });
+  if (!resp.ok) {
+    return { roles: [], menus: [] };
+  }
+  return resp.json();
+}
+
+// ---------------------------------------------------------------------------
+// Header Component
+// ---------------------------------------------------------------------------
 
 export default function Header() {
   const location = useLocation();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [menus, setMenus] = useState<string[]>([]);
   const context = useChainPagesContext();
+
+  // Fetch allowed menus from the backend on mount.
+  useEffect(() => {
+    let cancelled = false;
+    fetchMe().then((data) => {
+      if (!cancelled) {
+        if (data.error) {
+          console.warn('[Header] /me error:', data.error);
+        }
+        // If no menus returned (e.g. not authenticated), show all.
+        setMenus(data.menus.length > 0 ? data.menus : Object.keys(MENU_TO_PATH));
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const chainLinks = context?.chainPages
     .filter((p) => p.group.is_active)
     .map((p) => ({ path: p.route, label: p.group.name }))
     ?? [];
 
-  // Static links only (no inline chain links)
-  const links: { path: string; label: string }[] = [
-    { path: '/', label: 'Reservations' },
-    { path: '/performance-dashboard', label: 'Dashboard' },
-    { path: '/prompts', label: 'Prompt Management' },
-    { path: '/prompt-groups', label: 'Prompt Groups' },
-    { path: '/settings', label: 'Settings' },
+  // Build static links by filtering against the menus returned by /me.
+  const allLinks = [
+    { menu: 'reservations', path: '/', label: 'Reservations' },
+    { menu: 'performance-dashboard', path: '/performance-dashboard', label: 'Dashboard' },
+    { menu: 'prompts', path: '/prompts', label: 'Prompt Management' },
+    { menu: 'prompt-groups', path: '/prompt-groups', label: 'Prompt Groups' },
+    { menu: 'settings', path: '/settings', label: 'Settings' },
   ];
+
+  const links = useMemo(
+    () => allLinks.filter((l) => menus.includes(l.menu)),
+    [menus],
+  );
 
   const baseUrl = import.meta.env.BASE_URL;
   const currentApp = baseUrl === '/app2' ? 'app2' : 'app1';
@@ -48,9 +108,6 @@ export default function Header() {
   };
 
   const handleLogout = () => {
-    // oauth2-proxy sign-out endpoint.
-    // The backend_logout_url config on oauth2-proxy will terminate the
-    // Keycloak SSO session before clearing the proxy session cookie.
     const signOutUrl = `https://${window.location.host}/oauth2/sign_out`;
     window.location.href = signOutUrl;
   };
@@ -153,6 +210,12 @@ export default function Header() {
                   <div className="text-sm">
                     <span className="text-primary-300">Current App:</span>{' '}
                     <code className="bg-primary-900 px-1 rounded text-yellow-300">{currentApp}</code>
+                  </div>
+                  <div className="text-sm">
+                    <span className="text-primary-300">Menus:</span>{' '}
+                    <code className="bg-primary-900 px-1 rounded text-yellow-300">
+                      {menus.join(', ') || 'none'}
+                    </code>
                   </div>
                   <button
                     onClick={handleSwitchApp}

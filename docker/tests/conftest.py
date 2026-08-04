@@ -8,12 +8,9 @@ Run with: cd docker && python3 -m pytest tests/ -v
 
 import os
 import sys
-import tempfile
-import time
 
 import pytest
 import requests
-import yaml
 
 # Load shared settings to ensure consistent defaults
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -26,15 +23,6 @@ os.environ.setdefault("KEYCLOAK_ADMIN_USER", settings.KEYCLOAK_ADMIN_USER)
 os.environ.setdefault("KEYCLOAK_ADMIN_PASSWORD", settings.KEYCLOAK_ADMIN_PASSWORD)
 os.environ.setdefault("CADDY_ADMIN_URL", settings.CADDY_ADMIN_URL)
 os.environ.setdefault("SYNC_INTERVAL", str(settings.SYNC_INTERVAL))
-# Use a local-aware MAPPING_FILE: prefer the Docker path if it exists
-# (inside containers), otherwise fall back to the rbac_routes.yaml next
-# to the docker/ directory (local development).
-_default_mapping = settings.MAPPING_FILE
-if not os.path.exists(_default_mapping):
-    _local_mapping = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "rbac_routes.yaml")
-    if os.path.exists(_local_mapping):
-        _default_mapping = _local_mapping
-os.environ.setdefault("MAPPING_FILE", _default_mapping)
 os.environ.setdefault("VALKEY_URL", settings.VALKEY_URL)
 os.environ.setdefault("SESSION_COOKIE_NAME", settings.SESSION_COOKIE_NAME)
 
@@ -64,22 +52,6 @@ def live_token():
     token = resp.json().get("access_token")
     assert token, "No access_token from Keycloak"
     return token
-
-
-@pytest.fixture
-def sample_mapping():
-    """Sample role-to-path mapping data."""
-    return [
-        {
-            "role": "settings:view",
-            "paths": ["/settings", "/settings/*"],
-            "message": "Access denied: settings requires viewer role.",
-        },
-        {
-            "role": "models:admin",
-            "paths": ["/models", "/models/*"],
-        },
-    ]
 
 
 @pytest.fixture
@@ -140,7 +112,7 @@ def sample_caddy_config():
 
 
 # ======================================================================
-# Fixtures: Live Keycloak role lifecycle (create + cleanup)
+# Fixtures: Live Keycloak role lifecycle (create + cleanup with attributes)
 # ======================================================================
 
 
@@ -168,7 +140,6 @@ def _clear_sync_checkpoint(monkeypatch, pytestconfig):
         pass
 
     # Only monkeypatch sync_is_current for non-event-persistence tests
-    # (test_event_persistence.py tests sync_is_current() directly)
     current_test = os.environ.get("PYTEST_CURRENT_TEST", "")
     if "test_event_persistence" not in current_test:
         monkeypatch.setattr(role_sync, "sync_is_current", lambda: False)
@@ -176,43 +147,47 @@ def _clear_sync_checkpoint(monkeypatch, pytestconfig):
 
 @pytest.fixture
 def live_test_role(live_token):
-    """Create a real role in Keycloak for integration testing, then delete it.
+    """Create a real role in Keycloak with paths/menus attributes for integration testing.
 
     Yields the role name after creation, and guarantees cleanup.
-    Also temporarily adds a mapping entry for the role so the sync
-    service can generate a deny rule for it.
+    Attributes are stored directly in Keycloak (no external YAML mapping needed).
     """
     role_name = "test:cof-integration-role"
     realm = role_sync.KEYCLOAK_REALM
     base = role_sync.KEYCLOAK_URL
-    headers = {"Authorization": f"Bearer {live_token}"}
+    headers = {"Authorization": f"Bearer {live_token}", "Content-Type": "application/json"}
 
-    # ── CREATE role in Keycloak (reuse keycloak_setup.create_role) ──
-    keycloak_setup.create_role(base, live_token, realm, role_name, "CI integration test role")
+    # ── CREATE role in Keycloak with attributes ───────────────────
+    # Step 1: Create role (idempotent)
+    resp = requests.get(
+        f"{base}/admin/realms/{realm}/roles/{role_name}",
+        headers=headers,
+    )
+    if resp.status_code != 200:
+        resp = requests.post(
+            f"{base}/admin/realms/{realm}/roles",
+            headers=headers,
+            json={"name": role_name, "description": "CI integration test role"},
+        )
+        resp.raise_for_status()
 
-    # ── Load existing mapping and add a temporary entry ──────────
-    original_mapping_path = role_sync.MAPPING_FILE
-    mapping_entry = {
-        "role": role_name,
+    # Step 2: Fetch and update with attributes
+    resp = requests.get(
+        f"{base}/admin/realms/{realm}/roles/{role_name}",
+        headers=headers,
+    )
+    resp.raise_for_status()
+    role_data = resp.json()
+    role_data["attributes"] = {
         "paths": ["/test-cof", "/test-cof/*"],
-        "message": f"Access denied: this resource requires the {role_name} role.",
+        "menus": ["test-cof"],
     }
-
-    # Read existing mapping (if any)
-    existing_mapping = []
-    if os.path.exists(original_mapping_path):
-        with open(original_mapping_path, "r") as f:
-            existing_mapping = yaml.safe_load(f) or []
-
-    # Write temporary mapping file with our test entry
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-        yaml.dump(existing_mapping + [mapping_entry], f)
-        temp_mapping = f.name
-
-    role_sync.MAPPING_FILE = temp_mapping
-
-    # ── Initial sync so the new role's deny rule is pushed ───────
-    # (done by the test itself after yield)
+    resp = requests.put(
+        f"{base}/admin/realms/{realm}/roles/{role_name}",
+        headers=headers,
+        json=role_data,
+    )
+    resp.raise_for_status()
 
     yield role_name
 
@@ -225,7 +200,5 @@ def live_test_role(live_token):
         # 204 = success, 404 = already gone
         assert resp.status_code in (204, 404), \
             f"Failed to delete role {role_name}: {resp.status_code}"
-    finally:
-        # Always restore mapping file path and delete temp file
-        role_sync.MAPPING_FILE = original_mapping_path
-        os.unlink(temp_mapping)
+    except Exception:
+        pass

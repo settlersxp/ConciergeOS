@@ -21,6 +21,16 @@ class Settings:
         """Keycloak realm name."""
         return os.environ.get("KEYCLOAK_REALM", "production")
 
+    @property
+    def KEYCLOAK_ADMIN_USER(self) -> str:
+        """Keycloak admin username for Admin API access."""
+        return os.environ.get("KEYCLOAK_ADMIN_USER", "admin")
+
+    @property
+    def KEYCLOAK_ADMIN_PASSWORD(self) -> str:
+        """Keycloak admin password for Admin API access."""
+        return os.environ.get("KEYCLOAK_ADMIN_PASSWORD", "admin")
+
     # -- Client Credentials --
     @property
     def CLIENT_API_CLIENT_ID(self) -> str:
