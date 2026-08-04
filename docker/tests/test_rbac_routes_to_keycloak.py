@@ -14,7 +14,6 @@ from pathlib import Path
 
 import pytest
 
-# Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from rbac_sync import routes_persistence
@@ -28,6 +27,8 @@ from keycloak_setup.roles import (
 )
 from settings import settings
 
+from fixtures import json_file, test_role_name
+
 
 # ======================================================================
 # Fixtures
@@ -35,49 +36,9 @@ from settings import settings
 
 
 @pytest.fixture
-def sample_rbac_json():
-    """Sample RBAC routes JSON content for testing."""
-    return [
-        {
-            "role": "test:role1",
-            "paths": ["/test1", "/test1/*"],
-            "message": "Access denied for test1",
-        },
-        {
-            "role": "test:role2",
-            "paths": ["/test2"],
-            "message": "Access denied for test2",
-        },
-        {
-            "role": "test:role3",
-            "paths": ["/test3/a", "/test3/b", "/test3/c"],
-            "message": "",
-        },
-    ]
-
-
-@pytest.fixture
-def json_file(sample_rbac_json):
-    """Create a temporary JSON file with sample content."""
-    import json
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-        json.dump(sample_rbac_json, f)
-        f.flush()
-        yield Path(f.name)
-    os.unlink(f.name)
-
-
-@pytest.fixture
 def live_token():
     """Get a live authentication token."""
     return authenticate()
-
-
-@pytest.fixture
-def test_role_name():
-    """Generate a unique test role name."""
-    import time
-    return f"test:cof-rbac-{int(time.time())}"
 
 
 # ======================================================================

@@ -15,126 +15,21 @@ Usage:
     cd docker && python3 -m pytest test_oidc_config.py -v
 """
 
-import os
-import re
-import ssl
 from typing import Any
 
 import pytest
 import requests
 
-DOCKER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-COMPOSE_PATH = os.path.join(DOCKER_DIR, "docker-compose.yaml")
-
-PUBLIC_ISSUER_URL = "https://out-customer.com/auth/realms/production"
-PUBLIC_BASE = "https://out-customer.com"
-# Configurable via environment variables for Docker vs local development.
-# Defaults: "keycloak" container name in Docker, "localhost" locally.
-HOST = os.environ.get("OIDC_CONFIG_HOST", "keycloak")
-PORT = int(os.environ.get("OIDC_CONFIG_PORT", "8080"))
-
-# SSL context for self-signed Caddy CA
-SSL_CTX = ssl.create_default_context()
-SSL_CTX.check_hostname = False
-SSL_CTX.verify_mode = ssl.CERT_NONE
-
-
-# ======================================================================
-# Fixtures
-# ======================================================================
-
-
-@pytest.fixture(scope="session")
-def compose_content() -> str:
-    """Read docker-compose.yaml once per session."""
-    with open(COMPOSE_PATH, "r") as f:
-        return f.read()
-
-
-@pytest.fixture(scope="session")
-def compose_issuer_url(compose_content: str) -> str | None:
-    """Extract OAUTH2_PROXY_OIDC_ISSUER_URL from the docker-compose.yaml environment."""
-    # Match the env var line like: - OAUTH2_PROXY_OIDC_ISSUER_URL=${APP_DOMAIN:-https://out-customer.com}/auth/realms/${OIDC_REALM:-production}
-    match = re.search(
-        r'OAUTH2_PROXY_OIDC_ISSUER_URL\s*=\s*(.+)',
-        compose_content,
-    )
-    if match:
-        url = match.group(1)
-        # Resolve ${APP_DOMAIN:-https://out-customer.com}
-        url = re.sub(r'\$\{APP_DOMAIN:-([^}]+)\}', r'\1', url)
-        url = re.sub(r'\$\{APP_DOMAIN\}', 'https://out-customer.com', url)
-        # Resolve ${OIDC_REALM:-production}
-        url = re.sub(r'\$\{OIDC_REALM:-([^}]+)\}', r'\1', url)
-        url = re.sub(r'\$\{OIDC_REALM\}', 'production', url)
-        return url
-    return None
-
-
-def _resolve_env_defaults(raw: str) -> str:
-    """Resolve ${VAR:-default} and ${VAR} patterns to their default values."""
-    # Resolve ${VAR:-default} -> default
-    raw = re.sub(r'\$\{[^}:]+:-([^}]+)\}', r'\1', raw)
-    # Resolve ${VAR} (no default) -> empty string
-    raw = re.sub(r'\$\{[^}]+\}', '', raw)
-    return raw
-
-
-@pytest.fixture(scope="session")
-def compose_ssl_insecure_skip_verify(compose_content: str) -> str | None:
-    """Extract OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY from docker-compose.yaml."""
-    match = re.search(
-        r'OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY\s*=\s*(\S+)',
-        compose_content,
-    )
-    if not match:
-        return None
-    raw = match.group(1).strip('"\'')
-    return _resolve_env_defaults(raw)
-
-
-@pytest.fixture(scope="session")
-def compose_session_store_type(compose_content: str) -> str | None:
-    """Extract OAUTH2_PROXY_SESSION_STORE_TYPE from docker-compose.yaml."""
-    match = re.search(
-        r'OAUTH2_PROXY_SESSION_STORE_TYPE\s*=\s*(\S+)',
-        compose_content,
-    )
-    if not match:
-        return None
-    raw = match.group(1).strip('"\'')
-    return _resolve_env_defaults(raw)
-
-
-@pytest.fixture(scope="session")
-def compose_redis_connection_url(compose_content: str) -> str | None:
-    """Extract OAUTH2_PROXY_REDIS_CONNECTION_URL from docker-compose.yaml."""
-    match = re.search(
-        r'OAUTH2_PROXY_REDIS_CONNECTION_URL\s*=\s*(\S+)',
-        compose_content,
-    )
-    if not match:
-        return None
-    raw = match.group(1).strip('"\'')
-    return _resolve_env_defaults(raw)
-
-
-@pytest.fixture(scope="session")
-def discovery_config_public() -> dict[str, Any]:
-    """Fetch the OIDC discovery config via the public HTTPS domain (Caddy proxy)."""
-    url = f"{PUBLIC_BASE}/auth/realms/production/.well-known/openid-configuration"
-    resp = requests.get(url, timeout=10, verify=False)
-    resp.raise_for_status()
-    return resp.json()
-
-
-@pytest.fixture(scope="session")
-def discovery_config_direct() -> dict[str, Any]:
-    """Fetch the OIDC discovery config directly on localhost:8080."""
-    url = f"http://{HOST}:{PORT}/auth/realms/production/.well-known/openid-configuration"
-    resp = requests.get(url, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+from fixtures import (
+    PUBLIC_BASE,
+    PUBLIC_ISSUER_URL,
+    compose_issuer_url,
+    compose_ssl_insecure_skip_verify,
+    compose_session_store_type,
+    compose_redis_connection_url,
+    discovery_config_public,
+    discovery_config_direct,
+)
 
 
 # ======================================================================
@@ -221,35 +116,21 @@ class TestDiscoveryEndpointReachable:
 
 class TestDiscoveryReturnsPublicHTTPS:
 
-    def test_issuer_is_public_https(self, discovery_config_public: dict[str, Any]):
-        url = discovery_config_public["issuer"]
+    @pytest.mark.parametrize("endpoint_key", [
+        "issuer",
+        "authorization_endpoint",
+        "token_endpoint",
+        "userinfo_endpoint",
+        "jwks_uri",
+        "end_session_endpoint",
+    ])
+    def test_endpoint_is_public_https(
+        self, discovery_config_public: dict[str, Any], endpoint_key: str
+    ):
+        """All discovery endpoints must start with https://out-customer.com."""
+        url = discovery_config_public[endpoint_key]
         assert url.startswith("https://out-customer.com"), \
-            f"issuer must be https://out-customer.com, got: {url}"
-
-    def test_authorization_endpoint_is_public_https(self, discovery_config_public: dict[str, Any]):
-        url = discovery_config_public["authorization_endpoint"]
-        assert url.startswith("https://out-customer.com"), \
-            f"authorization_endpoint must be https://out-customer.com, got: {url}"
-
-    def test_token_endpoint_is_public_https(self, discovery_config_public: dict[str, Any]):
-        url = discovery_config_public["token_endpoint"]
-        assert url.startswith("https://out-customer.com"), \
-            f"token_endpoint must be https://out-customer.com, got: {url}"
-
-    def test_userinfo_endpoint_is_public_https(self, discovery_config_public: dict[str, Any]):
-        url = discovery_config_public["userinfo_endpoint"]
-        assert url.startswith("https://out-customer.com"), \
-            f"userinfo_endpoint must be https://out-customer.com, got: {url}"
-
-    def test_jwks_uri_is_public_https(self, discovery_config_public: dict[str, Any]):
-        url = discovery_config_public["jwks_uri"]
-        assert url.startswith("https://out-customer.com"), \
-            f"jwks_uri must be https://out-customer.com, got: {url}"
-
-    def test_end_session_endpoint_is_public_https(self, discovery_config_public: dict[str, Any]):
-        url = discovery_config_public["end_session_endpoint"]
-        assert url.startswith("https://out-customer.com"), \
-            f"end_session_endpoint must be https://out-customer.com, got: {url}"
+            f"{endpoint_key} must start with https://out-customer.com, got: {url}"
 
     def test_all_endpoints_no_internal_hostnames(self, discovery_config_public: dict[str, Any]):
         """No endpoint in the discovery response contains internal Docker hostnames."""
@@ -284,59 +165,39 @@ class TestAuthorizationEndpoint:
 
 class TestSignInRedirect:
 
-    def test_start_redirects_to_keycloak(self):
-        """
-        Hitting /oauth2/start must redirect (302) to Keycloak's authorization
-        endpoint. The redirect Location must be a public URL.
-
-        Note: /oauth2/sign_in renders an HTML page (200) with a login button,
-        whereas /oauth2/start directly initiates the OAuth2 flow with a 302.
-        """
-        start_url = f"{PUBLIC_BASE}/oauth2/start"
-
-        resp = requests.get(start_url, timeout=10, verify=False, allow_redirects=False)
-
-        # Expect a 302 redirect
+    def _get_redirect_location(self) -> str:
+        """Hit /oauth2/start and return the redirect Location header."""
+        resp = requests.get(
+            f"{PUBLIC_BASE}/oauth2/start",
+            timeout=10,
+            verify=False,
+            allow_redirects=False,
+        )
         assert resp.status_code == 302, \
             f"Expected 302 redirect from /oauth2/start, got {resp.status_code}"
+        return resp.headers.get("Location", "")
 
-        location = resp.headers.get("Location", "")
+    def test_start_redirects_to_keycloak(self):
+        """Hitting /oauth2/start must redirect (302) to Keycloak's authorization endpoint."""
+        location = self._get_redirect_location()
         assert location, "Redirect Location header is empty"
 
     def test_start_redirect_no_internal_hostname(self):
-        """
-        The redirect Location must NOT contain internal Docker hostnames.
-        """
-        start_url = f"{PUBLIC_BASE}/oauth2/start"
-
-        resp = requests.get(start_url, timeout=10, verify=False, allow_redirects=False)
-        location = resp.headers.get("Location", "")
-
+        """The redirect Location must NOT contain internal Docker hostnames."""
+        location = self._get_redirect_location()
         forbidden = ["keycloak:", "localhost:8080", "172.", "192.168."]
         for pattern in forbidden:
             assert pattern not in location, \
                 f"Redirect contains internal hostname '{pattern}': {location}"
 
     def test_start_redirect_points_to_auth_endpoint(self):
-        """
-        The redirect Location must point to Keycloak's authorization endpoint.
-        """
-        start_url = f"{PUBLIC_BASE}/oauth2/start"
-
-        resp = requests.get(start_url, timeout=10, verify=False, allow_redirects=False)
-        location = resp.headers.get("Location", "")
-
+        """The redirect Location must point to Keycloak's authorization endpoint."""
+        location = self._get_redirect_location()
         assert "/protocol/openid-connect/auth" in location or "/auth/realms/" in location, \
             f"Redirect must point to Keycloak auth endpoint: {location}"
 
     def test_start_redirect_is_public_https(self):
-        """
-        The redirect Location must start with https://out-customer.com.
-        """
-        start_url = f"{PUBLIC_BASE}/oauth2/start"
-
-        resp = requests.get(start_url, timeout=10, verify=False, allow_redirects=False)
-        location = resp.headers.get("Location", "")
-
+        """The redirect Location must start with https://out-customer.com."""
+        location = self._get_redirect_location()
         assert location.startswith("https://out-customer.com"), \
             f"Redirect must start with https://out-customer.com: {location}"

@@ -13,62 +13,10 @@ import os
 import sys
 import time
 
-import pytest
-import valkey
-
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from rbac_sync import session_management, SYNC_INTERVAL
-from rbac_sync.config import VALKEY_URL
 
-
-# ======================================================================
-# Fixtures
-# ======================================================================
-
-
-@pytest.fixture()
-def _valkey_flush():
-    """Flush all role_sync:* keys from Valkey before and after each test.
-
-    Gracefully skips if Valkey is unavailable (e.g., Docker not running).
-    Only use this fixture on tests that actually touch Valkey.
-    """
-    r = valkey.from_url(VALKEY_URL)
-    try:
-        r.ping()
-    except Exception:
-        # Valkey unavailable — skip flush (tests that require Valkey
-        # will fail at the assertion level with a clearer message).
-        yield
-        return
-
-    # Flush before
-    cursor = 0
-    while True:
-        cursor, keys = r.scan(cursor=cursor, match="role_sync:*", count=100)
-        if keys:
-            r.delete(*keys)
-        if cursor == 0:
-            break
-    yield
-    # Flush after
-    cursor = 0
-    while True:
-        cursor, keys = r.scan(cursor=cursor, match="role_sync:*", count=100)
-        if keys:
-            r.delete(*keys)
-        if cursor == 0:
-            break
-
-
-@pytest.fixture
-def sample_events():
-    """Return a list of mock Keycloak admin events."""
-    return [
-        {"id": "evt-001", "operationType": "CREATE", "resourceType": "REALM_ROLE"},
-        {"id": "evt-002", "operationType": "UPDATE", "resourceType": "ROLE"},
-        {"id": "evt-003", "operationType": "LOGIN", "resourceType": "USER"},
-    ]
+from fixtures import sample_events, _valkey_flush
 
 
 # ======================================================================

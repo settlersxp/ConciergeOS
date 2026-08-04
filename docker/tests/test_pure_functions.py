@@ -9,10 +9,10 @@ No network calls, no mocking.
 Updated to use new modules from rbac_sync package.
 """
 
-import os
-import sys
 import copy
 import inspect
+import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from rbac_sync import (
@@ -24,6 +24,9 @@ from rbac_sync import (
     ROLE_EVENT_TYPES,
 )
 
+from helpers import make_roles_with_attrs
+from fixtures import sample_caddy_config
+
 
 # ======================================================================
 # TestHasRoleEvents
@@ -32,39 +35,33 @@ from rbac_sync import (
 
 class TestHasRoleEvents:
 
+    @staticmethod
+    def _event(**kwargs) -> dict:
+        return kwargs
+
     def test_detects_create_role_event(self):
-        assert has_role_events([
-            {"operationType": "CREATE", "resourceType": "ROLE"}
-        ]) is True
+        assert has_role_events([self._event(operationType="CREATE", resourceType="ROLE")]) is True
 
     def test_detects_update_role_event(self):
-        assert has_role_events([
-            {"operationType": "UPDATE", "resourceType": "ROLE"}
-        ]) is True
+        assert has_role_events([self._event(operationType="UPDATE", resourceType="ROLE")]) is True
 
     def test_detects_delete_role_event(self):
-        assert has_role_events([
-            {"operationType": "DELETE", "resourceType": "ROLE"}
-        ]) is True
+        assert has_role_events([self._event(operationType="DELETE", resourceType="ROLE")]) is True
 
     def test_ignores_login_events(self):
-        assert has_role_events([
-            {"operationType": "LOGIN", "resourceType": "USER"}
-        ]) is False
+        assert has_role_events([self._event(operationType="LOGIN", resourceType="USER")]) is False
 
     def test_ignores_empty_list(self):
         assert has_role_events([]) is False
 
     def test_ignores_role_view_event(self):
         """VIEW on ROLE should NOT trigger re-sync."""
-        assert has_role_events([
-            {"operationType": "VIEW", "resourceType": "ROLE"}
-        ]) is False
+        assert has_role_events([self._event(operationType="VIEW", resourceType="ROLE")]) is False
 
     def test_mixed_events_returns_true(self):
         assert has_role_events([
-            {"operationType": "LOGIN", "resourceType": "USER"},
-            {"operationType": "CREATE", "resourceType": "ROLE"},
+            self._event(operationType="LOGIN", resourceType="USER"),
+            self._event(operationType="CREATE", resourceType="ROLE"),
         ]) is True
 
 
@@ -75,18 +72,8 @@ class TestHasRoleEvents:
 
 class TestGenerateDenyRules:
 
-    def _make_roles_with_attrs(self, **kwargs) -> dict[str, dict[str, list[str]]]:
-        """Helper: build roles_with_attrs dict. Kwargs are role_name -> {paths, menus}."""
-        result: dict[str, dict[str, list[str]]] = {}
-        for role_name, attrs in kwargs.items():
-            result[role_name] = {
-                "paths": attrs.get("paths", []),
-                "menus": attrs.get("menus", []),
-            }
-        return result
-
     def test_generates_rules_for_roles_with_paths(self):
-        roles_with_attrs = self._make_roles_with_attrs(
+        roles_with_attrs = make_roles_with_attrs(
             **{
                 "settings:view": {"paths": ["/settings", "/settings/*"], "menus": ["settings"]},
                 "models:admin": {"paths": ["/models", "/models/*"], "menus": ["models"]},
@@ -96,7 +83,7 @@ class TestGenerateDenyRules:
         assert len(rules) == 2
 
     def test_skips_roles_without_paths(self):
-        roles_with_attrs = self._make_roles_with_attrs(
+        roles_with_attrs = make_roles_with_attrs(
             **{
                 "full-access": {"paths": [], "menus": []},
                 "settings:view": {"paths": ["/settings"], "menus": ["settings"]},
@@ -107,7 +94,7 @@ class TestGenerateDenyRules:
 
     def test_rule_structure(self):
         """Verify the deny rule structure uses header_regexp with X-Forwarded-Groups."""
-        roles_with_attrs = self._make_roles_with_attrs(
+        roles_with_attrs = make_roles_with_attrs(
             **{"settings:view": {"paths": ["/settings", "/settings/*"], "menus": ["settings"]}}
         )
         rules = generate_deny_rules(roles_with_attrs)
@@ -133,7 +120,7 @@ class TestGenerateDenyRules:
 
     def test_rule_uses_custom_message(self):
         """Verify message from role name is used in the deny rule."""
-        roles_with_attrs = self._make_roles_with_attrs(
+        roles_with_attrs = make_roles_with_attrs(
             **{"settings:view": {"paths": ["/settings"], "menus": ["settings"]}}
         )
         rules = generate_deny_rules(roles_with_attrs)
@@ -145,7 +132,7 @@ class TestGenerateDenyRules:
         assert generate_deny_rules({}) == []
 
     def test_all_empty_paths_returns_no_rules(self):
-        roles_with_attrs = self._make_roles_with_attrs(
+        roles_with_attrs = make_roles_with_attrs(
             **{
                 "a:view": {"paths": [], "menus": ["a"]},
                 "b:view": {"paths": [], "menus": ["b"]},
@@ -161,24 +148,15 @@ class TestGenerateDenyRules:
 
 class TestGetMenusForRoles:
 
-    def _make_roles_with_attrs(self, **kwargs) -> dict[str, dict[str, list[str]]]:
-        result: dict[str, dict[str, list[str]]] = {}
-        for role_name, attrs in kwargs.items():
-            result[role_name] = {
-                "paths": attrs.get("paths", []),
-                "menus": attrs.get("menus", []),
-            }
-        return result
-
     def test_aggregates_menus_for_single_role(self):
-        roles_with_attrs = self._make_roles_with_attrs(
+        roles_with_attrs = make_roles_with_attrs(
             **{"settings:view": {"paths": ["/settings"], "menus": ["settings"]}}
         )
         menus = get_menus_for_roles({"settings:view"}, roles_with_attrs)
         assert menus == ["settings"]
 
     def test_aggregates_menus_for_multiple_roles(self):
-        roles_with_attrs = self._make_roles_with_attrs(
+        roles_with_attrs = make_roles_with_attrs(
             **{
                 "reservations:view": {"paths": ["/"], "menus": ["reservations"]},
                 "settings:view": {"paths": ["/settings"], "menus": ["settings"]},
@@ -190,14 +168,14 @@ class TestGetMenusForRoles:
         assert set(menus) == {"reservations", "settings"}
 
     def test_returns_empty_for_unknown_role(self):
-        roles_with_attrs = self._make_roles_with_attrs(
+        roles_with_attrs = make_roles_with_attrs(
             **{"settings:view": {"paths": ["/settings"], "menus": ["settings"]}}
         )
         menus = get_menus_for_roles({"unknown:role"}, roles_with_attrs)
         assert menus == []
 
     def test_deduplicates_menus(self):
-        roles_with_attrs = self._make_roles_with_attrs(
+        roles_with_attrs = make_roles_with_attrs(
             **{
                 "a:view": {"paths": [], "menus": ["shared"]},
                 "b:view": {"paths": [], "menus": ["shared"]},
@@ -353,19 +331,19 @@ class TestPushRoutesToCaddyConfigPreservation:
 
 class TestRoleEventTypes:
 
-    def test_role_event_types_contains_create(self):
-        assert "CREATE" in ROLE_EVENT_TYPES
+    @staticmethod
+    def _event_in_types(*ops: str) -> None:
+        for op in ops:
+            assert op in ROLE_EVENT_TYPES, f"{op} must be in ROLE_EVENT_TYPES"
 
-    def test_role_event_types_contains_update(self):
-        assert "UPDATE" in ROLE_EVENT_TYPES
+    @staticmethod
+    def _event_not_in_types(*ops: str) -> None:
+        for op in ops:
+            assert op not in ROLE_EVENT_TYPES, f"{op} must NOT be in ROLE_EVENT_TYPES"
 
-    def test_role_event_types_contains_delete(self):
-        assert "DELETE" in ROLE_EVENT_TYPES
+    def test_role_event_types_contains_required(self):
+        self._event_in_types("CREATE", "UPDATE", "DELETE")
 
-    def test_role_event_types_does_not_contain_view(self):
-        """VIEW should not trigger a re-sync."""
-        assert "VIEW" not in ROLE_EVENT_TYPES
-
-    def test_role_event_types_does_not_contain_login(self):
-        """LOGIN should not trigger a re-sync."""
-        assert "LOGIN" not in ROLE_EVENT_TYPES
+    def test_role_event_types_does_not_contain_non_triggering(self):
+        """VIEW and LOGIN should not trigger a re-sync."""
+        self._event_not_in_types("VIEW", "LOGIN")
