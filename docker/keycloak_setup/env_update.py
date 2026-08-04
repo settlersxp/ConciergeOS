@@ -4,7 +4,10 @@
 Handles updating .env files with client secrets.
 """
 
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 
 # ------------------------------------------------------------------
@@ -52,9 +55,9 @@ def _update_env_file(env_path: str, secret: str) -> None:
         with open(env_path, "w") as f:
             f.writelines(new_lines)
 
-        print(f"  ✓ Updated OIDC_CLIENT_SECRET in {env_path}")
+        logger.info("  ✓ Updated OIDC_CLIENT_SECRET in %s", env_path)
     except OSError as e:
-        print(f"  ⚠ Failed to update {env_path}: {e}")
+        logger.warning("  ⚠ Failed to update %s: %s", env_path, e)
 
 
 def _update_env_file_client_api(env_path: str, secret: str) -> None:
@@ -81,9 +84,9 @@ def _update_env_file_client_api(env_path: str, secret: str) -> None:
         with open(env_path, "w") as f:
             f.writelines(new_lines)
 
-        print(f"  ✓ Updated CLIENT_API_CLIENT_SECRET in {env_path}")
+        logger.info("  ✓ Updated CLIENT_API_CLIENT_SECRET in %s", env_path)
     except OSError as e:
-        print(f"  ⚠ Failed to update {env_path}: {e}")
+        logger.warning("  ⚠ Failed to update %s: %s", env_path, e)
 
 
 def update_oidc_configs(actual_secret: str, client_api_secret: str) -> None:
@@ -92,8 +95,8 @@ def update_oidc_configs(actual_secret: str, client_api_secret: str) -> None:
     Updates both OIDC_CLIENT_SECRET (for oauth2-proxy) and
     CLIENT_API_CLIENT_SECRET (for the client-backend service).
     """
-    print(f"  ✓ concierge client secret: {actual_secret}")
-    print(f"  ✓ client-api client secret: {client_api_secret}")
+    logger.info("  ✓ concierge client secret: %s", actual_secret)
+    logger.info("  ✓ client-api client secret: %s", client_api_secret)
 
     # Auto-update .env files
     env_path = _find_env_file()
@@ -101,4 +104,4 @@ def update_oidc_configs(actual_secret: str, client_api_secret: str) -> None:
         _update_env_file(env_path, actual_secret)
         _update_env_file_client_api(env_path, client_api_secret)
     else:
-        print("  ⚠ No .env file found. Set secrets manually.")
+        logger.warning("  ⚠ No .env file found. Set secrets manually.")

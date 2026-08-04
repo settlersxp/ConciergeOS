@@ -4,9 +4,13 @@
 Handles configuring role claims in access tokens.
 """
 
+import logging
+
 from keycloak_common import kc_request
 
 from .config import REALMS
+
+logger = logging.getLogger(__name__)
 
 
 # ------------------------------------------------------------------
@@ -20,7 +24,7 @@ def configure_role_claim(token: str, realm: str, client_uuid: str) -> None:
     Roles are included in the access token by default in Keycloak, but we
     verify a mapper exists to ensure the claim is always emitted.
     """
-    print(f"  Configuring role claim for {realm}...")
+    logger.info("  Configuring role claim for %s...", realm)
 
     # Get existing protocol mappers
     resp = kc_request(
@@ -36,7 +40,7 @@ def configure_role_claim(token: str, realm: str, client_uuid: str) -> None:
     )
 
     if has_role_mapper:
-        print("    ⏭ Realm role mapper already exists")
+        logger.info("    ⏭ Realm role mapper already exists")
         return
 
     resp = kc_request(
@@ -58,7 +62,7 @@ def configure_role_claim(token: str, realm: str, client_uuid: str) -> None:
         },
     )
     resp.raise_for_status()
-    print("    ✓ Realm role mapper created")
+    logger.info("    ✓ Realm role mapper created")
 
 
 def configure_all_role_claims(
@@ -66,8 +70,8 @@ def configure_all_role_claims(
     client_uuids: dict[str, str],
 ) -> None:
     """Configure role claim for all realms."""
-    print("[7/8] Configuring role claim in access token...")
+    logger.info("[7/8] Configuring role claim in access token...")
 
     for realm in REALMS:
         configure_role_claim(token, realm, client_uuids[realm])
-    print()
+    logger.info("")

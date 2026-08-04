@@ -27,8 +27,12 @@ os.environ.setdefault("VALKEY_URL", settings.VALKEY_URL)
 os.environ.setdefault("SESSION_COOKIE_NAME", settings.SESSION_COOKIE_NAME)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import role_sync
-import keycloak_setup
+from rbac_sync.config import (
+    KEYCLOAK_URL,
+    KEYCLOAK_REALM,
+    VALKEY_URL,
+)
+from settings import settings
 
 
 # ======================================================================
@@ -40,12 +44,12 @@ import keycloak_setup
 def live_token():
     """Authenticate against the live Keycloak instance once per session."""
     resp = requests.post(
-        f"{role_sync.KEYCLOAK_URL}/realms/master/protocol/openid-connect/token",
+        f"{KEYCLOAK_URL}/realms/master/protocol/openid-connect/token",
         data={
             "grant_type": "password",
             "client_id": "admin-cli",
-            "username": role_sync.KEYCLOAK_ADMIN_USER,
-            "password": role_sync.KEYCLOAK_ADMIN_PASSWORD,
+            "username": settings.KEYCLOAK_ADMIN_USER,
+            "password": settings.KEYCLOAK_ADMIN_PASSWORD,
         },
     )
     resp.raise_for_status()
@@ -122,7 +126,7 @@ def _clear_sync_checkpoint(monkeypatch, pytestconfig):
 
     This fixture does two things:
     1. Deletes the role_sync:sync_ts key from Valkey
-    2. Monkeypatches role_sync.sync_is_current to always return False
+    2. Monkeypatches rbac_sync.sync_is_current to always return False
 
     This ensures that every call to initial_sync() in tests will actually
     rebuild the routes from scratch, which is required for tests that call
@@ -134,7 +138,7 @@ def _clear_sync_checkpoint(monkeypatch, pytestconfig):
     """
     import valkey as valkey_lib
     try:
-        r = valkey_lib.from_url(role_sync.VALKEY_URL)
+        r = valkey_lib.from_url(VALKEY_URL)
         r.delete("role_sync:sync_ts")
     except Exception:
         pass
@@ -142,7 +146,8 @@ def _clear_sync_checkpoint(monkeypatch, pytestconfig):
     # Only monkeypatch sync_is_current for non-event-persistence tests
     current_test = os.environ.get("PYTEST_CURRENT_TEST", "")
     if "test_event_persistence" not in current_test:
-        monkeypatch.setattr(role_sync, "sync_is_current", lambda: False)
+        from rbac_sync import session_management
+        monkeypatch.setattr(session_management, "sync_is_current", lambda: False)
 
 
 @pytest.fixture
@@ -153,8 +158,8 @@ def live_test_role(live_token):
     Attributes are stored directly in Keycloak (no external YAML mapping needed).
     """
     role_name = "test:cof-integration-role"
-    realm = role_sync.KEYCLOAK_REALM
-    base = role_sync.KEYCLOAK_URL
+    realm = KEYCLOAK_REALM
+    base = KEYCLOAK_URL
     headers = {"Authorization": f"Bearer {live_token}", "Content-Type": "application/json"}
 
     # ── CREATE role in Keycloak with attributes ───────────────────

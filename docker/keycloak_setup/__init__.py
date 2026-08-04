@@ -46,7 +46,15 @@ from .config import (
 )
 from .env_update import update_oidc_configs
 from .realms import create_realms
-from .roles import create_all_roles, create_composite_role, create_role
+from .roles import (
+    create_all_roles,
+    create_composite_role,
+    create_role,
+    create_role_with_attributes,
+    update_role_attributes,
+    sync_role_to_keycloak,
+    print_summary as print_role_sync_summary,
+)
 from .summary import print_summary
 from .users import create_all_users, create_user
 
@@ -64,11 +72,16 @@ __all__ = [
     # Individual entity functions
     "create_role",
     "create_composite_role",
+    "create_role_with_attributes",
+    "update_role_attributes",
+    "sync_role_to_keycloak",
     "create_user",
     "assign_user_to_roles",
     "create_client",
     "create_client_api",
     "configure_role_claim",
+    # Role sync summary (renamed to avoid conflict with other print_summary)
+    "print_role_sync_summary",
     # Configuration exports
     "REALMS",
     "ROLES",

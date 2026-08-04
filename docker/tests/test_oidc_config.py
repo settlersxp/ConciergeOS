@@ -15,7 +15,6 @@ Usage:
     cd docker && python3 -m pytest test_oidc_config.py -v
 """
 
-import json
 import os
 import re
 import ssl

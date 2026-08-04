@@ -17,7 +17,8 @@ import pytest
 import valkey
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-import role_sync
+from rbac_sync import session_management, SYNC_INTERVAL
+from rbac_sync.config import VALKEY_URL
 
 
 # ======================================================================
@@ -32,7 +33,7 @@ def _valkey_flush():
     Gracefully skips if Valkey is unavailable (e.g., Docker not running).
     Only use this fixture on tests that actually touch Valkey.
     """
-    r = valkey.from_url(role_sync.VALKEY_URL)
+    r = valkey.from_url(VALKEY_URL)
     try:
         r.ping()
     except Exception:
@@ -78,37 +79,37 @@ def sample_events():
 class TestSyncTimestamp:
 
     def test_save_and_load(self, _valkey_flush):
-        role_sync.save_sync_timestamp()
-        ts = role_sync.load_sync_timestamp()
+        session_management.save_sync_timestamp()
+        ts = session_management.load_sync_timestamp()
         assert ts is not None
         assert isinstance(ts, float)
         assert ts <= time.time()
 
     def test_load_none_when_empty(self, monkeypatch):
-        monkeypatch.setattr(role_sync, "_CHECKPOINT_KEY", "role_sync:__none__")
-        assert role_sync.load_sync_timestamp() is None
+        monkeypatch.setattr(session_management, "_CHECKPOINT_KEY", "role_sync:__none__")
+        assert session_management.load_sync_timestamp() is None
 
     def test_sync_is_current_after_save(self, _valkey_flush):
-        role_sync.save_sync_timestamp()
-        assert role_sync.sync_is_current() is True
+        session_management.save_sync_timestamp()
+        assert session_management.sync_is_current() is True
 
     def test_sync_is_current_stale(self, monkeypatch, _valkey_flush):
-        role_sync.save_sync_timestamp()
-        stale_ts = time.time() - (role_sync.SYNC_INTERVAL * 3)
-        monkeypatch.setattr(role_sync, "load_sync_timestamp", lambda: stale_ts)
-        assert role_sync.sync_is_current() is False
+        session_management.save_sync_timestamp()
+        stale_ts = time.time() - (SYNC_INTERVAL * 3)
+        monkeypatch.setattr(session_management, "load_sync_timestamp", lambda: stale_ts)
+        assert session_management.sync_is_current() is False
 
     def test_sync_is_current_no_checkpoint(self, monkeypatch):
-        monkeypatch.setattr(role_sync, "load_sync_timestamp", lambda: None)
-        assert role_sync.sync_is_current() is False
+        monkeypatch.setattr(session_management, "load_sync_timestamp", lambda: None)
+        assert session_management.sync_is_current() is False
 
     def test_survives_overwrite(self, _valkey_flush):
-        role_sync.save_sync_timestamp()
-        ts1 = role_sync.load_sync_timestamp()
+        session_management.save_sync_timestamp()
+        ts1 = session_management.load_sync_timestamp()
         time.sleep(0.05)
-        role_sync.save_sync_timestamp()
-        ts2 = role_sync.load_sync_timestamp()
-        assert ts2 >= ts1
+        session_management.save_sync_timestamp()
+        ts2 = session_management.load_sync_timestamp()
+        assert ts2 is not None and ts1 is not None and ts2 >= ts1
 
 
 # ======================================================================
@@ -120,27 +121,27 @@ class TestSeenIds:
 
     def test_save_and_load(self, _valkey_flush):
         ids = {"a", "b", "c"}
-        role_sync.save_seen_ids(ids)
-        assert role_sync.load_seen_ids() == ids
+        session_management.save_seen_ids(ids)
+        assert session_management.load_seen_ids() == ids
 
     def test_load_empty_when_none(self, _valkey_flush):
-        assert role_sync.load_seen_ids() == set()
+        assert session_management.load_seen_ids() == set()
 
     def test_save_empty_is_noop(self, _valkey_flush):
-        role_sync.save_seen_ids(set())
-        assert role_sync.load_seen_ids() == set()
+        session_management.save_seen_ids(set())
+        assert session_management.load_seen_ids() == set()
 
     def test_overwrite_replaces(self, _valkey_flush):
-        role_sync.save_seen_ids({"old"})
-        role_sync.save_seen_ids({"new1", "new2"})
-        assert role_sync.load_seen_ids() == {"new1", "new2"}
+        session_management.save_seen_ids({"old"})
+        session_management.save_seen_ids({"new1", "new2"})
+        assert session_management.load_seen_ids() == {"new1", "new2"}
 
     def test_union_with_existing(self, _valkey_flush):
         """Simulate poll_and_sync pattern: load_seen | new_ids → save."""
-        role_sync.save_seen_ids({"first"})
-        seen = role_sync.load_seen_ids() | {"second"}
-        role_sync.save_seen_ids(seen)
-        assert role_sync.load_seen_ids() == {"first", "second"}
+        session_management.save_seen_ids({"first"})
+        seen = session_management.load_seen_ids() | {"second"}
+        session_management.save_seen_ids(seen)
+        assert session_management.load_seen_ids() == {"first", "second"}
 
 
 # ======================================================================
@@ -151,25 +152,25 @@ class TestSeenIds:
 class TestFilterNewEvents:
 
     def test_all_new_when_seen_empty(self, sample_events):
-        new = role_sync.filter_new_events(sample_events, set())
+        new = session_management.filter_new_events(sample_events, set())
         assert len(new) == 3
 
     def test_filters_known_ids(self, sample_events):
         seen = {"evt-001", "evt-002"}
-        new = role_sync.filter_new_events(sample_events, seen)
+        new = session_management.filter_new_events(sample_events, seen)
         assert len(new) == 1
         assert new[0]["id"] == "evt-003"
 
     def test_filters_all(self, sample_events):
         seen = {"evt-001", "evt-002", "evt-003"}
-        assert role_sync.filter_new_events(sample_events, seen) == []
+        assert session_management.filter_new_events(sample_events, seen) == []
 
     def test_empty_list(self):
-        assert role_sync.filter_new_events([], {"x"}) == []
+        assert session_management.filter_new_events([], {"x"}) == []
 
     def test_event_without_id_passed_through(self):
         events = [{"operationType": "VIEW"}]  # no id
-        new = role_sync.filter_new_events(events, set())
+        new = session_management.filter_new_events(events, set())
         assert len(new) == 1
 
     def test_mixed_known_and_new(self):
@@ -180,7 +181,7 @@ class TestFilterNewEvents:
             {"id": "new-2"},
         ]
         seen = {"old-1", "old-2"}
-        new = role_sync.filter_new_events(events, seen)
+        new = session_management.filter_new_events(events, seen)
         assert {e["id"] for e in new} == {"new-1", "new-2"}
 
 
@@ -193,14 +194,14 @@ class TestCollectEventIds:
 
     def test_collects_all_ids(self):
         events = [{"id": "a"}, {"id": "b"}, {"id": "c"}]
-        assert role_sync.collect_event_ids(events) == {"a", "b", "c"}
+        assert session_management.collect_event_ids(events) == {"a", "b", "c"}
 
     def test_skips_events_without_id(self):
         events = [{"id": "x"}, {"operationType": "VIEW"}, {}]
-        assert role_sync.collect_event_ids(events) == {"x"}
+        assert session_management.collect_event_ids(events) == {"x"}
 
     def test_empty_list(self):
-        assert role_sync.collect_event_ids([]) == set()
+        assert session_management.collect_event_ids([]) == set()
 
 
 # ======================================================================
@@ -213,22 +214,22 @@ class TestPersistenceFlow:
     def test_two_poll_cycles(self, sample_events, _valkey_flush):
         """Cycle 1: all events new. Cycle 2: all events seen."""
         # Cycle 1
-        seen = role_sync.load_seen_ids()
-        new_1 = role_sync.filter_new_events(sample_events, seen)
+        seen = session_management.load_seen_ids()
+        new_1 = session_management.filter_new_events(sample_events, seen)
         assert len(new_1) == 3
 
         # Persist
-        all_ids = role_sync.collect_event_ids(sample_events) | seen
-        role_sync.save_seen_ids(all_ids)
+        all_ids = session_management.collect_event_ids(sample_events) | seen
+        session_management.save_seen_ids(all_ids)
 
         # Cycle 2
-        seen_2 = role_sync.load_seen_ids()
-        new_2 = role_sync.filter_new_events(sample_events, seen_2)
+        seen_2 = session_management.load_seen_ids()
+        new_2 = session_management.filter_new_events(sample_events, seen_2)
         assert len(new_2) == 0
 
     def test_mixed_across_cycles(self, _valkey_flush):
         """Some events already seen, some new."""
-        role_sync.save_seen_ids({"old-1", "old-2"})
+        session_management.save_seen_ids({"old-1", "old-2"})
 
         events = [
             {"id": "old-1"},
@@ -236,20 +237,20 @@ class TestPersistenceFlow:
             {"id": "old-2"},
             {"id": "new-2"},
         ]
-        seen = role_sync.load_seen_ids()
-        new = role_sync.filter_new_events(events, seen)
+        seen = session_management.load_seen_ids()
+        new = session_management.filter_new_events(events, seen)
         assert {e["id"] for e in new} == {"new-1", "new-2"}
 
     def test_initial_sync_fast_path(self, _valkey_flush):
         """After save_sync_timestamp, sync_is_current is True."""
-        role_sync.save_sync_timestamp()
-        assert role_sync.sync_is_current() is True
+        session_management.save_sync_timestamp()
+        assert session_management.sync_is_current() is True
 
     def test_initial_sync_slow_path(self, _valkey_flush):
         """When no checkpoint, sync_is_current is False."""
         # Fixture already flushed keys
-        assert role_sync.sync_is_current() is False
+        assert session_management.sync_is_current() is False
 
     def test_constants(self):
-        assert role_sync._CHECKPOINT_KEY == "role_sync:sync_ts"
-        assert role_sync._SEEN_KEY == "role_sync:seen"
+        assert session_management._CHECKPOINT_KEY == "role_sync:sync_ts"
+        assert session_management._SEEN_KEY == "role_sync:seen"

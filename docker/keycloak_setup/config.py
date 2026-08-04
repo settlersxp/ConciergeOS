@@ -6,8 +6,7 @@ Centralizes all configuration values used across the keycloak_setup package.
 
 import os
 
-import yaml
-
+from rbac_file import load_rbac_routes
 from settings import settings
 
 
@@ -39,15 +38,15 @@ LOCAL_WEB_ORIGIN = "http://localhost:*"
 DOMAIN_WILD_CARD = f"{APP_DOMAIN}/*"
 
 # ------------------------------------------------------------------
-# Role Definitions (loaded from rbac_routes.yaml)
+# Role Definitions (loaded from rbac_routes.json)
 # ------------------------------------------------------------------
 
 
 def _load_roles_from_mapping() -> dict[str, str]:
-    """Load role definitions from the RBAC mapping YAML file.
+    """Load role definitions from the RBAC mapping file.
 
-    Reads 'rbac_routes.yaml' and extracts the unique role names, deriving a
-    human-readable description from each entry's *message* field.
+    Reads the RBAC routes file (YAML or JSON) via the Pydantic RBACRoutes
+    model and extracts the role descriptions.
 
     Returns
     -------
@@ -58,14 +57,14 @@ def _load_roles_from_mapping() -> dict[str, str]:
     -----
     Tries the following locations in order:
     1. MAPPING_FILE environment variable (set by settings.MAPPING_FILE)
-    2. rbac_routes.yaml relative to this script's directory (local dev)
+    2. rbac_routes.json relative to this script (local dev)
     """
     # Try the configured path first (works inside Docker containers)
     mapping_file = settings.MAPPING_FILE
     if not os.path.exists(mapping_file):
-        # Fallback: look for rbac_routes.yaml next to this script (local dev)
+        # Fallback: look for rbac_routes.json next to this script (local dev)
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        fallback = os.path.join(script_dir, "..", "rbac_routes.yaml")
+        fallback = os.path.join(script_dir, "..", "rbac_routes.json")
         if os.path.exists(fallback):
             mapping_file = fallback
         else:
@@ -73,33 +72,14 @@ def _load_roles_from_mapping() -> dict[str, str]:
                 f"RBAC mapping file not found. Searched:\n"
                 f"  1. {settings.MAPPING_FILE} (MAPPING_FILE env var)\n"
                 f"  2. {fallback} (next to this script)\n"
-                "Set MAPPING_FILE to point to rbac_routes.yaml."
+                "Set MAPPING_FILE to point to rbac_routes.json."
             )
 
-    with open(mapping_file, "r") as f:
-        data = yaml.safe_load(f) or []
-
-    roles: dict[str, str] = {}
-    for entry in data:
-        role_name = entry.get("role", "")
-        if not role_name:
-            continue
-
-        # Derive a clean description from the YAML's 'message' field.
-        # Example input : "Access denied: /settings requires the settings:view role."
-        # Example output: "/settings requires settings:view"
-        msg = entry.get("message", f"Role: {role_name}")
-        description = (
-            msg.replace("Access denied: ", "")
-               .replace(" role.", "")
-               .replace(" requires the ", " requires ")
-        )
-        roles[role_name] = description
-
-    return roles
+    routes = load_rbac_routes(mapping_file)
+    return routes.role_descriptions()
 
 
-# Roles are loaded from rbac_routes.yaml — single source of truth.
+# Roles are loaded from rbac_routes.json — single source of truth.
 # Note: ROLES is loaded lazily to allow imports even when the file is missing.
 def get_roles() -> dict[str, str]:
     """Get role definitions, loading from YAML if available."""

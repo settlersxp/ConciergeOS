@@ -4,9 +4,13 @@
 Handles assigning users to roles.
 """
 
+import logging
+
 from keycloak_common import fetch_all_roles_with_attrs, kc_request
 
 from .config import USERS
+
+logger = logging.getLogger(__name__)
 
 
 # ------------------------------------------------------------------
@@ -23,7 +27,7 @@ def assign_user_to_roles(
 ) -> None:
     """Assign a user to realm roles."""
     if not user_id:
-        print(f"    ⚠ Skipping {username} (missing user ID)")
+        logger.warning("    ⚠ Skipping %s (missing user ID)", username)
         return
 
     # Get all roles with their IDs using keycloak_common helper
@@ -46,7 +50,7 @@ def assign_user_to_roles(
     roles_payload = []
     for role_name in role_names:
         if role_name in existing_roles:
-            print(f"    ⏭ {username} already has {role_name}")
+            logger.info("    ⏭ %s already has %s", username, role_name)
             continue
         if role_name in all_roles:
             roles_payload.append({
@@ -63,9 +67,9 @@ def assign_user_to_roles(
         )
         if resp.status_code in (200, 204, 201):
             role_list = ", ".join(r["name"] for r in roles_payload)
-            print(f"    ✓ {username} → {role_list}")
+            logger.info("    ✓ %s → %s", username, role_list)
         else:
-            print(f"    ⚠ Could not assign roles to {username}: {resp.status_code}")
+            logger.warning("    ⚠ Could not assign roles to %s: %s", username, resp.status_code)
 
 
 def assign_all_users_to_roles(
@@ -74,10 +78,10 @@ def assign_all_users_to_roles(
     role_data: dict[str, dict[str, str]],
 ) -> None:
     """Assign all users to their respective roles in all realms."""
-    print("[5/8] Assigning users to roles...")
+    logger.info("[5/8] Assigning users to roles...")
 
     for realm in REALMS:
-        print(f"  Realm: {realm}")
+        logger.info("  Realm: %s", realm)
         for username, config in USERS.items():
             assign_user_to_roles(
                 token,
@@ -86,7 +90,7 @@ def assign_all_users_to_roles(
                 config["roles"],
                 username,
             )
-    print()
+    logger.info("")
 
 
 # Import REALMS here to avoid circular imports

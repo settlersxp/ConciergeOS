@@ -5,19 +5,23 @@ test_sync_flow.py - Integration tests for the full sync flow and role lifecycle.
 Tests the full sync flow (live Keycloak + pure logic) and end-to-end role
 lifecycle: create -> sync -> validate -> delete -> sync -> validate.
 
-The sync flow now uses Keycloak role attributes (paths, menus) instead of
-an external YAML mapping file.
+Updated to use new modules from rbac_sync and keycloak_setup packages.
 """
 
-import os
-import sys
 import time
 
-import requests
-
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-import role_sync
-import keycloak_setup
+from keycloak_setup.roles import delete_role, list_roles_with_attrs, upsert_role_with_attributes
+from keycloak_setup.users import create_test_user, delete_user, get_users_by_username
+from rbac_sync import (
+    generate_deny_rules,
+    build_caddy_routes,
+    poll_admin_events,
+    has_role_events,
+    verify_caddy_routes,
+    get_menus_for_roles,
+    initial_sync,
+    KEYCLOAK_REALM,
+)
 
 
 # ======================================================================
@@ -29,14 +33,14 @@ class TestFullSyncFlow:
 
     def test_full_sync_with_live_keycloak(self, live_token):
         """Run initial_sync against live Keycloak (Caddy push may or may not be available)."""
-        roles_with_attrs = role_sync.fetch_all_roles_with_attrs(live_token)
+        roles_with_attrs = list_roles_with_attrs(live_token, KEYCLOAK_REALM)
         assert isinstance(roles_with_attrs, dict)
         assert len(roles_with_attrs) > 0, "Should have at least one role in Keycloak"
 
-        deny_rules = role_sync.generate_deny_rules(roles_with_attrs)
+        deny_rules = generate_deny_rules(roles_with_attrs)
         assert isinstance(deny_rules, list)
 
-        routes = role_sync.build_caddy_routes(deny_rules)
+        routes = build_caddy_routes(deny_rules)
         assert isinstance(routes, list)
         roles_with_paths = sum(1 for r in roles_with_attrs.values() if r.get("paths"))
         assert len(routes) == roles_with_paths + 3
@@ -47,26 +51,26 @@ class TestFullSyncFlow:
         """Poll live events and run has_role_events on the result."""
         from datetime import datetime, timezone
         since = datetime.now(timezone.utc)
-        events = role_sync.poll_admin_events(live_token, since)
+        events = poll_admin_events(live_token, since)
         assert isinstance(events, list)
-        result = role_sync.has_role_events(events)
+        result = has_role_events(events)
         assert isinstance(result, bool)
 
     def test_deny_rule_count_matches_roles_with_paths(self, live_token):
         """Verify deny rules are only generated for roles that have 'paths' attribute."""
-        roles_with_attrs = role_sync.fetch_all_roles_with_attrs(live_token)
-        deny_rules = role_sync.generate_deny_rules(roles_with_attrs)
+        roles_with_attrs = list_roles_with_attrs(live_token, KEYCLOAK_REALM)
+        deny_rules = generate_deny_rules(roles_with_attrs)
         roles_with_paths = sum(1 for r in roles_with_attrs.values() if r.get("paths"))
         assert len(deny_rules) == roles_with_paths
 
     def test_verify_caddy_routes_returns_list(self):
         """verify_caddy_routes should return a list from the live Caddy instance."""
-        result = role_sync.verify_caddy_routes()
+        result = verify_caddy_routes()
         assert isinstance(result, list)
 
     def test_fetch_roles_includes_role_attributes(self, live_token):
         """Verify that roles with paths/menus attributes are fetched correctly."""
-        roles_with_attrs = role_sync.fetch_all_roles_with_attrs(live_token)
+        roles_with_attrs = list_roles_with_attrs(live_token, KEYCLOAK_REALM)
 
         setup_role_names = {
             "reservations:view",
@@ -88,68 +92,20 @@ class TestFullSyncFlow:
 
     def test_get_menus_for_roles(self, live_token):
         """Test menu aggregation from role attributes."""
-        from role_sync import get_menus_for_roles
-        roles_with_attrs = role_sync.fetch_all_roles_with_attrs(live_token)
+        roles_with_attrs = list_roles_with_attrs(live_token, KEYCLOAK_REALM)
         for role_name in list(roles_with_attrs.keys())[:1]:
             menus = get_menus_for_roles({role_name}, roles_with_attrs)
             assert isinstance(menus, list)
 
     def test_get_menus_for_full_access(self, live_token):
         """Test that full-access role gets all menus."""
-        from role_sync import get_menus_for_roles
-        roles_with_attrs = role_sync.fetch_all_roles_with_attrs(live_token)
+        roles_with_attrs = list_roles_with_attrs(live_token, KEYCLOAK_REALM)
         menus = get_menus_for_roles({"full-access"}, roles_with_attrs)
         all_menus: set[str] = set()
         for attrs in roles_with_attrs.values():
             for m in attrs.get("menus", []):
                 all_menus.add(m)
         assert set(menus) == all_menus
-
-
-# ======================================================================
-# Helper: create role with attributes via direct Keycloak API
-# ======================================================================
-
-
-def _create_role_with_attrs(base_url: str, token: str, realm: str, role_name: str,
-                            paths: list[str], menus: list[str]) -> None:
-    """Create a role in Keycloak with custom paths/menus attributes.
-
-    keycloak_setup.create_role only creates the role without attributes.
-    This helper creates the role and then PUTs the attributes back.
-    """
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-
-    # Step 1: Create role (or skip if exists)
-    resp = requests.get(
-        f"{base_url}/admin/realms/{realm}/roles/{role_name}",
-        headers=headers,
-    )
-    if resp.status_code != 200:
-        resp = requests.post(
-            f"{base_url}/admin/realms/{realm}/roles",
-            headers=headers,
-            json={"name": role_name, "description": f"Test role: {role_name}"},
-        )
-        resp.raise_for_status()
-
-    # Step 2: PUT role with attributes
-    resp = requests.get(
-        f"{base_url}/admin/realms/{realm}/roles/{role_name}",
-        headers=headers,
-    )
-    resp.raise_for_status()
-    role_data = resp.json()
-    role_data["attributes"] = {
-        "paths": paths,
-        "menus": menus,
-    }
-    resp = requests.put(
-        f"{base_url}/admin/realms/{realm}/roles/{role_name}",
-        headers=headers,
-        json=role_data,
-    )
-    resp.raise_for_status()
 
 
 # ======================================================================
@@ -174,7 +130,7 @@ class TestLiveRoleLifecycleSync:
 
     def test_create_role_sync_and_validate(self, live_token, live_test_role):
         """CREATE role with attributes -> sync -> validate deny rule exists in Caddy."""
-        roles_with_attrs = role_sync.fetch_all_roles_with_attrs(live_token)
+        roles_with_attrs = list_roles_with_attrs(live_token, KEYCLOAK_REALM)
         assert live_test_role in roles_with_attrs, \
             f"Test role '{live_test_role}' should exist in Keycloak"
 
@@ -183,10 +139,10 @@ class TestLiveRoleLifecycleSync:
             f"Test role '{live_test_role}' should have 'paths' attribute"
         assert "/test-cof" in role_attrs["paths"], "/test-cof should be in role paths"
 
-        success = role_sync.initial_sync()
+        success = initial_sync()
         assert success, "initial_sync() should succeed"
 
-        routes = role_sync.verify_caddy_routes()
+        routes = verify_caddy_routes()
         assert isinstance(routes, list)
         assert len(routes) > 0, "Caddy should have routes after sync"
 
@@ -215,37 +171,30 @@ class TestLiveRoleLifecycleSync:
 
     def test_delete_role_sync_and_validate(self, live_token, live_test_role):
         """DELETE role -> sync -> validate deny rule is removed from Caddy."""
-        realm = role_sync.KEYCLOAK_REALM
-        base = role_sync.KEYCLOAK_URL
-        headers = {"Authorization": f"Bearer {live_token}"}
-
-        roles_with_attrs = role_sync.fetch_all_roles_with_attrs(live_token)
+        roles_with_attrs = list_roles_with_attrs(live_token, KEYCLOAK_REALM)
         assert live_test_role in roles_with_attrs, \
             f"Test role '{live_test_role}' must exist before delete test"
 
-        success = role_sync.initial_sync()
+        success = initial_sync()
         assert success, "initial_sync() should succeed before deletion"
 
-        routes_before = role_sync.verify_caddy_routes()
+        routes_before = verify_caddy_routes()
         deny_rule_before = self._find_deny_rule_for_role(routes_before, live_test_role)
         assert deny_rule_before is not None, \
             f"Deny rule for '{live_test_role}' must exist BEFORE deletion"
 
-        resp = requests.delete(
-            f"{base}/admin/realms/{realm}/roles/{live_test_role}",
-            headers=headers,
-        )
+        resp = delete_role(live_token, KEYCLOAK_REALM, live_test_role)
         assert resp.status_code in (204, 404), \
             f"DELETE role should succeed, got {resp.status_code}"
 
-        roles_after = role_sync.fetch_all_roles_with_attrs(live_token)
+        roles_after = list_roles_with_attrs(live_token, KEYCLOAK_REALM)
         assert live_test_role not in roles_after, \
             f"Test role '{live_test_role}' should be deleted from Keycloak"
 
-        success = role_sync.initial_sync()
+        success = initial_sync()
         assert success, "initial_sync() should succeed after role deletion"
 
-        routes_after = role_sync.verify_caddy_routes()
+        routes_after = verify_caddy_routes()
         deny_rule_after = self._find_deny_rule_for_role(routes_after, live_test_role)
         assert deny_rule_after is None, \
             f"Deny rule for '{live_test_role}' should be REMOVED from Caddy after deletion"
@@ -259,28 +208,25 @@ class TestLiveRoleLifecycleSync:
         4. Sync -> validate deny rule is removed
         """
         role_name = "test:cof-full-lifecycle"
-        realm = role_sync.KEYCLOAK_REALM
-        base = role_sync.KEYCLOAK_URL
-        headers = {"Authorization": f"Bearer {live_token}"}
 
         try:
             # Phase 1: CREATE role with attributes
-            _create_role_with_attrs(
-                base, live_token, realm, role_name,
+            upsert_role_with_attributes(
+                live_token, KEYCLOAK_REALM, role_name,
                 paths=["/lifecycle-test", "/lifecycle-test/*"],
                 menus=["lifecycle-test"],
             )
 
             # Verify role exists with attributes
-            roles_with_attrs = role_sync.fetch_all_roles_with_attrs(live_token)
+            roles_with_attrs = list_roles_with_attrs(live_token, KEYCLOAK_REALM)
             assert role_name in roles_with_attrs
             assert roles_with_attrs[role_name].get("paths")
 
             # Phase 2: SYNC & VALIDATE (role present)
-            success = role_sync.initial_sync()
+            success = initial_sync()
             assert success, "initial_sync() after role creation should succeed"
 
-            routes = role_sync.verify_caddy_routes()
+            routes = verify_caddy_routes()
             deny_rule = self._find_deny_rule_for_role(routes, role_name)
             assert deny_rule is not None, \
                 f"Deny rule for '{role_name}' should exist after sync"
@@ -288,33 +234,27 @@ class TestLiveRoleLifecycleSync:
             assert deny_rule.get("handle", [{}])[0].get("status_code") == "403"
 
             # Phase 3: DELETE
-            resp = requests.delete(
-                f"{base}/admin/realms/{realm}/roles/{role_name}",
-                headers=headers,
-            )
+            resp = delete_role(live_token, KEYCLOAK_REALM, role_name)
             assert resp.status_code in (204, 404)
 
             # Verify role is gone
-            roles_after = role_sync.fetch_all_roles_with_attrs(live_token)
+            roles_after = list_roles_with_attrs(live_token, KEYCLOAK_REALM)
             assert role_name not in roles_after
 
             time.sleep(0.5)
 
             # Phase 4: SYNC & VALIDATE (role removed)
-            success = role_sync.initial_sync()
+            success = initial_sync()
             assert success, "initial_sync() after role deletion should succeed"
 
-            routes_after = role_sync.verify_caddy_routes()
+            routes_after = verify_caddy_routes()
             deny_rule_after = self._find_deny_rule_for_role(routes_after, role_name)
             assert deny_rule_after is None, \
                 f"Deny rule for '{role_name}' should be removed after role deletion"
 
         finally:
             # Cleanup (idempotent)
-            requests.delete(
-                f"{base}/admin/realms/{realm}/roles/{role_name}",
-                headers=headers,
-            )
+            delete_role(live_token, KEYCLOAK_REALM, role_name)
 
 
 # ======================================================================
@@ -328,52 +268,23 @@ class TestLiveUserLifecycle:
     def test_create_user_validate_delete_validate(self, live_token):
         """CREATE user -> validate exists -> DELETE user -> validate gone."""
         username = "cof-test-user-lifecycle"
-        realm = role_sync.KEYCLOAK_REALM
-        base = role_sync.KEYCLOAK_URL
-        headers = {"Authorization": f"Bearer {live_token}"}
 
         # Phase 1: CREATE user via direct API
-        resp = requests.post(
-            f"{base}/admin/realms/{realm}/users",
-            headers=headers,
-            json={
-                "username": username,
-                "enabled": True,
-                "email": f"{username}@conciergeos.local",
-                "credentials": [{"type": "password", "value": "TestPass123!", "temporary": False}],
-                "emailVerified": True,
-                "requiredActions": [],
-            },
-        )
+        resp = create_test_user(live_token, KEYCLOAK_REALM, username)
         assert resp.status_code in (201, 204), f"Create user failed: {resp.status_code} {resp.text}"
         user_id = resp.headers.get("Location", "").split("/")[-1]
 
         # Phase 2: VALIDATE user exists
-        resp = requests.get(
-            f"{base}/admin/realms/{realm}/users",
-            params={"username": username, "max": 1},
-            headers=headers,
-        )
-        resp.raise_for_status()
-        users = resp.json()
+        users = get_users_by_username(live_token, KEYCLOAK_REALM, username)
         assert len(users) == 1, f"Expected 1 user, got {len(users)}"
         assert users[0]["username"] == username
         saved_user_id = users[0]["id"]
 
         # Phase 3: DELETE user
-        resp = requests.delete(
-            f"{base}/admin/realms/{realm}/users/{saved_user_id}",
-            headers=headers,
-        )
+        resp = delete_user(live_token, KEYCLOAK_REALM, saved_user_id)
         assert resp.status_code in (204, 200), f"Delete user failed: {resp.status_code}"
 
         # Phase 4: VALIDATE user is gone
-        resp = requests.get(
-            f"{base}/admin/realms/{realm}/users",
-            params={"username": username, "max": 1},
-            headers=headers,
-        )
-        resp.raise_for_status()
-        users_after = resp.json()
+        users_after = get_users_by_username(live_token, KEYCLOAK_REALM, username)
         assert len(users_after) == 0, \
             f"User '{username}' should be deleted but still found: {users_after}"

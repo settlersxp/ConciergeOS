@@ -4,6 +4,8 @@
 Handles creation and configuration of Keycloak clients.
 """
 
+import logging
+
 import requests
 
 from keycloak_common import kc_request
@@ -22,6 +24,8 @@ from .config import (
     POST_LOGOUT_URI,
     REALMS,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # Global secret storage (updated during client creation)
@@ -54,7 +58,7 @@ def _create_client_in_realm(
 
     if match:
         client_uuid = match[0]["id"]
-        print(f"    ⏭ Client {client_id} already exists in {realm}, updating secret...")
+        logger.info("    ⏭ Client %s already exists in %s, updating secret...", client_id, realm)
     else:
         payload: dict = {
             "clientId": client_id,
@@ -98,7 +102,7 @@ def _create_client_in_realm(
     )
     resp.raise_for_status()
     secret_value = resp.json().get("value", "")
-    print(f"    ✓ Client {client_id} in {realm} (secret: {secret_value})")
+    logger.info("    ✓ Client %s in %s (secret: %s)", client_id, realm, secret_value)
     return client_uuid, secret_value
 
 
@@ -148,12 +152,12 @@ def create_client_api(token: str, realm: str) -> tuple[str, str]:
 
 def create_all_clients(token: str) -> dict[str, str]:
     """Create clients in all realms. Returns {realm: client_uuid}."""
-    print("[6/8] Creating clients in realms...")
+    logger.info("[6/8] Creating clients in realms...")
     client_uuids: dict[str, str] = {}
 
     for realm in REALMS:
         client_uuids[realm] = create_client(token, realm)
-    print()
+    logger.info("")
     return client_uuids
 
 
@@ -162,13 +166,13 @@ def create_all_client_apis(token: str) -> dict[str, tuple[str, str]]:
 
     Returns {realm: (client_uuid, secret)}.
     """
-    print("[6b/8] Creating client-api service client in realms...")
+    logger.info("[6b/8] Creating client-api service client in realms...")
     results: dict[str, tuple[str, str]] = {}
 
     for realm in REALMS:
-        print(f"  Realm: {realm}")
+        logger.info("  Realm: %s", realm)
         results[realm] = create_client_api(token, realm)
-    print()
+    logger.info("")
     return results
 
 
