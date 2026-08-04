@@ -3,41 +3,102 @@
 ## Architecture
 
 ```
-Browser → Caddy (443) → oauth2-proxy (oidc-main:4182) → Caddy internal (8000)
-                                                 ├─ static assets → frontend:80 (always allowed)
-                                                 ├─ /settings → deny if group "all"
-                                                 ├─ !/settings → deny if group "single"
-                                                 └─ allow → frontend:80
-                                                              → /api/* proxied to backend:8000
-                                                              → all other routes → static SPA
+Browser → Caddy (443)
+         ├─ /auth/*        → Keycloak (8080)
+         ├─ /app1/*        → oauth2-proxy oidc-main (4182) → frontend (80)
+         ├─ /app2/*        → oauth2-proxy oidc-two  (4183) → frontend-two (80)
+         ├─ /oauth2/*      → oauth2-proxy oidc-main (4182)
+         ├─ /client-api/*  → client-backend (8000)
+         ├─ /api/*         → backend (8000)
+         └─ default        → oauth2-proxy oidc-main (4182) → frontend (80)
 ```
 
-- **Caddy (https-server)**: Reverse proxy and HTTPS terminator (internal CA), routes `/auth/*` to Keycloak and all other traffic to oauth2-proxy
-- **Caddy (internal-server)**: Internal server on port 8000 that enforces group-based access control using `X-Forwarded-Groups` header from oauth2-proxy:
-  - Static assets (`.css`, `.js`, fonts, images) are always allowed through to frontend
-  - Users in group `single`: access only `/settings` (403 on all other paths)
-  - Users in group `all`: access all pages (403 on `/settings`)
-- **oauth2-proxy (oidc-main)**: Handles OIDC authentication with Keycloak, passes user groups via `X-Forwarded-Groups` header
-- **Keycloak**: OIDC identity provider (realms: `testing`, `production`; users: `user1`→single, `user2`→all)
-- **Frontend**: Node.js static file server with built-in API proxy to backend
-- **Backend**: FastAPI application (not directly accessible from outside Docker network)
+### Services
+
+| Service | Image | Port | Description |
+|---------|-------|------|-------------|
+| **Caddy** | `caddy:2-alpine` | 80, 443, 2019 (admin) | Reverse proxy & HTTPS terminator using internal CA. Routes `/auth/*` to Keycloak, `/app1/*` and `/app2/*` to respective oauth2-proxy instances, `/client-api/*` to client-backend, `/api/*` to backend. Admin API exposed on port 2019 for the role-sync service. |
+| **oauth2-proxy (oidc-main)** | `oauth2-proxy:v7.15.3` | 4182 | Handles OIDC authentication for App1. Extracts user roles from access token via `realm_access.roles` claim and passes them through `X-Forwarded-Groups` header. Sessions stored in Valkey. |
+| **oauth2-proxy (oidc-two)** | `oauth2-proxy:v7.15.3` | 4183 | Handles OIDC authentication for App2 (second tenant instance). Same configuration as oidc-main but with separate redirect URI (`/app2/oauth2/callback`). |
+| **role-sync** | `concos-role-sync:latest` | N/A | Background service that polls Keycloak's Admin Events API to detect role changes, regenerates Caddy deny rules, and pushes them via the Caddy Admin API. Also persists role attributes to `rbac_routes.json`. |
+| **valkey** | `valkey/valkey:8-alpine` | 6379 | Redis-compatible session store used by oauth2-proxy instances for session persistence and invalidation. |
+| **frontend** | `concos-frontend:latest` | 80 | Node.js static file server (App1) serving the Vite SPA build. |
+| **frontend-two** | `concos-frontend-two:latest` | 80 | Node.js static file server (App2) serving a second tenant instance of the Vite SPA build (built with `BASE_URL=/app2`). |
+| **client-backend** | `concos-client-backend:latest` | 8000 | FastAPI service demonstrating service-to-service authentication via Keycloak (Client Credentials Grant). Exposes `/client-api/*` endpoints for health checks, token inspection, user info (RBAC menus), and backend proxying. |
+| **backend** | `concos-backend:latest` | 8000 | FastAPI application. Accessible via Caddy at `/api/*` and internally by client-backend. |
+| **keycloak** | `keycloak:26.0` | 8080 | OIDC identity provider. Exposed externally via Caddy at `/auth/*`. Realms: `testing`, `production`. |
+
+### Access Control Flow
+
+Access control is role-based and **dynamically synced** from Keycloak to Caddy:
+
+1. **oauth2-proxy** authenticates the user via Keycloak OIDC and extracts roles from the `realm_access.roles` claim
+2. Roles are passed to upstream services via the `X-Forwarded-Groups` header (format: `role:<name>,role:<name>`)
+3. **role-sync** service polls Keycloak's Admin Events API every 10 seconds (configurable via `SYNC_INTERVAL`)
+4. On role changes (create, update, delete), role-sync fetches role attributes from Keycloak, generates Caddy deny rules, and pushes them via the Caddy Admin API
+5. Role attributes (paths, menus) are persisted to `rbac_routes.json` for documentation and version control
+
+### Roles
+
+Roles are defined in `docker/rbac_routes.json` and synced to Keycloak during setup. Each role defines paths that require that role to access:
+
+| Role | Protected Paths |
+|------|-----------------|
+| `settings:view` | `/settings`, `/api/settings` |
+| `models:admin` | `/api/models` |
+| `prompts:admin` | `/prompt-management`, `/prompt-groups`, `/prompt-chain-page*`, `/api/prompts`, `/api/prompt-groups` |
+| `performance:view` | `/performance-testing`, `/performance-dashboard`, `/api/performance-testing` |
+| `performance:run` | `/api/performance-testing/batch/*`, `/api/performance-testing/result/*`, etc. |
+| `reservations:view` | `/reservations`, `/api/reservations` |
+| `reservations:write` | `/api/reservations/shift` |
+| `guest-search:view` | `/api/guest-search` |
+| `guest-search:extract` | `/api/guest-search/extract-name` |
+| `full-access` | Composite role inheriting all granular roles |
 
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) (with Docker Compose)
 - Docker daemon running
 
+## Environment Configuration
+
+Copy the example environment file and adjust values:
+
+```bash
+cp docker/.env.docker.example docker/.env
+```
+
+Key variables (see `docker/.env.docker.example` for a complete list):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `APP_DOMAIN` | `https://out-customer.com` | Full domain with scheme |
+| `APP_DOMAIN_HOST` | `out-customer.com` | Hostname only |
+| `OIDC_REALM` | `production` | Keycloak realm |
+| `OIDC_CLIENT_ID` | `concierge` | OIDC client ID |
+| `OIDC_CLIENT_SECRET` | _(empty)_ | Set by keycloak_setup.py |
+| `CLIENT_API_CLIENT_SECRET` | _(empty)_ | Set by keycloak_setup.py |
+| `KEYCLOAK_ADMIN_USER` | `admin` | Keycloak admin username |
+| `KEYCLOAK_ADMIN_PASSWORD` | `admin` | Keycloak admin password |
+| `SYNC_INTERVAL` | `10` | Role-sync polling interval in seconds |
+| `OAUTH2_COOKIE_SECRET` | _(random)_ | oauth2-proxy cookie signing secret |
+| `VALKEY_URL` | `redis://valkey:6379/0` | Valkey/Redis connection URL |
+
 ## Build & Start
 
 ### Build images
 
 ```bash
+cd docker
 docker compose build
 ```
 
-This builds both images:
+This builds the following images:
 - `concos-frontend:latest` — Vite SPA built with Node.js, served by a minimal static file server
+- `concos-frontend-two:latest` — Second tenant instance of the SPA (built with `BASE_URL=/app2`)
 - `concos-backend:latest` — FastAPI app with Python 3.12 + uv
+- `concos-client-backend:latest` — Service-to-service authentication demo
+- `concos-role-sync:latest` — Role synchronization background service
 
 ### Start all services
 
@@ -55,6 +116,14 @@ docker compose down
 
 ```bash
 docker compose logs -f
+```
+
+### View logs for a specific service
+
+```bash
+docker compose logs -f role-sync
+docker compose logs -f keycloak
+docker compose logs -f oidc-main
 ```
 
 ### Rebuild and restart (after code changes)
@@ -114,35 +183,46 @@ echo "127.0.0.1 out-customer.com" | sudo tee -a /etc/hosts
 Add-Content -Path "C:\Windows\System32\drivers\etc\hosts" -Value "127.0.0.1 out-customer.com"
 ```
 
-Then visit: `https://out-customer.com`
+Then visit:
+- **App1**: `https://out-customer.com/app1`
+- **App2**: `https://out-customer.com/app2`
+- **Root fallback**: `https://out-customer.com` (routed to App1)
 
 ## Running Tests
 
 The test suite is located in `docker/tests/` and runs inside a Docker container connected to the `app-network`, allowing it to reach Keycloak, Caddy, and Valkey.
 
-### Run All Tests
+### Prerequisites
+
+The main services must be running before executing tests:
+
+```bash
+docker compose up -d
+```
+
+### Run all tests
 
 ```bash
 cd docker
-docker compose run --rm pytest
+docker compose -f docker-compose.yaml -f docker-compose.pytest.yaml run --rm pytest
 ```
 
 This builds the `concos-pytest:latest` image on first run, then executes all tests.
 
-### Run Specific Tests
+### Run specific tests
 
 ```bash
 # Run a single test file
-docker compose run --rm pytest pytest tests/test_pure_functions.py -v
+docker compose -f docker-compose.yaml -f docker-compose.pytest.yaml run --rm pytest pytest tests/test_pure_functions.py -v
 
 # Run a specific test class
-docker compose run --rm pytest pytest tests/test_keycloak_auth.py::TestLiveKeycloakAuth -v
+docker compose -f docker-compose.yaml -f docker-compose.pytest.yaml run --rm pytest pytest tests/test_keycloak_auth.py::TestLiveKeycloakAuth -v
 
 # Run a single test method
-docker compose run --rm pytest pytest tests/test_pure_functions.py::TestHasRoleEvents::test_detects_create_role_event -v
+docker compose -f docker-compose.yaml -f docker-compose.pytest.yaml run --rm pytest pytest tests/test_pure_functions.py::TestHasRoleEvents::test_detects_create_role_event -v
 
 # Run tests matching a pattern
-docker compose run --rm pytest pytest tests/ -k "test_issuer" -v
+docker compose -f docker-compose.yaml -f docker-compose.pytest.yaml run --rm pytest pytest tests/ -k "test_issuer" -v
 ```
 
 ### Local Development Override
@@ -150,7 +230,7 @@ docker compose run --rm pytest pytest tests/ -k "test_issuer" -v
 By default, the tests use Docker container names for service discovery (e.g., `keycloak:8080`). To run tests against a locally running Keycloak instance:
 
 ```bash
-OIDC_CONFIG_HOST=localhost docker compose run --rm pytest
+OIDC_CONFIG_HOST=localhost docker compose -f docker-compose.yaml -f docker-compose.pytest.yaml run --rm pytest
 ```
 
 ### Test Categories
@@ -162,37 +242,10 @@ OIDC_CONFIG_HOST=localhost docker compose run --rm pytest
 | `test_keycloak_auth.py` | Keycloak authentication & role fetching | Keycloak |
 | `test_keycloak_events.py` | Keycloak events API & realm config | Keycloak |
 | `test_oidc_config.py` | OIDC config consistency & reachability | Keycloak + Caddy |
+| `test_rbac_routes_to_keycloak.py` | RBAC routes mapping validation | Keycloak |
+| `test_routes_persistence.py` | Route persistence to rbac_routes.json | Keycloak |
 | `test_sync_flow.py` | Full sync flow (Keycloak → Caddy) | Keycloak + Caddy |
 | `test_valkey_session.py` | Valkey session storage & invalidation | Keycloak + Caddy + Valkey |
-
-## Troubleshooting
-
-### Certificate not trusted
-
-Re-run the certificate installation steps for your OS. On macOS, you may need to explicitly set the certificate to "Always Trust" in Keychain Access.
-
-### Services not starting
-
-Check logs for errors:
-```bash
-docker compose logs -f backend
-docker compose logs -f frontend
-docker compose logs -f caddy
-```
-
-### Port already in use
-
-If ports 80 or 443 are occupied, modify the port mappings in `docker-compose.yaml`:
-```yaml
-ports:
-  - "8080:80"
-  - "8443:443"
-```
-Then access via `https://out-customer.com:8443`.
-
-## Accepted tradeoff
-
-`server.js` is needed because without it Caddy would have to serve the static files, thus `/api/*` would have to be exposed as well. Since the purpose of this setup is to secure FastAPI and expose only the frontend, `server.js` was created as a lightweight static file server with built-in API proxy.
 
 ## Keycloak Setup
 
@@ -203,28 +256,30 @@ https://out-customer.com/auth/admin#/master
 
 ### Initial Keycloak Configuration
 
-Run the setup script from **inside the Docker network** to provision realms, users, groups, and clients:
+Run the setup script from **inside the Docker network** to provision realms, users, roles, and clients:
 
 ```bash
 docker run --rm --network docker_app-network \
   -v "$(pwd)/docker":/work python:3.12-slim \
-  bash -c "cd /work && pip install requests -q && python3 keycloak_setup.py keycloak 8080"
+  bash -c "cd /work && pip install requests pydantic -q && python3 keycloak_setup.py keycloak 8080"
 ```
 
 This creates:
 - **Realms**: `testing`, `production`
-- **Groups**: `single` (settings-only access), `all` (full access)
-- **Users**: `user1` (password: `password1`, group: `single`), `user2` (password: `password2`, group: `all`)
-- **Client**: `concierge` (confidential, PKCE S256, groups claim in ID token)
+- **Roles**: Granular roles loaded from `rbac_routes.json` (`settings:view`, `models:admin`, `prompts:admin`, `performance:view`, `performance:run`, `reservations:view`, `reservations:write`, `guest-search:view`, `guest-search:extract`)
+- **Composite role**: `full-access` (inherits all granular roles)
+- **Users**: `user1` (password: `password1`, roles: `reservations:view`, `guest-search:view`), `user2` (password: `password2`, role: `full-access`)
+- **Client**: `concierge` (confidential, PKCE S256, `realm_access.roles` claim in access token)
+- **Client API**: `client-api` (confidential, Client Credentials Grant, service accounts enabled)
 
-**Important:** Keycloak 26 always generates a random client secret (ignoring any value passed in the request). The `keycloak_setup.py` script handles this automatically by reading back the generated secret after client creation and printing it to stdout. Set the `OIDC_CLIENT_SECRET` environment variable in `docker/.env` with the printed value.
+**Important:** Keycloak 26 always generates a random client secret (ignoring any value passed in the request). The `keycloak_setup.py` script handles this automatically by reading back the generated secrets after client creation, printing them to stdout, and updating `docker/.env` with `OIDC_CLIENT_SECRET` and `CLIENT_API_CLIENT_SECRET`.
 
 ### Restart Services After Setup
 
-After running the setup script, restart oauth2-proxy to pick up the updated client secret:
+After running the setup script, restart oauth2-proxy instances and role-sync to pick up the updated client secrets:
 
 ```bash
-docker compose restart oidc-main
+docker compose restart oidc-main oidc-two role-sync
 ```
 
 ### Regenerating the Keycloak Configuration
@@ -242,9 +297,10 @@ To completely reset and regenerate the Keycloak configuration from scratch:
    ```
    > Note: Check `docker volume ls` for the exact volume name. If you're using default Docker Compose volumes, the Keycloak container state is ephemeral (no persistent volume), so simply restarting is sufficient.
 
-3. **Clear the `OIDC_CLIENT_SECRET`** in `docker/.env` (or set to any placeholder):
+3. **Clear the client secrets** in `docker/.env`:
    ```bash
-   sed -i.bak 's/OIDC_CLIENT_SECRET=.*/OIDC_CLIENT_SECRET=changeme/' docker/.env
+   sed -i.bak 's/OIDC_CLIENT_SECRET=.*/OIDC_CLIENT_SECRET=/' docker/.env
+   sed -i.bak 's/CLIENT_API_CLIENT_SECRET=.*/CLIENT_API_CLIENT_SECRET=/' docker/.env
    ```
 
 4. **Start services fresh:**
@@ -256,35 +312,138 @@ To completely reset and regenerate the Keycloak configuration from scratch:
    ```bash
    docker compose logs -f keycloak
    ```
-   Wait until you see `KEYCLOAK_SKIP_INITIAL_HEALTH_CHECK=false` and the server is ready.
+   Wait until you see the server is ready.
 
 6. **Run the setup script:**
    ```bash
    docker run --rm --network docker_app-network \
      -v "$(pwd)/docker":/work python:3.12-slim \
-     bash -c "cd /work && pip install requests -q && python3 keycloak_setup.py keycloak 8080"
+     bash -c "cd /work && pip install requests pydantic -q && python3 keycloak_setup.py keycloak 8080"
    ```
 
-7. **Restart oauth2-proxy:**
+7. **Restart oauth2-proxy and role-sync:**
    ```bash
-   docker compose restart oidc-main
+   docker compose restart oidc-main oidc-two role-sync
    ```
 
 ### Diagnostic Script
 
-To inspect Keycloak configuration (realms, users, groups, clients):
+To inspect Keycloak configuration (realms, users, roles, clients):
 
 ```bash
 docker run --rm --network docker_app-network \
   -v "$(pwd)/docker":/work python:3.12-slim \
-  bash -c "cd /work && pip install requests -q && python3 keycloak_diagnose.py"
+  bash -c "cd /work && pip install requests -q && python3 debug/keycloak_diagnose.py keycloak 8080"
 ```
 
 ### Users and Access Control
 
-| User   | Password  | Group    | Access                         |
-|--------|-----------|----------|--------------------------------|
-| user1  | password1 | single   | `/settings` only               |
-| user2  | password2 | all      | All pages (except `/settings`) |
+| User | Password | Roles | Access |
+|------|----------|-------|--------|
+| user1 | password1 | `reservations:view`, `guest-search:view` | `/reservations`, `/api/reservations`, `/api/guest-search` |
+| user2 | password2 | `full-access` | All pages |
 
-Access control is enforced by Caddy's internal server (port 8000) using the `X-Forwarded-Groups` header set by oauth2-proxy.
+## Troubleshooting
+
+### Certificate not trusted
+
+Re-run the certificate installation steps for your OS. On macOS, you may need to explicitly set the certificate to "Always Trust" in Keychain Access.
+
+### Services not starting
+
+Check logs for errors:
+```bash
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f caddy
+docker compose logs -f role-sync
+docker compose logs -f keycloak
+```
+
+### Port already in use
+
+If ports 80 or 443 are occupied, modify the port mappings in `docker-compose.yaml`:
+```yaml
+ports:
+  - "8080:80"
+  - "8443:443"
+```
+Then access via `https://out-customer.com:8443`.
+
+### Role-sync not syncing
+
+Check role-sync logs for connection issues:
+```bash
+docker compose logs -f role-sync
+```
+
+Common issues:
+- Keycloak not ready yet (role-sync waits up to 120 seconds on startup)
+- Caddy admin API unreachable (port 2019)
+- Valkey unreachable (port 6379)
+- Invalid `OIDC_CLIENT_SECRET` in `.env`
+
+### Role changes not reflected
+
+The role-sync service polls every 10 seconds by default (configurable via `SYNC_INTERVAL`). If changes don't appear after 10-15 seconds:
+
+1. Check role-sync is running: `docker compose ps role-sync`
+2. Check logs for errors: `docker compose logs -f role-sync`
+3. Restart role-sync: `docker compose restart role-sync`
+
+## Accepted tradeoff
+
+`server.js` is needed because without it Caddy would have to serve the static files, thus `/api/*` would have to be exposed as well. Since the purpose of this setup is to secure FastAPI and expose only the frontend, `server.js` was created as a lightweight static file server with built-in API proxy.
+
+## Role-Sync Service
+
+The `role-sync` service (`docker/role_sync.py`) is a background process that keeps Caddy's access control rules in sync with Keycloak roles.
+
+### How it works
+
+1. **Startup**: Waits for Keycloak and Caddy to be ready, then performs an initial full sync
+2. **Polling**: Every `SYNC_INTERVAL` seconds (default: 10), polls Keycloak's Admin Events API
+3. **Role change detection**: Detects role create, update, and delete operations
+4. **Route regeneration**: On role changes, fetches all roles with their attributes from Keycloak, generates Caddy deny rules, and pushes them via the Caddy Admin API
+5. **Session invalidation**: On user deletion events, invalidates all sessions stored in Valkey
+6. **Persistence**: Syncs role attributes back to `rbac_routes.json` for documentation and version control
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KEYCLOAK_URL` | `http://keycloak:8080/auth` | Keycloak base URL |
+| `KEYCLOAK_REALM` | `production` | Keycloak realm |
+| `KEYCLOAK_ADMIN_USER` | `admin` | Keycloak admin username |
+| `KEYCLOAK_ADMIN_PASSWORD` | `admin` | Keycloak admin password |
+| `CADDY_ADMIN_URL` | `http://caddy:2019` | Caddy Admin API URL |
+| `SYNC_INTERVAL` | `10` | Polling interval in seconds |
+| `VALKEY_URL` | `redis://valkey:6379/0` | Valkey/Redis connection URL |
+| `SESSION_COOKIE_NAME` | `_oauth2_proxy` | oauth2-proxy session cookie name |
+
+## Client-Backend Service
+
+The `client-backend` service (`client_backend/`) demonstrates service-to-service authentication using Keycloak's Client Credentials Grant.
+
+### Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /client-api/health` | Health check |
+| `GET /client-api/token-info` | Inspect current OAuth2 token |
+| `POST /client-api/refresh-token` | Force token refresh |
+| `GET /client-api/me` | Current user's roles and accessible menu items (reads `X-Forwarded-Groups` header) |
+| `GET /client-api/backend/health` | Proxy to main backend's root endpoint |
+| `GET /client-api/backend/models` | Proxy to main backend's `/api/models` |
+| `GET /client-api/backend/settings` | Proxy to main backend's `/api/settings` |
+| `POST /client-api/backend/{path}` | Generic POST proxy to any backend endpoint |
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KEYCLOAK_URL` | `http://keycloak:8080/auth` | Keycloak base URL |
+| `KEYCLOAK_REALM` | `production` | Keycloak realm |
+| `CLIENT_API_CLIENT_ID` | `client-api` | OAuth2 client ID |
+| `CLIENT_API_CLIENT_SECRET` | _(required)_ | OAuth2 client secret (set by keycloak_setup.py) |
+| `BACKEND_URL` | `http://backend:8000` | Main backend URL |
