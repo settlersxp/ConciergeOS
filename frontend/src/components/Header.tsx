@@ -13,6 +13,11 @@ interface MeResponse {
   error?: string;
 }
 
+interface TokenClaimsResponse {
+  claims: Record<string, unknown>;
+  raw_headers: Record<string, string>;
+}
+
 // Mapping from menu identifiers (set in Keycloak role attributes) to
 // the actual route paths used by React Router.
 const MENU_TO_PATH: Record<string, string> = {
@@ -38,6 +43,17 @@ async function fetchMe(): Promise<MeResponse> {
   return resp.json();
 }
 
+async function fetchTokenClaims(): Promise<TokenClaimsResponse> {
+  const host = window.location.host;
+  const resp = await fetch(`https://${host}/client-api/me/token-claims`, {
+    credentials: 'include',
+  });
+  if (!resp.ok) {
+    return { claims: {}, raw_headers: {} };
+  }
+  return resp.json();
+}
+
 // ---------------------------------------------------------------------------
 // Header Component
 // ---------------------------------------------------------------------------
@@ -47,18 +63,21 @@ export default function Header() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [menus, setMenus] = useState<string[]>([]);
+  const [tokenClaims, setTokenClaims] = useState<TokenClaimsResponse | null>(null);
+  const [claimsExpanded, setClaimsExpanded] = useState(false);
   const context = useChainPagesContext();
 
-  // Fetch allowed menus from the backend on mount.
+  // Fetch allowed menus and token claims from the backend on mount.
   useEffect(() => {
     let cancelled = false;
-    fetchMe().then((data) => {
+    Promise.all([fetchMe(), fetchTokenClaims()]).then(([meData, claimsData]) => {
       if (!cancelled) {
-        if (data.error) {
-          console.warn('[Header] /me error:', data.error);
+        if (meData.error) {
+          console.warn('[Header] /me error:', meData.error);
         }
         // If no menus returned (e.g. not authenticated), show all.
-        setMenus(data.menus.length > 0 ? data.menus : Object.keys(MENU_TO_PATH));
+        setMenus(meData.menus.length > 0 ? meData.menus : Object.keys(MENU_TO_PATH));
+        setTokenClaims(claimsData);
       }
     });
     return () => { cancelled = true; };
@@ -202,7 +221,7 @@ export default function Header() {
                 </svg>
               </button>
               {debugOpen && (
-                <div className="absolute right-0 z-50 mt-1 min-w-[240px] rounded-md bg-primary-800 shadow-lg ring-1 ring-black/10 p-4 space-y-3">
+                <div className="absolute right-0 z-50 mt-1 min-w-[280px] rounded-md bg-primary-800 shadow-lg ring-1 ring-black/10 p-4 space-y-3">
                   <div className="text-sm">
                     <span className="text-primary-300">Base URL:</span>{' '}
                     <code className="bg-primary-900 px-1 rounded text-yellow-300">{baseUrl}</code>
@@ -217,18 +236,50 @@ export default function Header() {
                       {menus.join(', ') || 'none'}
                     </code>
                   </div>
-                  <button
-                    onClick={handleSwitchApp}
-                    className="w-full rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-                  >
-                    Switch to {otherApp}
-                  </button>
-                  <button
-                    onClick={handleLogout}
-                    className="w-full rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
-                  >
-                    Logout
-                  </button>
+
+                  {/* JWT Claims Section */}
+                  {tokenClaims && Object.keys(tokenClaims.claims).length > 0 && (
+                    <div className="border-t border-primary-700 pt-3 space-y-2">
+                      <button
+                        onClick={() => setClaimsExpanded(!claimsExpanded)}
+                        className="w-full flex items-center justify-between text-sm text-yellow-300 hover:text-yellow-200 transition-colors"
+                      >
+                        <span>
+                          <span className="text-primary-300">JWT Claims:</span> Keycloak Token Info
+                        </span>
+                        <svg
+                          className={`w-4 h-4 transition-transform ${claimsExpanded ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {claimsExpanded && (
+                        <div className="bg-primary-900 rounded p-2 max-h-80 overflow-auto">
+                          <pre className="text-xs text-yellow-300 whitespace-pre-wrap font-mono">
+                            {JSON.stringify(tokenClaims.claims, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="border-t border-primary-700 pt-3 space-y-2">
+                    <button
+                      onClick={handleSwitchApp}
+                      className="w-full rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+                    >
+                      Switch to {otherApp}
+                    </button>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                    >
+                      Logout
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

@@ -172,6 +172,66 @@ async def refresh_token():
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Token Claims Endpoint (Debug — JWT claims from Keycloak via oauth2-proxy)
+# ---------------------------------------------------------------------------
+
+@app.get("/client-api/me/token-claims")
+async def token_claims(
+    request: Request,
+    x_forwarded_email: str | None = Header(None),
+    x_forwarded_user: str | None = Header(None),
+    x_forwarded_preferred_username: str | None = Header(None),
+    x_forwarded_name: str | None = Header(None),
+    x_forwarded_groups: str | None = Header(None),
+    x_forwarded_access_token: str | None = Header(None),
+):
+    """Return the JWT-like claims forwarded by oauth2-proxy.
+
+    oauth2-proxy extracts claims from the Keycloak JWT and forwards them
+    as HTTP headers. This endpoint collects those headers so the frontend
+    can display them in the debug panel to verify Keycloak token contents.
+    """
+    claims: dict = {}
+
+    if x_forwarded_email:
+        claims["email"] = x_forwarded_email
+    if x_forwarded_user:
+        claims["sub"] = x_forwarded_user
+    if x_forwarded_preferred_username:
+        claims["preferred_username"] = x_forwarded_preferred_username
+    if x_forwarded_name:
+        claims["name"] = x_forwarded_name
+
+    # Parse roles from X-Forwarded-Groups (format: "role:xxx,role:yyy")
+    if x_forwarded_groups:
+        roles = []
+        for group in x_forwarded_groups.split(","):
+            group = group.strip()
+            if group.startswith("role:"):
+                roles.append(group[5:])
+            else:
+                roles.append(group)
+        claims["realm_access"] = {"roles": roles}
+
+    # Also expose the raw header values for debugging
+    raw_headers: dict = {}
+    for header_name, header_value in [
+        ("X-Forwarded-Email", x_forwarded_email),
+        ("X-Forwarded-User", x_forwarded_user),
+        ("X-Forwarded-Preferred-Username", x_forwarded_preferred_username),
+        ("X-Forwarded-Name", x_forwarded_name),
+        ("X-Forwarded-Groups", x_forwarded_groups),
+    ]:
+        if header_value is not None:
+            raw_headers[header_name] = header_value
+
+    return {
+        "claims": claims,
+        "raw_headers": raw_headers,
+    }
+
+
 @app.get("/client-api/me")
 async def me(
     request: Request,

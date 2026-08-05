@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml ./
 # Create a minimal pyproject.toml just for the client backend deps
-RUN echo '[project]\nname = "client-backend"\nversion = "0.1.0"\ndependencies = ["fastapi>=0.115", "uvicorn[standard]>=0.34", "httpx>=0.28"]' > pyproject.toml
+RUN echo '[project]\nname = "client-backend"\nversion = "0.1.0"\ndependencies = ["fastapi>=0.115", "uvicorn[standard]>=0.34", "httpx>=0.28", "requests"]' > pyproject.toml
 
 RUN uv sync --frozen 2>/dev/null || uv sync
 

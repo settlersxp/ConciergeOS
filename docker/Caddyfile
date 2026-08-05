@@ -84,10 +84,12 @@ out-customer.com {
         }
     }
 
-    # 5. Client API — service-to-service proxy (no user auth, uses client credentials)
+    # 5. Client API — proxy through oidc-client-api (oauth2-proxy) to attach user headers
+    #    Flow: Caddy → oidc-client-api(oauth2-proxy) → client-backend
+    #    oauth2-proxy sets X-Forwarded-Groups, X-Forwarded-Email, etc.
     @clientapi path /client-api/*
     handle @clientapi {
-        reverse_proxy client-backend:8000 {
+        reverse_proxy oidc-client-api:4186 {
             header_up X-Forwarded-By out-customer.com
             header_up X-Forwarded-Proto https
         }
