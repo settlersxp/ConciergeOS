@@ -84,6 +84,10 @@ from .sync_orchestrator import (
     run_sync_service,
 )
 
+from .role_operations import (
+    sync_all_roles,
+)
+
 __all__ = [
     # Config
     "KEYCLOAK_URL",
@@ -133,4 +137,6 @@ __all__ = [
     "poll_and_sync",
     "wait_for_dependencies",
     "run_sync_service",
+    # Role Operations
+    "sync_all_roles",
 ]

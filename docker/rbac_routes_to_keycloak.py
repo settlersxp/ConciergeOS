@@ -21,7 +21,6 @@ from pathlib import Path
 from rbac_sync import (
     RBAC_ROUTES_FILE,
     sync_all_roles,
-    print_summary,
 )
 
 # Configure logging
@@ -53,7 +52,16 @@ def main():
     results = sync_all_roles(routes_path, create_if_missing)
 
     # Print summary
-    print_summary(results)
+    logger.info("")
+    logger.info("=== Sync Summary ===")
+    for role, action in results.items():
+        logger.info("  %s: %s", role, action)
+    created = sum(1 for v in results.values() if v == "created")
+    updated = sum(1 for v in results.values() if v == "updated")
+    failed = sum(1 for v in results.values() if v == "failed")
+    logger.info(
+        "Total: %d created, %d updated, %d failed", created, updated, failed
+    )
 
     # Exit with error if any failed
     if any(v == "failed" for v in results.values()):
