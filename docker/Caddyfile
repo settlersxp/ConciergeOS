@@ -93,10 +93,12 @@ out-customer.com {
         }
     }
 
-    # 6. Backend API — internal API proxy
+    # 6. Backend API — proxy through oidc-api (oauth2-proxy) for RBAC enforcement
+    #    Flow: Caddy → oidc-api(oauth2-proxy) → caddy-rbac(gateway) → backend
+    #    oauth2-proxy sets X-Forwarded-Groups, caddy-rbac enforces deny rules
     @backendapi path /api/*
     handle @backendapi {
-        reverse_proxy backend:8000 {
+        reverse_proxy oidc-api:4184 {
             header_up X-Forwarded-By out-customer.com
             header_up X-Forwarded-Proto https
         }

@@ -43,6 +43,10 @@ class Settings:
     def CADDY_ADMIN_URL(self) -> str:
         return os.environ.get("CADDY_ADMIN_URL", "http://caddy:2019")
 
+    @property
+    def CADDY_RBAC_ADMIN_URL(self) -> str:
+        return os.environ.get("CADDY_RBAC_ADMIN_URL", "http://caddy-rbac:2020")
+
     # -- Valkey --
     @property
     def VALKEY_URL(self) -> str:

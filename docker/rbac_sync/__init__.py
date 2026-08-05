@@ -56,8 +56,10 @@ from .caddy_routes import (
     generate_deny_rules,
     get_menus_for_roles,
     build_caddy_routes,
+    build_rbac_routes,
     push_routes_to_caddy,
     verify_caddy_routes,
+    verify_rbac_routes,
 )
 
 from .event_polling import (
@@ -117,8 +119,10 @@ __all__ = [
     "generate_deny_rules",
     "get_menus_for_roles",
     "build_caddy_routes",
+    "build_rbac_routes",
     "push_routes_to_caddy",
     "verify_caddy_routes",
+    "verify_rbac_routes",
     # Event Polling
     "poll_admin_events",
     "has_role_events",

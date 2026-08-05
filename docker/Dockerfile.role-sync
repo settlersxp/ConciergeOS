@@ -6,15 +6,19 @@ RUN pip install requests pydantic valkey --no-cache-dir
 
 COPY role_sync.py .
 COPY settings.py .
+COPY keycloak_common.py .
 COPY rbac_models.py .
 COPY rbac_file.py .
 COPY rbac_routes.json .
+COPY rbac_sync/ ./rbac_sync/
+COPY keycloak_setup/ ./keycloak_setup/
 
 ENV KEYCLOAK_URL=http://keycloak:8080/auth
 ENV KEYCLOAK_REALM=production
 ENV KEYCLOAK_ADMIN_USER=admin
 ENV KEYCLOAK_ADMIN_PASSWORD=admin
 ENV CADDY_ADMIN_URL=http://caddy:2019
+ENV CADDY_RBAC_ADMIN_URL=http://caddy-rbac:2020
 ENV SYNC_INTERVAL=10
 ENV VALKEY_URL=redis://valkey:6379/0
 ENV SESSION_COOKIE_NAME=_oauth2_proxy
