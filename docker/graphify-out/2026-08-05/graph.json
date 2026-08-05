@@ -246,7 +246,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "keycloak_common",
-      "community": 11,
+      "community": 5,
       "community_name": "roles.py",
       "norm_label": "keycloak_common.py"
     },
@@ -290,8 +290,8 @@
       "source_location": "L83",
       "_origin": "ast",
       "id": "keycloak_common_fetch_all_roles",
-      "community": 11,
-      "community_name": "roles.py",
+      "community": 8,
+      "community_name": "kc_request",
       "norm_label": "fetch_all_roles()"
     },
     {
@@ -301,8 +301,8 @@
       "source_location": "L91",
       "_origin": "ast",
       "id": "keycloak_common_fetch_all_roles_with_attrs",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 38,
+      "community_name": "initial_sync",
       "norm_label": "fetch_all_roles_with_attrs()"
     },
     {
@@ -313,7 +313,7 @@
       "_origin": "ast",
       "id": "keycloak_common_get_role_by_name",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "get_role_by_name()"
     },
     {
@@ -323,8 +323,8 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "keycloak_common_has_events",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 29,
+      "community_name": "sync_orchestrator.py",
       "norm_label": "has_events()"
     },
     {
@@ -356,8 +356,8 @@
       "source_location": "L84",
       "_origin": "ast",
       "id": "keycloak_common_rationale_84",
-      "community": 11,
-      "community_name": "roles.py",
+      "community": 8,
+      "community_name": "kc_request",
       "norm_label": "fetch all role names in the given realm (defaults to settings.keycloak_realm)."
     },
     {
@@ -367,8 +367,8 @@
       "source_location": "L92",
       "_origin": "ast",
       "id": "keycloak_common_rationale_92",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 38,
+      "community_name": "initial_sync",
       "norm_label": "fetch all roles with their attributes from the given realm (defaults to..."
     },
     {
@@ -379,7 +379,7 @@
       "_origin": "ast",
       "id": "keycloak_common_rationale_113",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "return role data dict if found, else none."
     },
     {
@@ -389,8 +389,8 @@
       "source_location": "L130",
       "_origin": "ast",
       "id": "keycloak_common_rationale_130",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 29,
+      "community_name": "sync_orchestrator.py",
       "norm_label": "check if any event matches the given resource and operation types."
     },
     {
@@ -422,8 +422,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "keycloak_setup_assignments",
-      "community": 4,
-      "community_name": "keycloak_setup/__init__.py",
+      "community": 40,
+      "community_name": "assignments.py",
       "norm_label": "assignments.py"
     },
     {
@@ -433,8 +433,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "keycloak_setup_assignments_assign_user_to_roles",
-      "community": 4,
-      "community_name": "keycloak_setup/__init__.py",
+      "community": 40,
+      "community_name": "assignments.py",
       "norm_label": "assign_user_to_roles()"
     },
     {
@@ -444,8 +444,8 @@
       "source_location": "L75",
       "_origin": "ast",
       "id": "keycloak_setup_assignments_assign_all_users_to_roles",
-      "community": 4,
-      "community_name": "keycloak_setup/__init__.py",
+      "community": 40,
+      "community_name": "assignments.py",
       "norm_label": "assign_all_users_to_roles()"
     },
     {
@@ -455,8 +455,8 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "keycloak_setup_assignments_rationale_28",
-      "community": 4,
-      "community_name": "keycloak_setup/__init__.py",
+      "community": 40,
+      "community_name": "assignments.py",
       "norm_label": "assign a user to realm roles."
     },
     {
@@ -466,8 +466,8 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "keycloak_setup_assignments_rationale_80",
-      "community": 4,
-      "community_name": "keycloak_setup/__init__.py",
+      "community": 40,
+      "community_name": "assignments.py",
       "norm_label": "assign all users to their respective roles in all realms."
     },
     {
@@ -477,8 +477,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "keycloak_setup_auth",
-      "community": 11,
-      "community_name": "roles.py",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "auth.py"
     },
     {
@@ -489,7 +489,7 @@
       "_origin": "ast",
       "id": "keycloak_setup_auth_authenticate",
       "community": 23,
-      "community_name": "authenticate",
+      "community_name": "test_keycloak_events.py",
       "norm_label": "authenticate()"
     },
     {
@@ -500,7 +500,7 @@
       "_origin": "ast",
       "id": "keycloak_setup_auth_rationale_14",
       "community": 23,
-      "community_name": "authenticate",
+      "community_name": "test_keycloak_events.py",
       "norm_label": "authenticate as admin to the master realm and return access token."
     },
     {
@@ -906,8 +906,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "keycloak_setup_events",
-      "community": 8,
-      "community_name": "kc_request",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "events.py"
     },
     {
@@ -917,8 +917,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "keycloak_setup_events_fetch_events_with_params",
-      "community": 8,
-      "community_name": "kc_request",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "fetch_events_with_params()"
     },
     {
@@ -928,8 +928,8 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "keycloak_setup_events_get_realm_events",
-      "community": 8,
-      "community_name": "kc_request",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "get_realm_events()"
     },
     {
@@ -939,8 +939,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "keycloak_setup_events_rationale_27",
-      "community": 8,
-      "community_name": "kc_request",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "fetch realm events with custom query parameters. returns the raw response..."
     },
     {
@@ -950,8 +950,8 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "keycloak_setup_events_rationale_54",
-      "community": 8,
-      "community_name": "kc_request",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "fetch realm admin events for a date range. args: token: keycloak admin token..."
     },
     {
@@ -961,8 +961,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "keycloak_setup_realms",
-      "community": 8,
-      "community_name": "kc_request",
+      "community": 4,
+      "community_name": "keycloak_setup/__init__.py",
       "norm_label": "realms.py"
     },
     {
@@ -972,8 +972,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "keycloak_setup_realms_create_realms",
-      "community": 8,
-      "community_name": "kc_request",
+      "community": 4,
+      "community_name": "keycloak_setup/__init__.py",
       "norm_label": "create_realms()"
     },
     {
@@ -983,8 +983,8 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "keycloak_setup_realms_get_realm_config",
-      "community": 8,
-      "community_name": "kc_request",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "get_realm_config()"
     },
     {
@@ -994,8 +994,8 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "keycloak_setup_realms_ensure_events_enabled",
-      "community": 8,
-      "community_name": "kc_request",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "_ensure_events_enabled()"
     },
     {
@@ -1005,8 +1005,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "keycloak_setup_realms_rationale_22",
-      "community": 8,
-      "community_name": "kc_request",
+      "community": 4,
+      "community_name": "keycloak_setup/__init__.py",
       "norm_label": "create realms: testing, production. enables admin events and user events on..."
     },
     {
@@ -1016,8 +1016,8 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "keycloak_setup_realms_rationale_47",
-      "community": 8,
-      "community_name": "kc_request",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "fetch full realm configuration. args: token: keycloak admin token realm: realm..."
     },
     {
@@ -1027,8 +1027,8 @@
       "source_location": "L67",
       "_origin": "ast",
       "id": "keycloak_setup_realms_rationale_67",
-      "community": 8,
-      "community_name": "kc_request",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "enable admin and user events on an existing realm. keycloak 26 requires a full..."
     },
     {
@@ -1038,7 +1038,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "keycloak_setup_roles",
-      "community": 11,
+      "community": 5,
       "community_name": "roles.py",
       "norm_label": "roles.py"
     },
@@ -1049,8 +1049,8 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "keycloak_setup_roles_list_roles",
-      "community": 11,
-      "community_name": "roles.py",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "list_roles()"
     },
     {
@@ -1072,7 +1072,7 @@
       "_origin": "ast",
       "id": "keycloak_setup_roles_upsert_role_with_attributes",
       "community": 11,
-      "community_name": "roles.py",
+      "community_name": ".VALKEY_URL",
       "norm_label": "upsert_role_with_attributes()"
     },
     {
@@ -1083,7 +1083,7 @@
       "_origin": "ast",
       "id": "keycloak_setup_roles_delete_role",
       "community": 11,
-      "community_name": "roles.py",
+      "community_name": ".VALKEY_URL",
       "norm_label": "delete_role()"
     },
     {
@@ -1094,7 +1094,7 @@
       "_origin": "ast",
       "id": "keycloak_setup_roles_py_response",
       "community": 11,
-      "community_name": "roles.py",
+      "community_name": ".VALKEY_URL",
       "norm_label": "response"
     },
     {
@@ -1138,7 +1138,7 @@
       "_origin": "ast",
       "id": "keycloak_setup_roles_create_role_with_attributes",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "create_role_with_attributes()"
     },
     {
@@ -1149,7 +1149,7 @@
       "_origin": "ast",
       "id": "keycloak_setup_roles_update_role_attributes",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "update_role_attributes()"
     },
     {
@@ -1160,7 +1160,7 @@
       "_origin": "ast",
       "id": "keycloak_setup_roles_sync_role_to_keycloak",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "sync_role_to_keycloak()"
     },
     {
@@ -1170,8 +1170,8 @@
       "source_location": "L341",
       "_origin": "ast",
       "id": "keycloak_setup_roles_print_summary",
-      "community": 11,
-      "community_name": "roles.py",
+      "community": 42,
+      "community_name": "print_summary",
       "norm_label": "print_summary()"
     },
     {
@@ -1181,8 +1181,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "keycloak_setup_roles_rationale_27",
-      "community": 11,
-      "community_name": "roles.py",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "fetch all role names in the given realm. args: token: keycloak admin token..."
     },
     {
@@ -1204,7 +1204,7 @@
       "_origin": "ast",
       "id": "keycloak_setup_roles_rationale_70",
       "community": 11,
-      "community_name": "roles.py",
+      "community_name": ".VALKEY_URL",
       "norm_label": "create or update a role with paths and menus attributes. if the role exists,..."
     },
     {
@@ -1215,7 +1215,7 @@
       "_origin": "ast",
       "id": "keycloak_setup_roles_rationale_111",
       "community": 11,
-      "community_name": "roles.py",
+      "community_name": ".VALKEY_URL",
       "norm_label": "delete a role by name. returns the raw response. args: token: keycloak admin..."
     },
     {
@@ -1259,7 +1259,7 @@
       "_origin": "ast",
       "id": "keycloak_setup_roles_rationale_225",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "create a new role with paths and message attributes. args: token: admin access..."
     },
     {
@@ -1270,7 +1270,7 @@
       "_origin": "ast",
       "id": "keycloak_setup_roles_rationale_263",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "update an existing role's paths and message attributes. args: token: admin..."
     },
     {
@@ -1281,7 +1281,7 @@
       "_origin": "ast",
       "id": "keycloak_setup_roles_rationale_309",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "sync a single role to keycloak. args: token: admin access token realm: realm..."
     },
     {
@@ -1291,8 +1291,8 @@
       "source_location": "L342",
       "_origin": "ast",
       "id": "keycloak_setup_roles_rationale_342",
-      "community": 11,
-      "community_name": "roles.py",
+      "community": 42,
+      "community_name": "print_summary",
       "norm_label": "print a summary table of all operations."
     },
     {
@@ -1357,8 +1357,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "keycloak_setup_users",
-      "community": 4,
-      "community_name": "keycloak_setup/__init__.py",
+      "community": 8,
+      "community_name": "kc_request",
       "norm_label": "users.py"
     },
     {
@@ -1368,8 +1368,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "keycloak_setup_users_create_user",
-      "community": 4,
-      "community_name": "keycloak_setup/__init__.py",
+      "community": 8,
+      "community_name": "kc_request",
       "norm_label": "create_user()"
     },
     {
@@ -1379,8 +1379,8 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "keycloak_setup_users_clear_required_actions",
-      "community": 4,
-      "community_name": "keycloak_setup/__init__.py",
+      "community": 8,
+      "community_name": "kc_request",
       "norm_label": "_clear_required_actions()"
     },
     {
@@ -1445,8 +1445,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "keycloak_setup_users_rationale_24",
-      "community": 4,
-      "community_name": "keycloak_setup/__init__.py",
+      "community": 8,
+      "community_name": "kc_request",
       "norm_label": "create a user in a realm. returns the user id. keycloak blocks password grant..."
     },
     {
@@ -1456,8 +1456,8 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "keycloak_setup_users_rationale_90",
-      "community": 4,
-      "community_name": "keycloak_setup/__init__.py",
+      "community": 8,
+      "community_name": "kc_request",
       "norm_label": "clear required actions on a user so password grant authentication works...."
     },
     {
@@ -1951,8 +1951,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rbac_routes_to_keycloak",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 32,
+      "community_name": "sync_all_roles",
       "norm_label": "rbac_routes_to_keycloak.py"
     },
     {
@@ -1962,8 +1962,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "rbac_routes_to_keycloak_main",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 32,
+      "community_name": "sync_all_roles",
       "norm_label": "main()"
     },
     {
@@ -1973,7 +1973,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rbac_sync_init",
-      "community": 1,
+      "community": 28,
       "community_name": "rbac_sync/__init__.py",
       "norm_label": "rbac_sync/__init__.py"
     },
@@ -1984,7 +1984,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rbac_sync_init_rationale_1",
-      "community": 1,
+      "community": 28,
       "community_name": "rbac_sync/__init__.py",
       "norm_label": "rbac sync package for conciergeos. this package provides modular functionality..."
     },
@@ -1995,15 +1995,37 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rbac_sync_caddy_routes",
-      "community": 1,
+      "community": 28,
       "community_name": "rbac_sync/__init__.py",
       "norm_label": "caddy_routes.py"
+    },
+    {
+      "label": "_is_api_path()",
+      "file_type": "code",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L23",
+      "_origin": "ast",
+      "id": "rbac_sync_caddy_routes_is_api_path",
+      "community": 7,
+      "community_name": "helpers.py",
+      "norm_label": "_is_api_path()"
+    },
+    {
+      "label": "_load_fallback_roles()",
+      "file_type": "code",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L33",
+      "_origin": "ast",
+      "id": "rbac_sync_caddy_routes_load_fallback_roles",
+      "community": 7,
+      "community_name": "helpers.py",
+      "norm_label": "_load_fallback_roles()"
     },
     {
       "label": "generate_deny_rules()",
       "file_type": "code",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L16",
+      "source_location": "L59",
       "_origin": "ast",
       "id": "rbac_sync_caddy_routes_generate_deny_rules",
       "community": 7,
@@ -2014,7 +2036,7 @@
       "label": "get_menus_for_roles()",
       "file_type": "code",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L69",
+      "source_location": "L166",
       "_origin": "ast",
       "id": "rbac_sync_caddy_routes_get_menus_for_roles",
       "community": 7,
@@ -2025,34 +2047,56 @@
       "label": "build_caddy_routes()",
       "file_type": "code",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L90",
+      "source_location": "L187",
       "_origin": "ast",
       "id": "rbac_sync_caddy_routes_build_caddy_routes",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 22,
+      "community_name": "build_caddy_routes",
       "norm_label": "build_caddy_routes()"
     },
     {
-      "label": "push_routes_to_caddy()",
+      "label": "build_rbac_routes()",
       "file_type": "code",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L167",
+      "source_location": "L264",
+      "_origin": "ast",
+      "id": "rbac_sync_caddy_routes_build_rbac_routes",
+      "community": 28,
+      "community_name": "rbac_sync/__init__.py",
+      "norm_label": "build_rbac_routes()"
+    },
+    {
+      "label": "_push_routes_to_caddy()",
+      "file_type": "code",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L308",
       "_origin": "ast",
       "id": "rbac_sync_caddy_routes_push_routes_to_caddy",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
-      "norm_label": "push_routes_to_caddy()"
+      "community": 9,
+      "community_name": "Settings",
+      "norm_label": "_push_routes_to_caddy()"
     },
     {
       "label": "verify_caddy_routes()",
       "file_type": "code",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L213",
+      "source_location": "L382",
       "_origin": "ast",
       "id": "rbac_sync_caddy_routes_verify_caddy_routes",
-      "community": 1,
+      "community": 28,
       "community_name": "rbac_sync/__init__.py",
       "norm_label": "verify_caddy_routes()"
+    },
+    {
+      "label": "verify_rbac_routes()",
+      "file_type": "code",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L396",
+      "_origin": "ast",
+      "id": "rbac_sync_caddy_routes_verify_rbac_routes",
+      "community": 28,
+      "community_name": "rbac_sync/__init__.py",
+      "norm_label": "verify_rbac_routes()"
     },
     {
       "label": "Caddy Route Generation module. Handles generating Caddy deny rules from\u2026",
@@ -2061,17 +2105,39 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rbac_sync_caddy_routes_rationale_1",
-      "community": 1,
+      "community": 28,
       "community_name": "rbac_sync/__init__.py",
       "norm_label": "caddy route generation module. handles generating caddy deny rules from..."
+    },
+    {
+      "label": "Return True if *path* is a backend API path. API paths are enforced by the\u2026",
+      "file_type": "rationale",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L24",
+      "_origin": "ast",
+      "id": "rbac_sync_caddy_routes_rationale_24",
+      "community": 7,
+      "community_name": "helpers.py",
+      "norm_label": "return true if *path* is a backend api path. api paths are enforced by the..."
+    },
+    {
+      "label": "Load role path/menus from rbac_routes.json as fallback. Returns: Dictionary\u2026",
+      "file_type": "rationale",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L34",
+      "_origin": "ast",
+      "id": "rbac_sync_caddy_routes_rationale_34",
+      "community": 7,
+      "community_name": "helpers.py",
+      "norm_label": "load role path/menus from rbac_routes.json as fallback. returns: dictionary..."
     },
     {
       "label": "Generate Caddy deny rules from role attributes fetched from Keycloak. Each\u2026",
       "file_type": "rationale",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L17",
+      "source_location": "L60",
       "_origin": "ast",
-      "id": "rbac_sync_caddy_routes_rationale_17",
+      "id": "rbac_sync_caddy_routes_rationale_60",
       "community": 7,
       "community_name": "helpers.py",
       "norm_label": "generate caddy deny rules from role attributes fetched from keycloak. each..."
@@ -2080,9 +2146,9 @@
       "label": "Aggregate menu items for a set of role names. Args: role_names: Set of role\u2026",
       "file_type": "rationale",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L73",
+      "source_location": "L170",
       "_origin": "ast",
-      "id": "rbac_sync_caddy_routes_rationale_73",
+      "id": "rbac_sync_caddy_routes_rationale_170",
       "community": 7,
       "community_name": "helpers.py",
       "norm_label": "aggregate menu items for a set of role names. args: role_names: set of role..."
@@ -2091,34 +2157,67 @@
       "label": "Build the full internal-server routes array. Combines static assets route, full\u2026",
       "file_type": "rationale",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L91",
+      "source_location": "L188",
       "_origin": "ast",
-      "id": "rbac_sync_caddy_routes_rationale_91",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "id": "rbac_sync_caddy_routes_rationale_188",
+      "community": 22,
+      "community_name": "build_caddy_routes",
       "norm_label": "build the full internal-server routes array. combines static assets route, full..."
     },
     {
-      "label": "Push the updated routes to Caddy via the Admin API. Args: routes: List of route\u2026",
+      "label": "Build the full caddy-rbac gateway routes array. Order: full-access bypass \u2192\u2026",
       "file_type": "rationale",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L168",
+      "source_location": "L265",
       "_origin": "ast",
-      "id": "rbac_sync_caddy_routes_rationale_168",
-      "community": 1,
+      "id": "rbac_sync_caddy_routes_rationale_265",
+      "community": 28,
       "community_name": "rbac_sync/__init__.py",
-      "norm_label": "push the updated routes to caddy via the admin api. args: routes: list of route..."
+      "norm_label": "build the full caddy-rbac gateway routes array. order: full-access bypass \u2192..."
     },
     {
-      "label": "Read current routes from Caddy for verification/debugging. Returns: List of\u2026",
+      "label": "Push routes to a specific Caddy instance. Args: admin_url: Caddy Admin API URL\u2026",
       "file_type": "rationale",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L214",
+      "source_location": "L309",
       "_origin": "ast",
-      "id": "rbac_sync_caddy_routes_rationale_214",
-      "community": 1,
+      "id": "rbac_sync_caddy_routes_rationale_309",
+      "community": 9,
+      "community_name": "Settings",
+      "norm_label": "push routes to a specific caddy instance. args: admin_url: caddy admin api url..."
+    },
+    {
+      "label": "Push the updated routes to both Caddy instances. Args: frontend_routes: Routes\u2026",
+      "file_type": "rationale",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L360",
+      "_origin": "ast",
+      "id": "rbac_sync_caddy_routes_rationale_360",
+      "community": 9,
+      "community_name": "Settings",
+      "norm_label": "push the updated routes to both caddy instances. args: frontend_routes: routes..."
+    },
+    {
+      "label": "Read current routes from the main Caddy for verification/debugging. Returns:\u2026",
+      "file_type": "rationale",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L383",
+      "_origin": "ast",
+      "id": "rbac_sync_caddy_routes_rationale_383",
+      "community": 28,
       "community_name": "rbac_sync/__init__.py",
-      "norm_label": "read current routes from caddy for verification/debugging. returns: list of..."
+      "norm_label": "read current routes from the main caddy for verification/debugging. returns:..."
+    },
+    {
+      "label": "Read current routes from the RBAC gateway for verification/debugging. Returns:\u2026",
+      "file_type": "rationale",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L397",
+      "_origin": "ast",
+      "id": "rbac_sync_caddy_routes_rationale_397",
+      "community": 28,
+      "community_name": "rbac_sync/__init__.py",
+      "norm_label": "read current routes from the rbac gateway for verification/debugging. returns:..."
     },
     {
       "label": "rbac_sync/config.py",
@@ -2127,7 +2226,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rbac_sync_config",
-      "community": 1,
+      "community": 28,
       "community_name": "rbac_sync/__init__.py",
       "norm_label": "rbac_sync/config.py"
     },
@@ -2138,7 +2237,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rbac_sync_config_rationale_1",
-      "community": 1,
+      "community": 28,
       "community_name": "rbac_sync/__init__.py",
       "norm_label": "configuration constants for rbac sync operations. centralizes all configuration..."
     },
@@ -2149,8 +2248,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rbac_sync_event_polling",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 29,
+      "community_name": "sync_orchestrator.py",
       "norm_label": "event_polling.py"
     },
     {
@@ -2160,8 +2259,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "rbac_sync_event_polling_poll_admin_events",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 29,
+      "community_name": "sync_orchestrator.py",
       "norm_label": "poll_admin_events()"
     },
     {
@@ -2171,8 +2270,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "datetime",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 29,
+      "community_name": "sync_orchestrator.py",
       "norm_label": "datetime"
     },
     {
@@ -2193,8 +2292,8 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "rbac_sync_event_polling_has_user_delete_events",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 29,
+      "community_name": "sync_orchestrator.py",
       "norm_label": "has_user_delete_events()"
     },
     {
@@ -2204,8 +2303,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rbac_sync_event_polling_rationale_1",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 29,
+      "community_name": "sync_orchestrator.py",
       "norm_label": "event polling module for keycloak admin events. handles polling keycloak's..."
     },
     {
@@ -2215,8 +2314,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "rbac_sync_event_polling_rationale_17",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 29,
+      "community_name": "sync_orchestrator.py",
       "norm_label": "poll keycloak admin events since the given timestamp. keycloak 26 has two..."
     },
     {
@@ -2237,8 +2336,8 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "rbac_sync_event_polling_rationale_58",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 29,
+      "community_name": "sync_orchestrator.py",
       "norm_label": "check if any event is a user delete or user_session delete event. args: events:..."
     },
     {
@@ -2248,7 +2347,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rbac_sync_role_operations",
-      "community": 11,
+      "community": 5,
       "community_name": "roles.py",
       "norm_label": "role_operations.py"
     },
@@ -2259,8 +2358,8 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "rbac_sync_role_operations_sync_all_roles",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 32,
+      "community_name": "sync_all_roles",
       "norm_label": "sync_all_roles()"
     },
     {
@@ -2270,8 +2369,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "rbac_sync_role_operations_py_path",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 32,
+      "community_name": "sync_all_roles",
       "norm_label": "path"
     },
     {
@@ -2281,7 +2380,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rbac_sync_role_operations_rationale_1",
-      "community": 11,
+      "community": 5,
       "community_name": "roles.py",
       "norm_label": "rbac role operations \u2014 adapter module. this module is a thin adapter that..."
     },
@@ -2292,8 +2391,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "rbac_sync_role_operations_rationale_27",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 32,
+      "community_name": "sync_all_roles",
       "norm_label": "sync all roles from a routes file (json) to keycloak. parses the routes file,..."
     },
     {
@@ -2336,8 +2435,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "rbac_sync_routes_persistence_convert_keycloak_attrs_to_route_format",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 38,
+      "community_name": "initial_sync",
       "norm_label": "convert_keycloak_attrs_to_route_format()"
     },
     {
@@ -2358,8 +2457,8 @@
       "source_location": "L67",
       "_origin": "ast",
       "id": "rbac_sync_routes_persistence_sync_rbac_routes",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 38,
+      "community_name": "initial_sync",
       "norm_label": "sync_rbac_routes()"
     },
     {
@@ -2391,8 +2490,8 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "rbac_sync_routes_persistence_rationale_42",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 38,
+      "community_name": "initial_sync",
       "norm_label": "convert keycloak role attributes to route-compatible format. args:..."
     },
     {
@@ -2413,8 +2512,8 @@
       "source_location": "L68",
       "_origin": "ast",
       "id": "rbac_sync_routes_persistence_rationale_68",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 38,
+      "community_name": "initial_sync",
       "norm_label": "fetch roles from keycloak and write to an rbac routes file. args: token:..."
     },
     {
@@ -2425,7 +2524,7 @@
       "_origin": "ast",
       "id": "rbac_sync_session_management",
       "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community_name": "session_management.py",
       "norm_label": "session_management.py"
     },
     {
@@ -2436,7 +2535,7 @@
       "_origin": "ast",
       "id": "rbac_sync_session_management_get_valkey_client",
       "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community_name": "session_management.py",
       "norm_label": "_get_valkey_client()"
     },
     {
@@ -2446,8 +2545,8 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "rbac_sync_session_management_invalidate_all_sessions",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 43,
+      "community_name": "invalidate_all_sessions",
       "norm_label": "invalidate_all_sessions()"
     },
     {
@@ -2458,7 +2557,7 @@
       "_origin": "ast",
       "id": "rbac_sync_session_management_load_sync_timestamp",
       "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community_name": "session_management.py",
       "norm_label": "load_sync_timestamp()"
     },
     {
@@ -2469,7 +2568,7 @@
       "_origin": "ast",
       "id": "rbac_sync_session_management_save_sync_timestamp",
       "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community_name": "session_management.py",
       "norm_label": "save_sync_timestamp()"
     },
     {
@@ -2480,7 +2579,7 @@
       "_origin": "ast",
       "id": "rbac_sync_session_management_sync_is_current",
       "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community_name": "session_management.py",
       "norm_label": "sync_is_current()"
     },
     {
@@ -2491,7 +2590,7 @@
       "_origin": "ast",
       "id": "rbac_sync_session_management_load_seen_ids",
       "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community_name": "session_management.py",
       "norm_label": "load_seen_ids()"
     },
     {
@@ -2502,7 +2601,7 @@
       "_origin": "ast",
       "id": "rbac_sync_session_management_save_seen_ids",
       "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community_name": "session_management.py",
       "norm_label": "save_seen_ids()"
     },
     {
@@ -2512,8 +2611,8 @@
       "source_location": "L154",
       "_origin": "ast",
       "id": "rbac_sync_session_management_filter_new_events",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 24,
+      "community_name": "poll_and_sync",
       "norm_label": "filter_new_events()"
     },
     {
@@ -2523,8 +2622,8 @@
       "source_location": "L173",
       "_origin": "ast",
       "id": "rbac_sync_session_management_collect_event_ids",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 24,
+      "community_name": "poll_and_sync",
       "norm_label": "collect_event_ids()"
     },
     {
@@ -2535,7 +2634,7 @@
       "_origin": "ast",
       "id": "rbac_sync_session_management_rationale_1",
       "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community_name": "session_management.py",
       "norm_label": "session management module for valkey session invalidation. handles session..."
     },
     {
@@ -2546,7 +2645,7 @@
       "_origin": "ast",
       "id": "rbac_sync_session_management_rationale_22",
       "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community_name": "session_management.py",
       "norm_label": "return a valkey client or none if unreachable. returns: valkey client instance..."
     },
     {
@@ -2556,8 +2655,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "rbac_sync_session_management_rationale_37",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 43,
+      "community_name": "invalidate_all_sessions",
       "norm_label": "delete all oauth2-proxy sessions from valkey. returns: number of session keys..."
     },
     {
@@ -2568,7 +2667,7 @@
       "_origin": "ast",
       "id": "rbac_sync_session_management_rationale_77",
       "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community_name": "session_management.py",
       "norm_label": "return the last-sync unix timestamp, or none. returns: unix timestamp of last..."
     },
     {
@@ -2579,7 +2678,7 @@
       "_origin": "ast",
       "id": "rbac_sync_session_management_rationale_95",
       "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community_name": "session_management.py",
       "norm_label": "record that a successful sync just completed."
     },
     {
@@ -2590,7 +2689,7 @@
       "_origin": "ast",
       "id": "rbac_sync_session_management_rationale_103",
       "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community_name": "session_management.py",
       "norm_label": "true if a successful sync happened within the last 2xsync_interval. returns:..."
     },
     {
@@ -2601,7 +2700,7 @@
       "_origin": "ast",
       "id": "rbac_sync_session_management_rationale_124",
       "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community_name": "session_management.py",
       "norm_label": "load today's set of already-processed event ids. returns: set of event ids that..."
     },
     {
@@ -2612,7 +2711,7 @@
       "_origin": "ast",
       "id": "rbac_sync_session_management_rationale_139",
       "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community_name": "session_management.py",
       "norm_label": "replace today's seen set. args: ids: set of event ids to mark as seen"
     },
     {
@@ -2622,8 +2721,8 @@
       "source_location": "L155",
       "_origin": "ast",
       "id": "rbac_sync_session_management_rationale_155",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 24,
+      "community_name": "poll_and_sync",
       "norm_label": "return only events whose ids are not in *seen*. args: events: list of events to..."
     },
     {
@@ -2633,8 +2732,8 @@
       "source_location": "L174",
       "_origin": "ast",
       "id": "rbac_sync_session_management_rationale_174",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 24,
+      "community_name": "poll_and_sync",
       "norm_label": "extract every event id from a list of events. args: events: list of event..."
     },
     {
@@ -2644,52 +2743,52 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rbac_sync_sync_orchestrator",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 29,
+      "community_name": "sync_orchestrator.py",
       "norm_label": "sync_orchestrator.py"
     },
     {
       "label": "initial_sync()",
       "file_type": "code",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L42",
+      "source_location": "L47",
       "_origin": "ast",
       "id": "rbac_sync_sync_orchestrator_initial_sync",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 38,
+      "community_name": "initial_sync",
       "norm_label": "initial_sync()"
     },
     {
       "label": "poll_and_sync()",
       "file_type": "code",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L92",
+      "source_location": "L104",
       "_origin": "ast",
       "id": "rbac_sync_sync_orchestrator_poll_and_sync",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 24,
+      "community_name": "poll_and_sync",
       "norm_label": "poll_and_sync()"
     },
     {
       "label": "wait_for_dependencies()",
       "file_type": "code",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L184",
+      "source_location": "L197",
       "_origin": "ast",
       "id": "rbac_sync_sync_orchestrator_wait_for_dependencies",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 24,
+      "community_name": "poll_and_sync",
       "norm_label": "wait_for_dependencies()"
     },
     {
       "label": "run_sync_service()",
       "file_type": "code",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L243",
+      "source_location": "L256",
       "_origin": "ast",
       "id": "rbac_sync_sync_orchestrator_run_sync_service",
-      "community": 9,
-      "community_name": "Settings",
+      "community": 24,
+      "community_name": "poll_and_sync",
       "norm_label": "run_sync_service()"
     },
     {
@@ -2699,52 +2798,52 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rbac_sync_sync_orchestrator_rationale_1",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 29,
+      "community_name": "sync_orchestrator.py",
       "norm_label": "sync orchestrator module for rbac role synchronization. contains the main sync..."
     },
     {
       "label": "Perform initial full sync on startup. Returns: True if successful, False\u2026",
       "file_type": "rationale",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L43",
+      "source_location": "L48",
       "_origin": "ast",
-      "id": "rbac_sync_sync_orchestrator_rationale_43",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "id": "rbac_sync_sync_orchestrator_rationale_48",
+      "community": 38,
+      "community_name": "initial_sync",
       "norm_label": "perform initial full sync on startup. returns: true if successful, false..."
     },
     {
       "label": "Poll Keycloak for role changes and sync if needed. Returns: True if successful,\u2026",
       "file_type": "rationale",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L93",
+      "source_location": "L105",
       "_origin": "ast",
-      "id": "rbac_sync_sync_orchestrator_rationale_93",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "id": "rbac_sync_sync_orchestrator_rationale_105",
+      "community": 24,
+      "community_name": "poll_and_sync",
       "norm_label": "poll keycloak for role changes and sync if needed. returns: true if successful,..."
     },
     {
       "label": "Wait for Keycloak and Caddy to be ready. Args: max_retries: Maximum number of\u2026",
       "file_type": "rationale",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L185",
+      "source_location": "L198",
       "_origin": "ast",
-      "id": "rbac_sync_sync_orchestrator_rationale_185",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "id": "rbac_sync_sync_orchestrator_rationale_198",
+      "community": 24,
+      "community_name": "poll_and_sync",
       "norm_label": "wait for keycloak and caddy to be ready. args: max_retries: maximum number of..."
     },
     {
       "label": "Main entry point for the sync service.",
       "file_type": "rationale",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L244",
+      "source_location": "L257",
       "_origin": "ast",
-      "id": "rbac_sync_sync_orchestrator_rationale_244",
-      "community": 9,
-      "community_name": "Settings",
+      "id": "rbac_sync_sync_orchestrator_rationale_257",
+      "community": 24,
+      "community_name": "poll_and_sync",
       "norm_label": "main entry point for the sync service."
     },
     {
@@ -2754,8 +2853,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "role_sync",
-      "community": 9,
-      "community_name": "Settings",
+      "community": 24,
+      "community_name": "poll_and_sync",
       "norm_label": "role_sync.py"
     },
     {
@@ -2765,8 +2864,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "role_sync_main",
-      "community": 9,
-      "community_name": "Settings",
+      "community": 24,
+      "community_name": "poll_and_sync",
       "norm_label": "main()"
     },
     {
@@ -2776,8 +2875,8 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "role_sync_rationale_38",
-      "community": 9,
-      "community_name": "Settings",
+      "community": 24,
+      "community_name": "poll_and_sync",
       "norm_label": "main entry point for the role sync service."
     },
     {
@@ -2787,7 +2886,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "settings",
-      "community": 11,
+      "community": 5,
       "community_name": "roles.py",
       "norm_label": "settings.py"
     },
@@ -2858,21 +2957,32 @@
       "norm_label": ".caddy_admin_url()"
     },
     {
+      "label": ".CADDY_RBAC_ADMIN_URL()",
+      "file_type": "code",
+      "source_file": "settings.py",
+      "source_location": "L47",
+      "_origin": "ast",
+      "id": "settings_settings_caddy_rbac_admin_url",
+      "community": 9,
+      "community_name": "Settings",
+      "norm_label": ".caddy_rbac_admin_url()"
+    },
+    {
       "label": ".VALKEY_URL()",
       "file_type": "code",
       "source_file": "settings.py",
-      "source_location": "L48",
+      "source_location": "L52",
       "_origin": "ast",
       "id": "settings_settings_valkey_url",
-      "community": 0,
-      "community_name": ".KEYCLOAK_REALM",
+      "community": 11,
+      "community_name": ".VALKEY_URL",
       "norm_label": ".valkey_url()"
     },
     {
       "label": ".SESSION_COOKIE_NAME()",
       "file_type": "code",
       "source_file": "settings.py",
-      "source_location": "L53",
+      "source_location": "L57",
       "_origin": "ast",
       "id": "settings_settings_session_cookie_name",
       "community": 9,
@@ -2883,18 +2993,18 @@
       "label": ".SYNC_INTERVAL()",
       "file_type": "code",
       "source_file": "settings.py",
-      "source_location": "L58",
+      "source_location": "L62",
       "_origin": "ast",
       "id": "settings_settings_sync_interval",
-      "community": 9,
-      "community_name": "Settings",
+      "community": 24,
+      "community_name": "poll_and_sync",
       "norm_label": ".sync_interval()"
     },
     {
       "label": ".MAPPING_FILE()",
       "file_type": "code",
       "source_file": "settings.py",
-      "source_location": "L62",
+      "source_location": "L66",
       "_origin": "ast",
       "id": "settings_settings_mapping_file",
       "community": 9,
@@ -2905,7 +3015,7 @@
       "label": ".APP_DOMAIN()",
       "file_type": "code",
       "source_file": "settings.py",
-      "source_location": "L67",
+      "source_location": "L71",
       "_origin": "ast",
       "id": "settings_settings_app_domain",
       "community": 9,
@@ -2916,7 +3026,7 @@
       "label": ".OIDC_REALM()",
       "file_type": "code",
       "source_file": "settings.py",
-      "source_location": "L72",
+      "source_location": "L76",
       "_origin": "ast",
       "id": "settings_settings_oidc_realm",
       "community": 9,
@@ -2927,7 +3037,7 @@
       "label": ".OIDC_CLIENT_ID()",
       "file_type": "code",
       "source_file": "settings.py",
-      "source_location": "L76",
+      "source_location": "L80",
       "_origin": "ast",
       "id": "settings_settings_oidc_client_id",
       "community": 9,
@@ -2938,7 +3048,7 @@
       "label": ".MODELS_ENDPOINT()",
       "file_type": "code",
       "source_file": "settings.py",
-      "source_location": "L81",
+      "source_location": "L85",
       "_origin": "ast",
       "id": "settings_settings_models_endpoint",
       "community": 9,
@@ -2949,7 +3059,7 @@
       "label": ".MODEL_NAME()",
       "file_type": "code",
       "source_file": "settings.py",
-      "source_location": "L85",
+      "source_location": "L89",
       "_origin": "ast",
       "id": "settings_settings_model_name",
       "community": 9,
@@ -2960,7 +3070,7 @@
       "label": ".VLLM_VERSION()",
       "file_type": "code",
       "source_file": "settings.py",
-      "source_location": "L89",
+      "source_location": "L93",
       "_origin": "ast",
       "id": "settings_settings_vllm_version",
       "community": 9,
@@ -2971,7 +3081,7 @@
       "label": ".THINKING_ENABLED()",
       "file_type": "code",
       "source_file": "settings.py",
-      "source_location": "L93",
+      "source_location": "L97",
       "_origin": "ast",
       "id": "settings_settings_thinking_enabled",
       "community": 9,
@@ -2982,7 +3092,7 @@
       "label": ".EXPECTED_FORMAT()",
       "file_type": "code",
       "source_file": "settings.py",
-      "source_location": "L97",
+      "source_location": "L101",
       "_origin": "ast",
       "id": "settings_settings_expected_format",
       "community": 9,
@@ -2993,7 +3103,7 @@
       "label": ".DATABASE_URL()",
       "file_type": "code",
       "source_file": "settings.py",
-      "source_location": "L102",
+      "source_location": "L106",
       "_origin": "ast",
       "id": "settings_settings_database_url",
       "community": 9,
@@ -3019,7 +3129,7 @@
       "_origin": "ast",
       "id": "tests_conftest",
       "community": 11,
-      "community_name": "roles.py",
+      "community_name": ".VALKEY_URL",
       "norm_label": "conftest.py"
     },
     {
@@ -3029,8 +3139,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_conftest_py_fixture",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 11,
+      "community_name": ".VALKEY_URL",
       "norm_label": "fixture"
     },
     {
@@ -3040,8 +3150,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "tests_conftest_live_token",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 11,
+      "community_name": ".VALKEY_URL",
       "norm_label": "live_token()"
     },
     {
@@ -3051,8 +3161,8 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "tests_conftest_sample_caddy_config",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 11,
+      "community_name": ".VALKEY_URL",
       "norm_label": "sample_caddy_config()"
     },
     {
@@ -3062,8 +3172,8 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "tests_conftest_clear_sync_checkpoint",
-      "community": 0,
-      "community_name": ".KEYCLOAK_REALM",
+      "community": 11,
+      "community_name": ".VALKEY_URL",
       "norm_label": "_clear_sync_checkpoint()"
     },
     {
@@ -3074,7 +3184,7 @@
       "_origin": "ast",
       "id": "tests_conftest_live_test_role",
       "community": 11,
-      "community_name": "roles.py",
+      "community_name": ".VALKEY_URL",
       "norm_label": "live_test_role()"
     },
     {
@@ -3084,8 +3194,8 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "tests_conftest_rationale_46",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 11,
+      "community_name": ".VALKEY_URL",
       "norm_label": "authenticate against the live keycloak instance once per session. uses the..."
     },
     {
@@ -3095,8 +3205,8 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "tests_conftest_rationale_56",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 11,
+      "community_name": ".VALKEY_URL",
       "norm_label": "sample caddy config that simulates a real config with multiple servers."
     },
     {
@@ -3106,8 +3216,8 @@
       "source_location": "L118",
       "_origin": "ast",
       "id": "tests_conftest_rationale_118",
-      "community": 0,
-      "community_name": ".KEYCLOAK_REALM",
+      "community": 11,
+      "community_name": ".VALKEY_URL",
       "norm_label": "clear the valkey sync timestamp and disable sync_is_current() so initial_sync()..."
     },
     {
@@ -3118,7 +3228,7 @@
       "_origin": "ast",
       "id": "tests_conftest_rationale_148",
       "community": 11,
-      "community_name": "roles.py",
+      "community_name": ".VALKEY_URL",
       "norm_label": "create a real role in keycloak with paths/menus attributes for integration..."
     },
     {
@@ -3128,7 +3238,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_fixtures",
-      "community": 14,
+      "community": 17,
       "community_name": "fixtures.py",
       "norm_label": "fixtures.py"
     },
@@ -3140,7 +3250,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_py_fixture",
       "community": 14,
-      "community_name": "fixtures.py",
+      "community_name": "fixture",
       "norm_label": "fixture"
     },
     {
@@ -3150,8 +3260,8 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "tests_fixtures_sample_events",
-      "community": 14,
-      "community_name": "fixtures.py",
+      "community": 27,
+      "community_name": "test_event_persistence.py",
       "norm_label": "sample_events()"
     },
     {
@@ -3162,7 +3272,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_sample_rbac_json",
       "community": 14,
-      "community_name": "fixtures.py",
+      "community_name": "fixture",
       "norm_label": "sample_rbac_json()"
     },
     {
@@ -3173,7 +3283,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_sample_caddy_config",
       "community": 14,
-      "community_name": "fixtures.py",
+      "community_name": "fixture",
       "norm_label": "sample_caddy_config()"
     },
     {
@@ -3184,7 +3294,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_json_file",
       "community": 14,
-      "community_name": "fixtures.py",
+      "community_name": "fixture",
       "norm_label": "json_file()"
     },
     {
@@ -3194,8 +3304,8 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "tests_fixtures_valkey_flush",
-      "community": 14,
-      "community_name": "fixtures.py",
+      "community": 27,
+      "community_name": "test_event_persistence.py",
       "norm_label": "_valkey_flush()"
     },
     {
@@ -3206,7 +3316,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_compose_content",
       "community": 14,
-      "community_name": "fixtures.py",
+      "community_name": "fixture",
       "norm_label": "compose_content()"
     },
     {
@@ -3217,7 +3327,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_compose_issuer_url",
       "community": 17,
-      "community_name": "test_oidc_config.py",
+      "community_name": "fixtures.py",
       "norm_label": "compose_issuer_url()"
     },
     {
@@ -3228,7 +3338,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_compose_ssl_insecure_skip_verify",
       "community": 17,
-      "community_name": "test_oidc_config.py",
+      "community_name": "fixtures.py",
       "norm_label": "compose_ssl_insecure_skip_verify()"
     },
     {
@@ -3239,7 +3349,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_compose_session_store_type",
       "community": 17,
-      "community_name": "test_oidc_config.py",
+      "community_name": "fixtures.py",
       "norm_label": "compose_session_store_type()"
     },
     {
@@ -3250,7 +3360,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_compose_redis_connection_url",
       "community": 17,
-      "community_name": "test_oidc_config.py",
+      "community_name": "fixtures.py",
       "norm_label": "compose_redis_connection_url()"
     },
     {
@@ -3260,8 +3370,8 @@
       "source_location": "L170",
       "_origin": "ast",
       "id": "tests_fixtures_discovery_config_public",
-      "community": 28,
-      "community_name": "discovery_config_direct",
+      "community": 17,
+      "community_name": "fixtures.py",
       "norm_label": "discovery_config_public()"
     },
     {
@@ -3271,8 +3381,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_fixtures_py_any",
-      "community": 28,
-      "community_name": "discovery_config_direct",
+      "community": 17,
+      "community_name": "fixtures.py",
       "norm_label": "any"
     },
     {
@@ -3282,8 +3392,8 @@
       "source_location": "L179",
       "_origin": "ast",
       "id": "tests_fixtures_discovery_config_direct",
-      "community": 28,
-      "community_name": "discovery_config_direct",
+      "community": 17,
+      "community_name": "fixtures.py",
       "norm_label": "discovery_config_direct()"
     },
     {
@@ -3294,7 +3404,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_test_role_name",
       "community": 14,
-      "community_name": "fixtures.py",
+      "community_name": "fixture",
       "norm_label": "test_role_name()"
     },
     {
@@ -3304,8 +3414,8 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "tests_fixtures_rationale_47",
-      "community": 14,
-      "community_name": "fixtures.py",
+      "community": 27,
+      "community_name": "test_event_persistence.py",
       "norm_label": "return a list of mock keycloak admin events."
     },
     {
@@ -3316,7 +3426,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_rationale_53",
       "community": 14,
-      "community_name": "fixtures.py",
+      "community_name": "fixture",
       "norm_label": "sample rbac routes json content for testing."
     },
     {
@@ -3327,7 +3437,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_rationale_59",
       "community": 14,
-      "community_name": "fixtures.py",
+      "community_name": "fixture",
       "norm_label": "sample caddy config that simulates a real config with multiple servers."
     },
     {
@@ -3338,7 +3448,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_rationale_65",
       "community": 14,
-      "community_name": "fixtures.py",
+      "community_name": "fixture",
       "norm_label": "create a temporary json file with sample rbac content."
     },
     {
@@ -3348,8 +3458,8 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "tests_fixtures_rationale_80",
-      "community": 14,
-      "community_name": "fixtures.py",
+      "community": 27,
+      "community_name": "test_event_persistence.py",
       "norm_label": "flush all role_sync:* keys from valkey before and after each test. gracefully..."
     },
     {
@@ -3360,7 +3470,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_rationale_122",
       "community": 14,
-      "community_name": "fixtures.py",
+      "community_name": "fixture",
       "norm_label": "read docker-compose.yaml once per session."
     },
     {
@@ -3371,7 +3481,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_rationale_129",
       "community": 17,
-      "community_name": "test_oidc_config.py",
+      "community_name": "fixtures.py",
       "norm_label": "extract oauth2_proxy_oidc_issuer_url from the docker-compose.yaml environment."
     },
     {
@@ -3382,7 +3492,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_rationale_148",
       "community": 17,
-      "community_name": "test_oidc_config.py",
+      "community_name": "fixtures.py",
       "norm_label": "extract oauth2_proxy_ssl_insecure_skip_verify from docker-compose.yaml."
     },
     {
@@ -3393,7 +3503,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_rationale_154",
       "community": 17,
-      "community_name": "test_oidc_config.py",
+      "community_name": "fixtures.py",
       "norm_label": "extract oauth2_proxy_session_store_type from docker-compose.yaml."
     },
     {
@@ -3404,7 +3514,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_rationale_160",
       "community": 17,
-      "community_name": "test_oidc_config.py",
+      "community_name": "fixtures.py",
       "norm_label": "extract oauth2_proxy_redis_connection_url from docker-compose.yaml."
     },
     {
@@ -3414,8 +3524,8 @@
       "source_location": "L171",
       "_origin": "ast",
       "id": "tests_fixtures_rationale_171",
-      "community": 28,
-      "community_name": "discovery_config_direct",
+      "community": 17,
+      "community_name": "fixtures.py",
       "norm_label": "fetch the oidc discovery config via the public https domain (caddy proxy)."
     },
     {
@@ -3425,8 +3535,8 @@
       "source_location": "L180",
       "_origin": "ast",
       "id": "tests_fixtures_rationale_180",
-      "community": 28,
-      "community_name": "discovery_config_direct",
+      "community": 17,
+      "community_name": "fixtures.py",
       "norm_label": "fetch the oidc discovery config directly on localhost:8080."
     },
     {
@@ -3437,7 +3547,7 @@
       "_origin": "ast",
       "id": "tests_fixtures_rationale_194",
       "community": 14,
-      "community_name": "fixtures.py",
+      "community_name": "fixture",
       "norm_label": "generate a unique test role name."
     },
     {
@@ -3469,8 +3579,8 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "tests_helpers_find_deny_rule_for_role",
-      "community": 24,
-      "community_name": "sample_caddy_config",
+      "community": 7,
+      "community_name": "helpers.py",
       "norm_label": "find_deny_rule_for_role()"
     },
     {
@@ -3480,8 +3590,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_helpers_py_any",
-      "community": 24,
-      "community_name": "sample_caddy_config",
+      "community": 7,
+      "community_name": "helpers.py",
       "norm_label": "any"
     },
     {
@@ -3657,7 +3767,7 @@
       "_origin": "ast",
       "id": "tests_helpers_extract_compose_env_var",
       "community": 17,
-      "community_name": "test_oidc_config.py",
+      "community_name": "fixtures.py",
       "norm_label": "extract_compose_env_var()"
     },
     {
@@ -3678,8 +3788,8 @@
       "source_location": "L281",
       "_origin": "ast",
       "id": "tests_helpers_sample_rbac_json",
-      "community": 24,
-      "community_name": "sample_caddy_config",
+      "community": 7,
+      "community_name": "helpers.py",
       "norm_label": "sample_rbac_json()"
     },
     {
@@ -3689,8 +3799,8 @@
       "source_location": "L302",
       "_origin": "ast",
       "id": "tests_helpers_sample_caddy_config",
-      "community": 24,
-      "community_name": "sample_caddy_config",
+      "community": 7,
+      "community_name": "helpers.py",
       "norm_label": "sample_caddy_config()"
     },
     {
@@ -3711,8 +3821,8 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "tests_helpers_rationale_51",
-      "community": 24,
-      "community_name": "sample_caddy_config",
+      "community": 7,
+      "community_name": "helpers.py",
       "norm_label": "search caddy routes for a deny rule referencing the given role."
     },
     {
@@ -3855,7 +3965,7 @@
       "_origin": "ast",
       "id": "tests_helpers_rationale_256",
       "community": 17,
-      "community_name": "test_oidc_config.py",
+      "community_name": "fixtures.py",
       "norm_label": "extract an environment variable value from docker-compose.yaml content...."
     },
     {
@@ -3876,8 +3986,8 @@
       "source_location": "L282",
       "_origin": "ast",
       "id": "tests_helpers_rationale_282",
-      "community": 24,
-      "community_name": "sample_caddy_config",
+      "community": 7,
+      "community_name": "helpers.py",
       "norm_label": "sample rbac routes json content for testing."
     },
     {
@@ -3887,8 +3997,8 @@
       "source_location": "L303",
       "_origin": "ast",
       "id": "tests_helpers_rationale_303",
-      "community": 24,
-      "community_name": "sample_caddy_config",
+      "community": 7,
+      "community_name": "helpers.py",
       "norm_label": "sample caddy config that simulates a real config with multiple servers."
     },
     {
@@ -3898,8 +4008,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_event_persistence",
-      "community": 14,
-      "community_name": "fixtures.py",
+      "community": 27,
+      "community_name": "test_event_persistence.py",
       "norm_label": "test_event_persistence.py"
     },
     {
@@ -3910,7 +4020,7 @@
       "_origin": "ast",
       "id": "tests_test_event_persistence_testsynctimestamp",
       "community": 27,
-      "community_name": "TestSyncTimestamp",
+      "community_name": "test_event_persistence.py",
       "norm_label": "testsynctimestamp"
     },
     {
@@ -3921,7 +4031,7 @@
       "_origin": "ast",
       "id": "tests_test_event_persistence_testsynctimestamp_test_save_and_load",
       "community": 27,
-      "community_name": "TestSyncTimestamp",
+      "community_name": "test_event_persistence.py",
       "norm_label": ".test_save_and_load()"
     },
     {
@@ -3932,7 +4042,7 @@
       "_origin": "ast",
       "id": "tests_test_event_persistence_testsynctimestamp_test_load_none_when_empty",
       "community": 27,
-      "community_name": "TestSyncTimestamp",
+      "community_name": "test_event_persistence.py",
       "norm_label": ".test_load_none_when_empty()"
     },
     {
@@ -3943,7 +4053,7 @@
       "_origin": "ast",
       "id": "tests_test_event_persistence_testsynctimestamp_test_sync_is_current_after_save",
       "community": 27,
-      "community_name": "TestSyncTimestamp",
+      "community_name": "test_event_persistence.py",
       "norm_label": ".test_sync_is_current_after_save()"
     },
     {
@@ -3954,7 +4064,7 @@
       "_origin": "ast",
       "id": "tests_test_event_persistence_testsynctimestamp_test_sync_is_current_stale",
       "community": 27,
-      "community_name": "TestSyncTimestamp",
+      "community_name": "test_event_persistence.py",
       "norm_label": ".test_sync_is_current_stale()"
     },
     {
@@ -3965,7 +4075,7 @@
       "_origin": "ast",
       "id": "tests_test_event_persistence_testsynctimestamp_test_sync_is_current_no_checkpoint",
       "community": 27,
-      "community_name": "TestSyncTimestamp",
+      "community_name": "test_event_persistence.py",
       "norm_label": ".test_sync_is_current_no_checkpoint()"
     },
     {
@@ -3976,7 +4086,7 @@
       "_origin": "ast",
       "id": "tests_test_event_persistence_testsynctimestamp_test_survives_overwrite",
       "community": 27,
-      "community_name": "TestSyncTimestamp",
+      "community_name": "test_event_persistence.py",
       "norm_label": ".test_survives_overwrite()"
     },
     {
@@ -4129,8 +4239,8 @@
       "source_location": "L141",
       "_origin": "ast",
       "id": "tests_test_event_persistence_testcollecteventids",
-      "community": 32,
-      "community_name": "TestCollectEventIds",
+      "community": 27,
+      "community_name": "test_event_persistence.py",
       "norm_label": "testcollecteventids"
     },
     {
@@ -4140,8 +4250,8 @@
       "source_location": "L143",
       "_origin": "ast",
       "id": "tests_test_event_persistence_testcollecteventids_test_collects_all_ids",
-      "community": 32,
-      "community_name": "TestCollectEventIds",
+      "community": 27,
+      "community_name": "test_event_persistence.py",
       "norm_label": ".test_collects_all_ids()"
     },
     {
@@ -4151,8 +4261,8 @@
       "source_location": "L147",
       "_origin": "ast",
       "id": "tests_test_event_persistence_testcollecteventids_test_skips_events_without_id",
-      "community": 32,
-      "community_name": "TestCollectEventIds",
+      "community": 27,
+      "community_name": "test_event_persistence.py",
       "norm_label": ".test_skips_events_without_id()"
     },
     {
@@ -4162,8 +4272,8 @@
       "source_location": "L151",
       "_origin": "ast",
       "id": "tests_test_event_persistence_testcollecteventids_test_empty_list",
-      "community": 32,
-      "community_name": "TestCollectEventIds",
+      "community": 27,
+      "community_name": "test_event_persistence.py",
       "norm_label": ".test_empty_list()"
     },
     {
@@ -4294,8 +4404,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_keycloak_auth",
-      "community": 11,
-      "community_name": "roles.py",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "test_keycloak_auth.py"
     },
     {
@@ -4306,7 +4416,7 @@
       "_origin": "ast",
       "id": "tests_test_keycloak_auth_testlivekeycloakauth",
       "community": 23,
-      "community_name": "authenticate",
+      "community_name": "test_keycloak_events.py",
       "norm_label": "testlivekeycloakauth"
     },
     {
@@ -4317,7 +4427,7 @@
       "_origin": "ast",
       "id": "tests_test_keycloak_auth_testlivekeycloakauth_test_authenticate_returns_valid_token",
       "community": 23,
-      "community_name": "authenticate",
+      "community_name": "test_keycloak_events.py",
       "norm_label": ".test_authenticate_returns_valid_token()"
     },
     {
@@ -4328,7 +4438,7 @@
       "_origin": "ast",
       "id": "tests_test_keycloak_auth_testlivekeycloakauth_test_authenticate_token_works_for_api",
       "community": 23,
-      "community_name": "authenticate",
+      "community_name": "test_keycloak_events.py",
       "norm_label": ".test_authenticate_token_works_for_api()"
     },
     {
@@ -4338,8 +4448,8 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "tests_test_keycloak_auth_testlivekeycloakroles",
-      "community": 29,
-      "community_name": "TestLiveKeycloakRoles",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "testlivekeycloakroles"
     },
     {
@@ -4349,8 +4459,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "tests_test_keycloak_auth_testlivekeycloakroles_test_fetch_all_roles_returns_roles",
-      "community": 29,
-      "community_name": "TestLiveKeycloakRoles",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": ".test_fetch_all_roles_returns_roles()"
     },
     {
@@ -4360,8 +4470,8 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "tests_test_keycloak_auth_testlivekeycloakroles_test_fetch_all_roles_returns_uma_authorization",
-      "community": 29,
-      "community_name": "TestLiveKeycloakRoles",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": ".test_fetch_all_roles_returns_uma_authorization()"
     },
     {
@@ -4372,7 +4482,7 @@
       "_origin": "ast",
       "id": "tests_test_keycloak_auth_rationale_17",
       "community": 23,
-      "community_name": "authenticate",
+      "community_name": "test_keycloak_events.py",
       "norm_label": "authenticate against live keycloak and verify we get a token."
     },
     {
@@ -4383,7 +4493,7 @@
       "_origin": "ast",
       "id": "tests_test_keycloak_auth_rationale_23",
       "community": 23,
-      "community_name": "authenticate",
+      "community_name": "test_keycloak_events.py",
       "norm_label": "verify the token can access the admin api."
     },
     {
@@ -4393,8 +4503,8 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "tests_test_keycloak_auth_rationale_31",
-      "community": 29,
-      "community_name": "TestLiveKeycloakRoles",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "fetch roles from live keycloak \u2014 should return at least our defined roles."
     },
     {
@@ -4404,8 +4514,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "tests_test_keycloak_auth_rationale_45",
-      "community": 29,
-      "community_name": "TestLiveKeycloakRoles",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "keycloak always creates uma_authorization."
     },
     {
@@ -4415,8 +4525,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_keycloak_events",
-      "community": 8,
-      "community_name": "kc_request",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "test_keycloak_events.py"
     },
     {
@@ -4426,8 +4536,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "tests_test_keycloak_events_testlivekeycloakevents",
-      "community": 0,
-      "community_name": ".KEYCLOAK_REALM",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "testlivekeycloakevents"
     },
     {
@@ -4437,8 +4547,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "tests_test_keycloak_events_testlivekeycloakevents_test_poll_admin_events_returns_list",
-      "community": 0,
-      "community_name": ".KEYCLOAK_REALM",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": ".test_poll_admin_events_returns_list()"
     },
     {
@@ -4448,8 +4558,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "tests_test_keycloak_events_testlivekeycloakevents_test_poll_admin_events_uses_ymd_date_format_not_milliseconds",
-      "community": 0,
-      "community_name": ".KEYCLOAK_REALM",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": ".test_poll_admin_events_uses_ymd_date_format_not_milliseconds()"
     },
     {
@@ -4470,8 +4580,8 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "tests_test_keycloak_events_testlivekeycloakevents_test_poll_admin_events_does_not_send_type_admin",
-      "community": 0,
-      "community_name": ".KEYCLOAK_REALM",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": ".test_poll_admin_events_does_not_send_type_admin()"
     },
     {
@@ -4481,8 +4591,8 @@
       "source_location": "L67",
       "_origin": "ast",
       "id": "tests_test_keycloak_events_testlivekeycloakrealmconfig",
-      "community": 0,
-      "community_name": ".KEYCLOAK_REALM",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "testlivekeycloakrealmconfig"
     },
     {
@@ -4492,8 +4602,8 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "tests_test_keycloak_events_testlivekeycloakrealmconfig_test_admin_events_enabled",
-      "community": 0,
-      "community_name": ".KEYCLOAK_REALM",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": ".test_admin_events_enabled()"
     },
     {
@@ -4503,8 +4613,8 @@
       "source_location": "L75",
       "_origin": "ast",
       "id": "tests_test_keycloak_events_testlivekeycloakrealmconfig_test_user_events_enabled",
-      "community": 0,
-      "community_name": ".KEYCLOAK_REALM",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": ".test_user_events_enabled()"
     },
     {
@@ -4514,8 +4624,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "tests_test_keycloak_events_rationale_18",
-      "community": 0,
-      "community_name": ".KEYCLOAK_REALM",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "poll_admin_events should return a list (possibly empty)."
     },
     {
@@ -4525,8 +4635,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "tests_test_keycloak_events_rationale_24",
-      "community": 0,
-      "community_name": ".KEYCLOAK_REALM",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "keycloak 26 requires yyyy-mm-dd date format. this test verifies the fix by: 1...."
     },
     {
@@ -4547,8 +4657,8 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "tests_test_keycloak_events_rationale_55",
-      "community": 0,
-      "community_name": ".KEYCLOAK_REALM",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "verify type=admin is not sent (keycloak 26 rejects it)."
     },
     {
@@ -4558,8 +4668,8 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "tests_test_keycloak_events_rationale_70",
-      "community": 0,
-      "community_name": ".KEYCLOAK_REALM",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "verify admineventsenabled is true on the production realm."
     },
     {
@@ -4569,8 +4679,8 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "tests_test_keycloak_events_rationale_76",
-      "community": 0,
-      "community_name": ".KEYCLOAK_REALM",
+      "community": 23,
+      "community_name": "test_keycloak_events.py",
       "norm_label": "verify eventsenabled is true on the production realm."
     },
     {
@@ -4581,7 +4691,7 @@
       "_origin": "ast",
       "id": "tests_test_oidc_config",
       "community": 17,
-      "community_name": "test_oidc_config.py",
+      "community_name": "fixtures.py",
       "norm_label": "test_oidc_config.py"
     },
     {
@@ -5017,7 +5127,7 @@
       "label": "TestHasRoleEvents",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L36",
+      "source_location": "L37",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testhasroleevents",
       "community": 12,
@@ -5028,7 +5138,7 @@
       "label": "._event()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L39",
+      "source_location": "L40",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testhasroleevents_event",
       "community": 12,
@@ -5039,7 +5149,7 @@
       "label": ".test_detects_create_role_event()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L42",
+      "source_location": "L43",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testhasroleevents_test_detects_create_role_event",
       "community": 12,
@@ -5050,7 +5160,7 @@
       "label": ".test_detects_update_role_event()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L45",
+      "source_location": "L46",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testhasroleevents_test_detects_update_role_event",
       "community": 12,
@@ -5061,7 +5171,7 @@
       "label": ".test_detects_delete_role_event()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L48",
+      "source_location": "L49",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testhasroleevents_test_detects_delete_role_event",
       "community": 12,
@@ -5072,7 +5182,7 @@
       "label": ".test_ignores_login_events()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L51",
+      "source_location": "L52",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testhasroleevents_test_ignores_login_events",
       "community": 12,
@@ -5083,7 +5193,7 @@
       "label": ".test_ignores_empty_list()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L54",
+      "source_location": "L55",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testhasroleevents_test_ignores_empty_list",
       "community": 12,
@@ -5094,7 +5204,7 @@
       "label": ".test_ignores_role_view_event()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L57",
+      "source_location": "L58",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testhasroleevents_test_ignores_role_view_event",
       "community": 12,
@@ -5105,7 +5215,7 @@
       "label": ".test_mixed_events_returns_true()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L61",
+      "source_location": "L62",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testhasroleevents_test_mixed_events_returns_true",
       "community": 12,
@@ -5116,7 +5226,7 @@
       "label": "TestGenerateDenyRules",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L73",
+      "source_location": "L74",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testgeneratedenyrules",
       "community": 7,
@@ -5127,7 +5237,7 @@
       "label": ".test_generates_rules_for_roles_with_paths()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L75",
+      "source_location": "L76",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testgeneratedenyrules_test_generates_rules_for_roles_with_paths",
       "community": 7,
@@ -5138,7 +5248,7 @@
       "label": ".test_skips_roles_without_paths()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L85",
+      "source_location": "L88",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testgeneratedenyrules_test_skips_roles_without_paths",
       "community": 7,
@@ -5149,7 +5259,7 @@
       "label": ".test_rule_structure()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L95",
+      "source_location": "L99",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testgeneratedenyrules_test_rule_structure",
       "community": 7,
@@ -5160,7 +5270,7 @@
       "label": ".test_rule_uses_custom_message()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L121",
+      "source_location": "L125",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testgeneratedenyrules_test_rule_uses_custom_message",
       "community": 7,
@@ -5171,7 +5281,7 @@
       "label": ".test_empty_roles_returns_no_rules()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L131",
+      "source_location": "L135",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testgeneratedenyrules_test_empty_roles_returns_no_rules",
       "community": 7,
@@ -5182,7 +5292,7 @@
       "label": ".test_all_empty_paths_returns_no_rules()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L134",
+      "source_location": "L143",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testgeneratedenyrules_test_all_empty_paths_returns_no_rules",
       "community": 7,
@@ -5190,10 +5300,32 @@
       "norm_label": ".test_all_empty_paths_returns_no_rules()"
     },
     {
+      "label": ".test_api_paths_go_to_api_rules()",
+      "file_type": "code",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L157",
+      "_origin": "ast",
+      "id": "tests_test_pure_functions_testgeneratedenyrules_test_api_paths_go_to_api_rules",
+      "community": 7,
+      "community_name": "helpers.py",
+      "norm_label": ".test_api_paths_go_to_api_rules()"
+    },
+    {
+      "label": ".test_mixed_paths_split_correctly()",
+      "file_type": "code",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L167",
+      "_origin": "ast",
+      "id": "tests_test_pure_functions_testgeneratedenyrules_test_mixed_paths_split_correctly",
+      "community": 7,
+      "community_name": "helpers.py",
+      "norm_label": ".test_mixed_paths_split_correctly()"
+    },
+    {
       "label": "TestGetMenusForRoles",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L149",
+      "source_location": "L189",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testgetmenusforroles",
       "community": 7,
@@ -5204,7 +5336,7 @@
       "label": ".test_aggregates_menus_for_single_role()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L151",
+      "source_location": "L191",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testgetmenusforroles_test_aggregates_menus_for_single_role",
       "community": 7,
@@ -5215,7 +5347,7 @@
       "label": ".test_aggregates_menus_for_multiple_roles()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L158",
+      "source_location": "L198",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testgetmenusforroles_test_aggregates_menus_for_multiple_roles",
       "community": 7,
@@ -5226,7 +5358,7 @@
       "label": ".test_returns_empty_for_unknown_role()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L170",
+      "source_location": "L210",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testgetmenusforroles_test_returns_empty_for_unknown_role",
       "community": 7,
@@ -5237,7 +5369,7 @@
       "label": ".test_deduplicates_menus()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L177",
+      "source_location": "L217",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testgetmenusforroles_test_deduplicates_menus",
       "community": 7,
@@ -5248,150 +5380,172 @@
       "label": "TestBuildCaddyRoutes",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L193",
+      "source_location": "L233",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testbuildcaddyroutes",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 22,
+      "community_name": "build_caddy_routes",
       "norm_label": "testbuildcaddyroutes"
     },
     {
       "label": ".test_static_assets_first()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L195",
+      "source_location": "L235",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testbuildcaddyroutes_test_static_assets_first",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 22,
+      "community_name": "build_caddy_routes",
       "norm_label": ".test_static_assets_first()"
     },
     {
       "label": ".test_static_assets_include_all_patterns()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L202",
+      "source_location": "L242",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testbuildcaddyroutes_test_static_assets_include_all_patterns",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 22,
+      "community_name": "build_caddy_routes",
       "norm_label": ".test_static_assets_include_all_patterns()"
     },
     {
       "label": ".test_catch_all_last()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L214",
+      "source_location": "L254",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testbuildcaddyroutes_test_catch_all_last",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 22,
+      "community_name": "build_caddy_routes",
       "norm_label": ".test_catch_all_last()"
+    },
+    {
+      "label": ".test_empty_rbac_produces_two_routes()",
+      "file_type": "code",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L262",
+      "_origin": "ast",
+      "id": "tests_test_pure_functions_testbuildcaddyroutes_test_empty_rbac_produces_two_routes",
+      "community": 22,
+      "community_name": "build_caddy_routes",
+      "norm_label": ".test_empty_rbac_produces_two_routes()"
+    },
+    {
+      "label": ".test_rbac_full_access_bypass_before_deny_rules()",
+      "file_type": "code",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L277",
+      "_origin": "ast",
+      "id": "tests_test_pure_functions_testbuildcaddyroutes_test_rbac_full_access_bypass_before_deny_rules",
+      "community": 22,
+      "community_name": "build_caddy_routes",
+      "norm_label": ".test_rbac_full_access_bypass_before_deny_rules()"
     },
     {
       "label": ".test_empty_produces_three_routes()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L222",
+      "source_location": "L291",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testbuildcaddyroutes_test_empty_produces_three_routes",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 22,
+      "community_name": "build_caddy_routes",
       "norm_label": ".test_empty_produces_three_routes()"
     },
     {
       "label": ".test_deny_rules_inserted_correctly()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L227",
+      "source_location": "L296",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testbuildcaddyroutes_test_deny_rules_inserted_correctly",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 22,
+      "community_name": "build_caddy_routes",
       "norm_label": ".test_deny_rules_inserted_correctly()"
     },
     {
       "label": ".test_route_order_static_deny_catch_all()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L235",
+      "source_location": "L304",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testbuildcaddyroutes_test_route_order_static_deny_catch_all",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "community": 22,
+      "community_name": "build_caddy_routes",
       "norm_label": ".test_route_order_static_deny_catch_all()"
     },
     {
       "label": "TestPushRoutesToCaddyConfigPreservation",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L253",
+      "source_location": "L322",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation",
-      "community": 22,
-      "community_name": "TestPushRoutesToCaddyConfigPreservation",
+      "community": 9,
+      "community_name": "Settings",
       "norm_label": "testpushroutestocaddyconfigpreservation"
     },
     {
       "label": ".test_config_structure_preserved()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L255",
+      "source_location": "L324",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation_test_config_structure_preserved",
-      "community": 22,
-      "community_name": "TestPushRoutesToCaddyConfigPreservation",
+      "community": 9,
+      "community_name": "Settings",
       "norm_label": ".test_config_structure_preserved()"
     },
     {
       "label": ".test_creates_missing_intermediate_keys()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L277",
+      "source_location": "L346",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation_test_creates_missing_intermediate_keys",
-      "community": 22,
-      "community_name": "TestPushRoutesToCaddyConfigPreservation",
+      "community": 9,
+      "community_name": "Settings",
       "norm_label": ".test_creates_missing_intermediate_keys()"
     },
     {
       "label": ".test_preserves_existing_internal_server_config()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L299",
+      "source_location": "L368",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation_test_preserves_existing_internal_server_config",
-      "community": 22,
-      "community_name": "TestPushRoutesToCaddyConfigPreservation",
+      "community": 9,
+      "community_name": "Settings",
       "norm_label": ".test_preserves_existing_internal_server_config()"
     },
     {
       "label": ".test_patch_not_put_is_used()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L314",
+      "source_location": "L383",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation_test_patch_not_put_is_used",
-      "community": 22,
-      "community_name": "TestPushRoutesToCaddyConfigPreservation",
+      "community": 9,
+      "community_name": "Settings",
       "norm_label": ".test_patch_not_put_is_used()"
     },
     {
       "label": ".test_fetches_config_before_pushing()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L320",
+      "source_location": "L390",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation_test_fetches_config_before_pushing",
-      "community": 22,
-      "community_name": "TestPushRoutesToCaddyConfigPreservation",
+      "community": 9,
+      "community_name": "Settings",
       "norm_label": ".test_fetches_config_before_pushing()"
     },
     {
       "label": "TestRoleEventTypes",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L332",
+      "source_location": "L403",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testroleeventtypes",
       "community": 7,
@@ -5402,7 +5556,7 @@
       "label": "._event_in_types()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L335",
+      "source_location": "L406",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testroleeventtypes_event_in_types",
       "community": 7,
@@ -5413,7 +5567,7 @@
       "label": "._event_not_in_types()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L340",
+      "source_location": "L411",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testroleeventtypes_event_not_in_types",
       "community": 7,
@@ -5424,7 +5578,7 @@
       "label": ".test_role_event_types_contains_required()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L344",
+      "source_location": "L415",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testroleeventtypes_test_role_event_types_contains_required",
       "community": 7,
@@ -5435,7 +5589,7 @@
       "label": ".test_role_event_types_does_not_contain_non_triggering()",
       "file_type": "code",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L347",
+      "source_location": "L418",
       "_origin": "ast",
       "id": "tests_test_pure_functions_testroleeventtypes_test_role_event_types_does_not_contain_non_triggering",
       "community": 7,
@@ -5446,9 +5600,9 @@
       "label": "VIEW on ROLE should NOT trigger re-sync.",
       "file_type": "rationale",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L58",
+      "source_location": "L59",
       "_origin": "ast",
-      "id": "tests_test_pure_functions_rationale_58",
+      "id": "tests_test_pure_functions_rationale_59",
       "community": 12,
       "community_name": "has_role_events",
       "norm_label": "view on role should not trigger re-sync."
@@ -5457,9 +5611,9 @@
       "label": "Verify the deny rule structure uses header_regexp with X-Forwarded-Groups.",
       "file_type": "rationale",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L96",
+      "source_location": "L100",
       "_origin": "ast",
-      "id": "tests_test_pure_functions_rationale_96",
+      "id": "tests_test_pure_functions_rationale_100",
       "community": 7,
       "community_name": "helpers.py",
       "norm_label": "verify the deny rule structure uses header_regexp with x-forwarded-groups."
@@ -5468,86 +5622,130 @@
       "label": "Verify message from role name is used in the deny rule.",
       "file_type": "rationale",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L122",
+      "source_location": "L126",
       "_origin": "ast",
-      "id": "tests_test_pure_functions_rationale_122",
+      "id": "tests_test_pure_functions_rationale_126",
       "community": 7,
       "community_name": "helpers.py",
       "norm_label": "verify message from role name is used in the deny rule."
     },
     {
+      "label": "Paths starting with /api/ should produce API deny rules, not frontend rules.",
+      "file_type": "rationale",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L158",
+      "_origin": "ast",
+      "id": "tests_test_pure_functions_rationale_158",
+      "community": 7,
+      "community_name": "helpers.py",
+      "norm_label": "paths starting with /api/ should produce api deny rules, not frontend rules."
+    },
+    {
+      "label": "Roles with both API and non-API paths should produce rules for both.",
+      "file_type": "rationale",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L168",
+      "_origin": "ast",
+      "id": "tests_test_pure_functions_rationale_168",
+      "community": 7,
+      "community_name": "helpers.py",
+      "norm_label": "roles with both api and non-api paths should produce rules for both."
+    },
+    {
+      "label": "Empty deny rules produces 2 routes for RBAC gateway: full_access_bypass, catch-\u2026",
+      "file_type": "rationale",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L263",
+      "_origin": "ast",
+      "id": "tests_test_pure_functions_rationale_263",
+      "community": 22,
+      "community_name": "build_caddy_routes",
+      "norm_label": "empty deny rules produces 2 routes for rbac gateway: full_access_bypass, catch-..."
+    },
+    {
+      "label": "Verify full-access bypass is the first route in RBAC gateway.",
+      "file_type": "rationale",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L278",
+      "_origin": "ast",
+      "id": "tests_test_pure_functions_rationale_278",
+      "community": 22,
+      "community_name": "build_caddy_routes",
+      "norm_label": "verify full-access bypass is the first route in rbac gateway."
+    },
+    {
       "label": "Empty deny rules produces 3 routes: static_assets, full_access_bypass, catch-\u2026",
       "file_type": "rationale",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L223",
+      "source_location": "L292",
       "_origin": "ast",
-      "id": "tests_test_pure_functions_rationale_223",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "id": "tests_test_pure_functions_rationale_292",
+      "community": 22,
+      "community_name": "build_caddy_routes",
       "norm_label": "empty deny rules produces 3 routes: static_assets, full_access_bypass, catch-..."
     },
     {
       "label": "Deny rules inserted between full_access_bypass and catch-all.",
       "file_type": "rationale",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L228",
+      "source_location": "L297",
       "_origin": "ast",
-      "id": "tests_test_pure_functions_rationale_228",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "id": "tests_test_pure_functions_rationale_297",
+      "community": 22,
+      "community_name": "build_caddy_routes",
       "norm_label": "deny rules inserted between full_access_bypass and catch-all."
     },
     {
       "label": "Verify the route order: static assets, full_access_bypass, deny rules, catch-\u2026",
       "file_type": "rationale",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L236",
+      "source_location": "L305",
       "_origin": "ast",
-      "id": "tests_test_pure_functions_rationale_236",
-      "community": 1,
-      "community_name": "rbac_sync/__init__.py",
+      "id": "tests_test_pure_functions_rationale_305",
+      "community": 22,
+      "community_name": "build_caddy_routes",
       "norm_label": "verify the route order: static assets, full_access_bypass, deny rules, catch-..."
     },
     {
       "label": "Verify the config manipulation preserves structure.",
       "file_type": "rationale",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L256",
+      "source_location": "L325",
       "_origin": "ast",
-      "id": "tests_test_pure_functions_rationale_256",
-      "community": 22,
-      "community_name": "TestPushRoutesToCaddyConfigPreservation",
+      "id": "tests_test_pure_functions_rationale_325",
+      "community": 9,
+      "community_name": "Settings",
       "norm_label": "verify the config manipulation preserves structure."
     },
     {
-      "label": "Verify push_routes_to_caddy uses requests.patch, not requests.put.",
+      "label": "Verify _push_routes_to_caddy uses requests.patch, not requests.put.",
       "file_type": "rationale",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L315",
+      "source_location": "L384",
       "_origin": "ast",
-      "id": "tests_test_pure_functions_rationale_315",
-      "community": 22,
-      "community_name": "TestPushRoutesToCaddyConfigPreservation",
-      "norm_label": "verify push_routes_to_caddy uses requests.patch, not requests.put."
+      "id": "tests_test_pure_functions_rationale_384",
+      "community": 9,
+      "community_name": "Settings",
+      "norm_label": "verify _push_routes_to_caddy uses requests.patch, not requests.put."
     },
     {
-      "label": "Verify push_routes_to_caddy fetches current config before pushing.",
+      "label": "Verify _push_routes_to_caddy fetches current config before pushing.",
       "file_type": "rationale",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L321",
+      "source_location": "L391",
       "_origin": "ast",
-      "id": "tests_test_pure_functions_rationale_321",
-      "community": 22,
-      "community_name": "TestPushRoutesToCaddyConfigPreservation",
-      "norm_label": "verify push_routes_to_caddy fetches current config before pushing."
+      "id": "tests_test_pure_functions_rationale_391",
+      "community": 9,
+      "community_name": "Settings",
+      "norm_label": "verify _push_routes_to_caddy fetches current config before pushing."
     },
     {
       "label": "VIEW and LOGIN should not trigger a re-sync.",
       "file_type": "rationale",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L348",
+      "source_location": "L419",
       "_origin": "ast",
-      "id": "tests_test_pure_functions_rationale_348",
+      "id": "tests_test_pure_functions_rationale_419",
       "community": 7,
       "community_name": "helpers.py",
       "norm_label": "view and login should not trigger a re-sync."
@@ -5560,7 +5758,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "test_rbac_routes_to_keycloak.py"
     },
     {
@@ -5570,8 +5768,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_py_fixture",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 41,
+      "community_name": "live_token",
       "norm_label": "fixture"
     },
     {
@@ -5581,8 +5779,8 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_live_token",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 41,
+      "community_name": "live_token",
       "norm_label": "live_token()"
     },
     {
@@ -5648,7 +5846,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_testcreaterolewithattributes",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "testcreaterolewithattributes"
     },
     {
@@ -5659,7 +5857,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_testcreaterolewithattributes_test_create_role_with_paths_and_message",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": ".test_create_role_with_paths_and_message()"
     },
     {
@@ -5670,7 +5868,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_testcreaterolewithattributes_test_create_role_without_message",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": ".test_create_role_without_message()"
     },
     {
@@ -5681,7 +5879,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_testupdateroleattributes",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "testupdateroleattributes"
     },
     {
@@ -5692,7 +5890,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_testupdateroleattributes_test_update_existing_role_attributes",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": ".test_update_existing_role_attributes()"
     },
     {
@@ -5703,7 +5901,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_testupdateroleattributes_test_update_nonexistent_role",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": ".test_update_nonexistent_role()"
     },
     {
@@ -5714,7 +5912,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_testsyncroletokeycloak",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "testsyncroletokeycloak"
     },
     {
@@ -5725,7 +5923,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_testsyncroletokeycloak_test_sync_creates_new_role",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": ".test_sync_creates_new_role()"
     },
     {
@@ -5736,7 +5934,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_testsyncroletokeycloak_test_sync_updates_existing_role",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": ".test_sync_updates_existing_role()"
     },
     {
@@ -5747,7 +5945,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_testsyncroletokeycloak_test_sync_skips_if_not_create",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": ".test_sync_skips_if_not_create()"
     },
     {
@@ -5757,8 +5955,8 @@
       "source_location": "L275",
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_testsyncallroles",
-      "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community": 32,
+      "community_name": "sync_all_roles",
       "norm_label": "testsyncallroles"
     },
     {
@@ -5768,8 +5966,8 @@
       "source_location": "L278",
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_testsyncallroles_test_sync_all_roles_from_json",
-      "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community": 32,
+      "community_name": "sync_all_roles",
       "norm_label": ".test_sync_all_roles_from_json()"
     },
     {
@@ -5779,8 +5977,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_rationale_40",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 41,
+      "community_name": "live_token",
       "norm_label": "get a live authentication token."
     },
     {
@@ -5846,7 +6044,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_rationale_112",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "tests for creating roles with attributes."
     },
     {
@@ -5857,7 +6055,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_rationale_117",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "test creating a role with paths and message attributes."
     },
     {
@@ -5868,7 +6066,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_rationale_138",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "test creating a role without a message."
     },
     {
@@ -5879,7 +6077,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_rationale_155",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "tests for updating role attributes."
     },
     {
@@ -5890,7 +6088,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_rationale_160",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "test updating an existing role's attributes."
     },
     {
@@ -5901,7 +6099,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_rationale_186",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "test updating a role that doesn't exist."
     },
     {
@@ -5912,7 +6110,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_rationale_197",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "tests for the sync_role_to_keycloak function."
     },
     {
@@ -5923,7 +6121,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_rationale_202",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "test that sync creates a new role if it doesn't exist."
     },
     {
@@ -5934,7 +6132,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_rationale_223",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "test that sync updates an existing role."
     },
     {
@@ -5945,7 +6143,7 @@
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_rationale_251",
       "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community_name": "roles.py",
       "norm_label": "test that sync skips if role doesn't exist and create_if_missing=false."
     },
     {
@@ -5955,8 +6153,8 @@
       "source_location": "L276",
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_rationale_276",
-      "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community": 32,
+      "community_name": "sync_all_roles",
       "norm_label": "tests for the full sync flow."
     },
     {
@@ -5966,8 +6164,8 @@
       "source_location": "L281",
       "_origin": "ast",
       "id": "tests_test_rbac_routes_to_keycloak_rationale_281",
-      "community": 5,
-      "community_name": "test_rbac_routes_to_keycloak.py",
+      "community": 32,
+      "community_name": "sync_all_roles",
       "norm_label": "test syncing all roles from a json file."
     },
     {
@@ -6109,8 +6307,8 @@
       "source_location": "L210",
       "_origin": "ast",
       "id": "tests_test_routes_persistence_testrbacroutesfileconstant",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 39,
+      "community_name": "TestRBACRoutesFileConstant",
       "norm_label": "testrbacroutesfileconstant"
     },
     {
@@ -6120,8 +6318,8 @@
       "source_location": "L213",
       "_origin": "ast",
       "id": "tests_test_routes_persistence_testrbacroutesfileconstant_test_rbac_routes_file_path_exists",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 39,
+      "community_name": "TestRBACRoutesFileConstant",
       "norm_label": ".test_rbac_routes_file_path_exists()"
     },
     {
@@ -6131,8 +6329,8 @@
       "source_location": "L217",
       "_origin": "ast",
       "id": "tests_test_routes_persistence_testrbacroutesfileconstant_test_rbac_routes_file_in_docker_directory",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 39,
+      "community_name": "TestRBACRoutesFileConstant",
       "norm_label": ".test_rbac_routes_file_in_docker_directory()"
     },
     {
@@ -6285,8 +6483,8 @@
       "source_location": "L211",
       "_origin": "ast",
       "id": "tests_test_routes_persistence_rationale_211",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 39,
+      "community_name": "TestRBACRoutesFileConstant",
       "norm_label": "tests for rbac_routes_file constant."
     },
     {
@@ -6296,8 +6494,8 @@
       "source_location": "L214",
       "_origin": "ast",
       "id": "tests_test_routes_persistence_rationale_214",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 39,
+      "community_name": "TestRBACRoutesFileConstant",
       "norm_label": "rbac_routes_file should point to an existing file."
     },
     {
@@ -6307,8 +6505,8 @@
       "source_location": "L218",
       "_origin": "ast",
       "id": "tests_test_routes_persistence_rationale_218",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 39,
+      "community_name": "TestRBACRoutesFileConstant",
       "norm_label": "rbac_routes_file should be in the docker directory."
     },
     {
@@ -6329,8 +6527,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_sync_flow",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 12,
+      "community_name": "has_role_events",
       "norm_label": "test_sync_flow.py"
     },
     {
@@ -6428,8 +6626,8 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "tests_test_sync_flow_testsyncflowintegration",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 12,
+      "community_name": "has_role_events",
       "norm_label": "testsyncflowintegration"
     },
     {
@@ -6439,8 +6637,8 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "tests_test_sync_flow_testsyncflowintegration_test_poll_and_sync_runs",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 12,
+      "community_name": "has_role_events",
       "norm_label": ".test_poll_and_sync_runs()"
     },
     {
@@ -6450,8 +6648,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_test_sync_flow_py_fixture",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 12,
+      "community_name": "has_role_events",
       "norm_label": "fixture"
     },
     {
@@ -6461,8 +6659,8 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "tests_test_sync_flow_live_token",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 12,
+      "community_name": "has_role_events",
       "norm_label": "live_token()"
     },
     {
@@ -6472,8 +6670,8 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "tests_test_sync_flow_rationale_58",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 12,
+      "community_name": "has_role_events",
       "norm_label": "poll_and_sync() runs without exceptions (hits live keycloak + caddy)."
     },
     {
@@ -6483,8 +6681,8 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "tests_test_sync_flow_rationale_72",
-      "community": 6,
-      "community_name": "authenticate",
+      "community": 12,
+      "community_name": "has_role_events",
       "norm_label": "get a live authentication token."
     },
     {
@@ -7885,7 +8083,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L57",
+      "source_location": "L62",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_initial_sync",
@@ -7897,7 +8095,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L101",
+      "source_location": "L113",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
@@ -8506,7 +8704,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L63",
+      "source_location": "L68",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_initial_sync",
@@ -8518,7 +8716,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L161",
+      "source_location": "L173",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
@@ -12443,6 +12641,18 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
+      "target": "rbac_sync_caddy_routes_build_rbac_routes",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "rbac_sync/__init__.py",
+      "source_location": "L55",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "rbac_sync_init",
       "target": "rbac_sync_caddy_routes_generate_deny_rules",
       "confidence_score": 1.0
     },
@@ -12467,7 +12677,7 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
-      "target": "rbac_sync_caddy_routes_push_routes_to_caddy",
+      "target": "rbac_sync_caddy_routes_verify_caddy_routes",
       "confidence_score": 1.0
     },
     {
@@ -12479,7 +12689,7 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
-      "target": "rbac_sync_caddy_routes_verify_caddy_routes",
+      "target": "rbac_sync_caddy_routes_verify_rbac_routes",
       "confidence_score": 1.0
     },
     {
@@ -12499,7 +12709,7 @@
       "context": "export",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L63",
+      "source_location": "L65",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12511,7 +12721,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L63",
+      "source_location": "L65",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12523,7 +12733,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L63",
+      "source_location": "L65",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12535,7 +12745,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L63",
+      "source_location": "L65",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12547,7 +12757,7 @@
       "context": "export",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L87",
+      "source_location": "L89",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12559,7 +12769,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L87",
+      "source_location": "L89",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12631,7 +12841,7 @@
       "context": "export",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L69",
+      "source_location": "L71",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12643,7 +12853,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L69",
+      "source_location": "L71",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12655,7 +12865,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L69",
+      "source_location": "L71",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12667,7 +12877,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L69",
+      "source_location": "L71",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12679,7 +12889,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L69",
+      "source_location": "L71",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12691,7 +12901,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L69",
+      "source_location": "L71",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12703,7 +12913,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L69",
+      "source_location": "L71",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12715,7 +12925,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L69",
+      "source_location": "L71",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12727,7 +12937,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L69",
+      "source_location": "L71",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12739,7 +12949,7 @@
       "context": "export",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L80",
+      "source_location": "L82",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12751,7 +12961,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L80",
+      "source_location": "L82",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12763,7 +12973,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L80",
+      "source_location": "L82",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12775,7 +12985,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L80",
+      "source_location": "L82",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12787,7 +12997,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/__init__.py",
-      "source_location": "L80",
+      "source_location": "L82",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_init",
@@ -12809,7 +13019,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L90",
+      "source_location": "L187",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_caddy_routes",
@@ -12820,7 +13030,18 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L16",
+      "source_location": "L264",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "rbac_sync_caddy_routes",
+      "target": "rbac_sync_caddy_routes_build_rbac_routes",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L59",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_caddy_routes",
@@ -12831,7 +13052,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L69",
+      "source_location": "L166",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_caddy_routes",
@@ -12842,7 +13063,29 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L167",
+      "source_location": "L23",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "rbac_sync_caddy_routes",
+      "target": "rbac_sync_caddy_routes_is_api_path",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L33",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "rbac_sync_caddy_routes",
+      "target": "rbac_sync_caddy_routes_load_fallback_roles",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L359",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_caddy_routes",
@@ -12853,7 +13096,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L213",
+      "source_location": "L382",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_caddy_routes",
@@ -12861,11 +13104,22 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L396",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "rbac_sync_caddy_routes",
+      "target": "rbac_sync_caddy_routes_verify_rbac_routes",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L11",
+      "source_location": "L14",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_caddy_routes",
@@ -12896,13 +13150,59 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L96",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "rbac_sync_caddy_routes_generate_deny_rules",
+      "target": "rbac_sync_caddy_routes_is_api_path",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L17",
+      "source_location": "L24",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "rbac_sync_caddy_routes_rationale_17",
+      "source": "rbac_sync_caddy_routes_rationale_24",
+      "target": "rbac_sync_caddy_routes_is_api_path",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L79",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "rbac_sync_caddy_routes_generate_deny_rules",
+      "target": "rbac_sync_caddy_routes_load_fallback_roles",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L34",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "rbac_sync_caddy_routes_rationale_34",
+      "target": "rbac_sync_caddy_routes_load_fallback_roles",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L60",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "rbac_sync_caddy_routes_rationale_60",
       "target": "rbac_sync_caddy_routes_generate_deny_rules",
       "confidence_score": 1.0
     },
@@ -12923,7 +13223,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L70",
+      "source_location": "L75",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_initial_sync",
@@ -12935,7 +13235,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L165",
+      "source_location": "L177",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
@@ -12960,7 +13260,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L141",
+      "source_location": "L153",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules_test_all_empty_paths_returns_no_rules",
@@ -12972,7 +13272,19 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L132",
+      "source_location": "L162",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions_testgeneratedenyrules_test_api_paths_go_to_api_rules",
+      "target": "rbac_sync_caddy_routes_generate_deny_rules"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L139",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules_test_empty_roles_returns_no_rules",
@@ -12984,7 +13296,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L82",
+      "source_location": "L83",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules_test_generates_rules_for_roles_with_paths",
@@ -12996,7 +13308,19 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L100",
+      "source_location": "L177",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions_testgeneratedenyrules_test_mixed_paths_split_correctly",
+      "target": "rbac_sync_caddy_routes_generate_deny_rules"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L104",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules_test_rule_structure",
@@ -13008,7 +13332,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L126",
+      "source_location": "L130",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules_test_rule_uses_custom_message",
@@ -13020,7 +13344,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L92",
+      "source_location": "L95",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules_test_skips_roles_without_paths",
@@ -13030,10 +13354,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L73",
+      "source_location": "L170",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "rbac_sync_caddy_routes_rationale_73",
+      "source": "rbac_sync_caddy_routes_rationale_170",
       "target": "rbac_sync_caddy_routes_get_menus_for_roles",
       "confidence_score": 1.0
     },
@@ -13055,7 +13379,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L165",
+      "source_location": "L205",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgetmenusforroles_test_aggregates_menus_for_multiple_roles",
@@ -13067,7 +13391,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L155",
+      "source_location": "L195",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgetmenusforroles_test_aggregates_menus_for_single_role",
@@ -13079,7 +13403,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L184",
+      "source_location": "L224",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgetmenusforroles_test_deduplicates_menus",
@@ -13091,7 +13415,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L174",
+      "source_location": "L214",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgetmenusforroles_test_returns_empty_for_unknown_role",
@@ -13101,10 +13425,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L91",
+      "source_location": "L188",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "rbac_sync_caddy_routes_rationale_91",
+      "source": "rbac_sync_caddy_routes_rationale_188",
       "target": "rbac_sync_caddy_routes_build_caddy_routes",
       "confidence_score": 1.0
     },
@@ -13125,7 +13449,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L73",
+      "source_location": "L81",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_initial_sync",
@@ -13137,7 +13461,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L166",
+      "source_location": "L178",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
@@ -13162,7 +13486,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L215",
+      "source_location": "L255",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testbuildcaddyroutes_test_catch_all_last",
@@ -13174,7 +13498,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L230",
+      "source_location": "L299",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testbuildcaddyroutes_test_deny_rules_inserted_correctly",
@@ -13186,7 +13510,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L224",
+      "source_location": "L293",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testbuildcaddyroutes_test_empty_produces_three_routes",
@@ -13198,7 +13522,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L238",
+      "source_location": "L307",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testbuildcaddyroutes_test_route_order_static_deny_catch_all",
@@ -13210,7 +13534,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L196",
+      "source_location": "L236",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testbuildcaddyroutes_test_static_assets_first",
@@ -13222,33 +13546,21 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L203",
+      "source_location": "L243",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testbuildcaddyroutes_test_static_assets_include_all_patterns",
       "target": "rbac_sync_caddy_routes_build_caddy_routes"
     },
     {
-      "relation": "indirect_call",
-      "context": "argument",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L188",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "rbac_sync_caddy_routes_push_routes_to_caddy",
-      "target": "settings_settings_caddy_admin_url"
-    },
-    {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L168",
+      "source_location": "L265",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "rbac_sync_caddy_routes_rationale_168",
-      "target": "rbac_sync_caddy_routes_push_routes_to_caddy",
+      "source": "rbac_sync_caddy_routes_rationale_265",
+      "target": "rbac_sync_caddy_routes_build_rbac_routes",
       "confidence_score": 1.0
     },
     {
@@ -13260,7 +13572,7 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator",
-      "target": "rbac_sync_caddy_routes_push_routes_to_caddy",
+      "target": "rbac_sync_caddy_routes_build_rbac_routes",
       "confidence_score": 1.0
     },
     {
@@ -13268,11 +13580,11 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L76",
+      "source_location": "L82",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_initial_sync",
-      "target": "rbac_sync_caddy_routes_push_routes_to_caddy",
+      "target": "rbac_sync_caddy_routes_build_rbac_routes",
       "confidence_score": 1.0
     },
     {
@@ -13280,11 +13592,11 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L168",
+      "source_location": "L179",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
-      "target": "rbac_sync_caddy_routes_push_routes_to_caddy",
+      "target": "rbac_sync_caddy_routes_build_rbac_routes",
       "confidence_score": 1.0
     },
     {
@@ -13293,6 +13605,88 @@
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
       "source_location": "L18",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions",
+      "target": "rbac_sync_caddy_routes_build_rbac_routes",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L264",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions_testbuildcaddyroutes_test_empty_rbac_produces_two_routes",
+      "target": "rbac_sync_caddy_routes_build_rbac_routes"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L280",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions_testbuildcaddyroutes_test_rbac_full_access_bypass_before_deny_rules",
+      "target": "rbac_sync_caddy_routes_build_rbac_routes"
+    },
+    {
+      "relation": "indirect_call",
+      "context": "argument",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L372",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "rbac_sync_caddy_routes_push_routes_to_caddy",
+      "target": "settings_settings_caddy_admin_url"
+    },
+    {
+      "relation": "indirect_call",
+      "context": "argument",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L376",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "rbac_sync_caddy_routes_push_routes_to_caddy",
+      "target": "settings_settings_caddy_rbac_admin_url"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L309",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "rbac_sync_caddy_routes_rationale_309",
+      "target": "rbac_sync_caddy_routes_push_routes_to_caddy",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L360",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "rbac_sync_caddy_routes_rationale_360",
+      "target": "rbac_sync_caddy_routes_push_routes_to_caddy",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L385",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions",
@@ -13305,7 +13699,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L322",
+      "source_location": "L393",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation_test_fetches_config_before_pushing",
@@ -13317,7 +13711,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L316",
+      "source_location": "L386",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation_test_patch_not_put_is_used",
@@ -13327,11 +13721,22 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/caddy_routes.py",
-      "source_location": "L214",
+      "source_location": "L383",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "rbac_sync_caddy_routes_rationale_214",
+      "source": "rbac_sync_caddy_routes_rationale_383",
       "target": "rbac_sync_caddy_routes_verify_caddy_routes",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "rbac_sync/caddy_routes.py",
+      "source_location": "L397",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "rbac_sync_caddy_routes_rationale_397",
+      "target": "rbac_sync_caddy_routes_verify_rbac_routes",
       "confidence_score": 1.0
     },
     {
@@ -13549,7 +13954,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L119",
+      "source_location": "L131",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
@@ -13644,7 +14049,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L154",
+      "source_location": "L166",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
@@ -13669,7 +14074,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L43",
+      "source_location": "L44",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents_test_detects_create_role_event",
@@ -13681,7 +14086,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L49",
+      "source_location": "L50",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents_test_detects_delete_role_event",
@@ -13693,7 +14098,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L46",
+      "source_location": "L47",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents_test_detects_update_role_event",
@@ -13705,7 +14110,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L55",
+      "source_location": "L56",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents_test_ignores_empty_list",
@@ -13717,7 +14122,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L52",
+      "source_location": "L53",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents_test_ignores_login_events",
@@ -13729,7 +14134,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L59",
+      "source_location": "L60",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents_test_ignores_role_view_event",
@@ -13741,7 +14146,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L62",
+      "source_location": "L63",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents_test_mixed_events_returns_true",
@@ -13859,7 +14264,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L146",
+      "source_location": "L158",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
@@ -14019,7 +14424,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L37",
+      "source_location": "L42",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator",
@@ -14159,7 +14564,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L37",
+      "source_location": "L42",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator",
@@ -14171,7 +14576,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L80",
+      "source_location": "L92",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_initial_sync",
@@ -14183,7 +14588,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L172",
+      "source_location": "L185",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
@@ -14447,7 +14852,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L148",
+      "source_location": "L160",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
@@ -14505,7 +14910,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L85",
+      "source_location": "L97",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_initial_sync",
@@ -14517,7 +14922,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L143",
+      "source_location": "L155",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
@@ -14552,7 +14957,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L48",
+      "source_location": "L53",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_initial_sync",
@@ -14587,7 +14992,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L115",
+      "source_location": "L127",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
@@ -14622,7 +15027,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L139",
+      "source_location": "L151",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
@@ -14657,7 +15062,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L122",
+      "source_location": "L134",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
@@ -14692,7 +15097,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L138",
+      "source_location": "L150",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
@@ -14703,7 +15108,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L42",
+      "source_location": "L47",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator",
@@ -14714,7 +15119,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L92",
+      "source_location": "L104",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator",
@@ -14725,7 +15130,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L243",
+      "source_location": "L256",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator",
@@ -14736,7 +15141,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L184",
+      "source_location": "L197",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator",
@@ -14760,7 +15165,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L67",
+      "source_location": "L72",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_initial_sync",
@@ -14770,10 +15175,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L43",
+      "source_location": "L48",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "rbac_sync_sync_orchestrator_rationale_43",
+      "source": "rbac_sync_sync_orchestrator_rationale_48",
       "target": "rbac_sync_sync_orchestrator_initial_sync",
       "confidence_score": 1.0
     },
@@ -14782,7 +15187,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L259",
+      "source_location": "L272",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_run_sync_service",
@@ -14795,7 +15200,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L108",
+      "source_location": "L120",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_poll_and_sync",
@@ -14805,10 +15210,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L93",
+      "source_location": "L105",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "rbac_sync_sync_orchestrator_rationale_93",
+      "source": "rbac_sync_sync_orchestrator_rationale_105",
       "target": "rbac_sync_sync_orchestrator_poll_and_sync",
       "confidence_score": 1.0
     },
@@ -14817,7 +15222,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L270",
+      "source_location": "L283",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_run_sync_service",
@@ -14852,10 +15257,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L185",
+      "source_location": "L198",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "rbac_sync_sync_orchestrator_rationale_185",
+      "source": "rbac_sync_sync_orchestrator_rationale_198",
       "target": "rbac_sync_sync_orchestrator_wait_for_dependencies",
       "confidence_score": 1.0
     },
@@ -14864,7 +15269,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L253",
+      "source_location": "L266",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_run_sync_service",
@@ -14875,10 +15280,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L244",
+      "source_location": "L257",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "rbac_sync_sync_orchestrator_rationale_244",
+      "source": "rbac_sync_sync_orchestrator_rationale_257",
       "target": "rbac_sync_sync_orchestrator_run_sync_service",
       "confidence_score": 1.0
     },
@@ -14888,7 +15293,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L250",
+      "source_location": "L263",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_run_sync_service",
@@ -14900,7 +15305,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L249",
+      "source_location": "L262",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_run_sync_service",
@@ -14912,7 +15317,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L248",
+      "source_location": "L261",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_run_sync_service",
@@ -14924,7 +15329,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "rbac_sync/sync_orchestrator.py",
-      "source_location": "L251",
+      "source_location": "L264",
       "weight": 1.0,
       "_origin": "ast",
       "source": "rbac_sync_sync_orchestrator_run_sync_service",
@@ -15050,7 +15455,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "settings.py",
-      "source_location": "L67",
+      "source_location": "L71",
       "weight": 1.0,
       "_origin": "ast",
       "source": "settings_settings",
@@ -15072,7 +15477,18 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "settings.py",
-      "source_location": "L102",
+      "source_location": "L47",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "settings_settings",
+      "target": "settings_settings_caddy_rbac_admin_url",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "settings.py",
+      "source_location": "L106",
       "weight": 1.0,
       "_origin": "ast",
       "source": "settings_settings",
@@ -15083,7 +15499,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "settings.py",
-      "source_location": "L97",
+      "source_location": "L101",
       "weight": 1.0,
       "_origin": "ast",
       "source": "settings_settings",
@@ -15138,7 +15554,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "settings.py",
-      "source_location": "L62",
+      "source_location": "L66",
       "weight": 1.0,
       "_origin": "ast",
       "source": "settings_settings",
@@ -15149,7 +15565,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "settings.py",
-      "source_location": "L85",
+      "source_location": "L89",
       "weight": 1.0,
       "_origin": "ast",
       "source": "settings_settings",
@@ -15160,7 +15576,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "settings.py",
-      "source_location": "L81",
+      "source_location": "L85",
       "weight": 1.0,
       "_origin": "ast",
       "source": "settings_settings",
@@ -15171,7 +15587,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "settings.py",
-      "source_location": "L76",
+      "source_location": "L80",
       "weight": 1.0,
       "_origin": "ast",
       "source": "settings_settings",
@@ -15182,7 +15598,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "settings.py",
-      "source_location": "L72",
+      "source_location": "L76",
       "weight": 1.0,
       "_origin": "ast",
       "source": "settings_settings",
@@ -15193,7 +15609,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "settings.py",
-      "source_location": "L53",
+      "source_location": "L57",
       "weight": 1.0,
       "_origin": "ast",
       "source": "settings_settings",
@@ -15204,7 +15620,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "settings.py",
-      "source_location": "L58",
+      "source_location": "L62",
       "weight": 1.0,
       "_origin": "ast",
       "source": "settings_settings",
@@ -15215,7 +15631,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "settings.py",
-      "source_location": "L93",
+      "source_location": "L97",
       "weight": 1.0,
       "_origin": "ast",
       "source": "settings_settings",
@@ -15226,7 +15642,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "settings.py",
-      "source_location": "L48",
+      "source_location": "L52",
       "weight": 1.0,
       "_origin": "ast",
       "source": "settings_settings",
@@ -15237,7 +15653,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "settings.py",
-      "source_location": "L89",
+      "source_location": "L93",
       "weight": 1.0,
       "_origin": "ast",
       "source": "settings_settings",
@@ -15876,7 +16292,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L28",
+      "source_location": "L29",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions",
@@ -16101,7 +16517,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L28",
+      "source_location": "L29",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions",
@@ -16545,7 +16961,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L27",
+      "source_location": "L28",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions",
@@ -16592,7 +17008,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L27",
+      "source_location": "L28",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions",
@@ -16605,7 +17021,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L135",
+      "source_location": "L144",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules_test_all_empty_paths_returns_no_rules",
@@ -16617,7 +17033,19 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L76",
+      "source_location": "L159",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions_testgeneratedenyrules_test_api_paths_go_to_api_rules",
+      "target": "tests_helpers_make_roles_with_attrs"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L77",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules_test_generates_rules_for_roles_with_paths",
@@ -16629,7 +17057,19 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L97",
+      "source_location": "L169",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions_testgeneratedenyrules_test_mixed_paths_split_correctly",
+      "target": "tests_helpers_make_roles_with_attrs"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L101",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules_test_rule_structure",
@@ -16641,7 +17081,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L123",
+      "source_location": "L127",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules_test_rule_uses_custom_message",
@@ -16653,7 +17093,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L86",
+      "source_location": "L89",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules_test_skips_roles_without_paths",
@@ -16665,7 +17105,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L159",
+      "source_location": "L199",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgetmenusforroles_test_aggregates_menus_for_multiple_roles",
@@ -16677,7 +17117,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L152",
+      "source_location": "L192",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgetmenusforroles_test_aggregates_menus_for_single_role",
@@ -16689,7 +17129,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L178",
+      "source_location": "L218",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgetmenusforroles_test_deduplicates_menus",
@@ -16701,7 +17141,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L171",
+      "source_location": "L211",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgetmenusforroles_test_returns_empty_for_unknown_role",
@@ -18813,7 +19253,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L193",
+      "source_location": "L233",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions",
@@ -18824,7 +19264,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L73",
+      "source_location": "L74",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions",
@@ -18835,7 +19275,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L149",
+      "source_location": "L189",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions",
@@ -18846,7 +19286,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L36",
+      "source_location": "L37",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions",
@@ -18857,7 +19297,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L253",
+      "source_location": "L322",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions",
@@ -18868,7 +19308,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L332",
+      "source_location": "L403",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions",
@@ -18879,7 +19319,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L39",
+      "source_location": "L40",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents",
@@ -18890,7 +19330,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L42",
+      "source_location": "L43",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents",
@@ -18901,7 +19341,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L48",
+      "source_location": "L49",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents",
@@ -18912,7 +19352,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L45",
+      "source_location": "L46",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents",
@@ -18923,7 +19363,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L54",
+      "source_location": "L55",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents",
@@ -18934,7 +19374,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L51",
+      "source_location": "L52",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents",
@@ -18945,7 +19385,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L57",
+      "source_location": "L58",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents",
@@ -18956,7 +19396,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L61",
+      "source_location": "L62",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents",
@@ -18968,7 +19408,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L43",
+      "source_location": "L44",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents_test_detects_create_role_event",
@@ -18980,7 +19420,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L49",
+      "source_location": "L50",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents_test_detects_delete_role_event",
@@ -18992,7 +19432,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L46",
+      "source_location": "L47",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents_test_detects_update_role_event",
@@ -19004,7 +19444,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L52",
+      "source_location": "L53",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents_test_ignores_login_events",
@@ -19016,7 +19456,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L59",
+      "source_location": "L60",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents_test_ignores_role_view_event",
@@ -19028,7 +19468,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L63",
+      "source_location": "L64",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testhasroleevents_test_mixed_events_returns_true",
@@ -19039,10 +19479,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L58",
+      "source_location": "L59",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "tests_test_pure_functions_rationale_58",
+      "source": "tests_test_pure_functions_rationale_59",
       "target": "tests_test_pure_functions_testhasroleevents_test_ignores_role_view_event",
       "confidence_score": 1.0
     },
@@ -19050,7 +19490,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L134",
+      "source_location": "L143",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules",
@@ -19061,7 +19501,18 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L131",
+      "source_location": "L157",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions_testgeneratedenyrules",
+      "target": "tests_test_pure_functions_testgeneratedenyrules_test_api_paths_go_to_api_rules",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L135",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules",
@@ -19072,7 +19523,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L75",
+      "source_location": "L76",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules",
@@ -19083,7 +19534,18 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L95",
+      "source_location": "L167",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions_testgeneratedenyrules",
+      "target": "tests_test_pure_functions_testgeneratedenyrules_test_mixed_paths_split_correctly",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L99",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules",
@@ -19094,7 +19556,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L121",
+      "source_location": "L125",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules",
@@ -19105,7 +19567,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L85",
+      "source_location": "L88",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgeneratedenyrules",
@@ -19116,10 +19578,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L96",
+      "source_location": "L100",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "tests_test_pure_functions_rationale_96",
+      "source": "tests_test_pure_functions_rationale_100",
       "target": "tests_test_pure_functions_testgeneratedenyrules_test_rule_structure",
       "confidence_score": 1.0
     },
@@ -19127,18 +19589,40 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L122",
+      "source_location": "L126",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "tests_test_pure_functions_rationale_122",
+      "source": "tests_test_pure_functions_rationale_126",
       "target": "tests_test_pure_functions_testgeneratedenyrules_test_rule_uses_custom_message",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L158",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions_rationale_158",
+      "target": "tests_test_pure_functions_testgeneratedenyrules_test_api_paths_go_to_api_rules",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L168",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions_rationale_168",
+      "target": "tests_test_pure_functions_testgeneratedenyrules_test_mixed_paths_split_correctly",
       "confidence_score": 1.0
     },
     {
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L158",
+      "source_location": "L198",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgetmenusforroles",
@@ -19149,7 +19633,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L151",
+      "source_location": "L191",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgetmenusforroles",
@@ -19160,7 +19644,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L177",
+      "source_location": "L217",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgetmenusforroles",
@@ -19171,7 +19655,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L170",
+      "source_location": "L210",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testgetmenusforroles",
@@ -19182,7 +19666,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L214",
+      "source_location": "L254",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testbuildcaddyroutes",
@@ -19193,7 +19677,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L227",
+      "source_location": "L296",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testbuildcaddyroutes",
@@ -19204,11 +19688,44 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L222",
+      "source_location": "L291",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testbuildcaddyroutes",
       "target": "tests_test_pure_functions_testbuildcaddyroutes_test_empty_produces_three_routes",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L262",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions_testbuildcaddyroutes",
+      "target": "tests_test_pure_functions_testbuildcaddyroutes_test_empty_rbac_produces_two_routes",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L277",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions_testbuildcaddyroutes",
+      "target": "tests_test_pure_functions_testbuildcaddyroutes_test_rbac_full_access_bypass_before_deny_rules",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L304",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions_testbuildcaddyroutes",
+      "target": "tests_test_pure_functions_testbuildcaddyroutes_test_route_order_static_deny_catch_all",
       "confidence_score": 1.0
     },
     {
@@ -19219,17 +19736,6 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testbuildcaddyroutes",
-      "target": "tests_test_pure_functions_testbuildcaddyroutes_test_route_order_static_deny_catch_all",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "tests/test_pure_functions.py",
-      "source_location": "L195",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "tests_test_pure_functions_testbuildcaddyroutes",
       "target": "tests_test_pure_functions_testbuildcaddyroutes_test_static_assets_first",
       "confidence_score": 1.0
     },
@@ -19237,7 +19743,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L202",
+      "source_location": "L242",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testbuildcaddyroutes",
@@ -19248,10 +19754,32 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L223",
+      "source_location": "L263",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "tests_test_pure_functions_rationale_223",
+      "source": "tests_test_pure_functions_rationale_263",
+      "target": "tests_test_pure_functions_testbuildcaddyroutes_test_empty_rbac_produces_two_routes",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L278",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions_rationale_278",
+      "target": "tests_test_pure_functions_testbuildcaddyroutes_test_rbac_full_access_bypass_before_deny_rules",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_pure_functions.py",
+      "source_location": "L292",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_pure_functions_rationale_292",
       "target": "tests_test_pure_functions_testbuildcaddyroutes_test_empty_produces_three_routes",
       "confidence_score": 1.0
     },
@@ -19259,10 +19787,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L228",
+      "source_location": "L297",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "tests_test_pure_functions_rationale_228",
+      "source": "tests_test_pure_functions_rationale_297",
       "target": "tests_test_pure_functions_testbuildcaddyroutes_test_deny_rules_inserted_correctly",
       "confidence_score": 1.0
     },
@@ -19270,10 +19798,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L236",
+      "source_location": "L305",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "tests_test_pure_functions_rationale_236",
+      "source": "tests_test_pure_functions_rationale_305",
       "target": "tests_test_pure_functions_testbuildcaddyroutes_test_route_order_static_deny_catch_all",
       "confidence_score": 1.0
     },
@@ -19281,7 +19809,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L255",
+      "source_location": "L324",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation",
@@ -19292,7 +19820,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L277",
+      "source_location": "L346",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation",
@@ -19303,7 +19831,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L320",
+      "source_location": "L390",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation",
@@ -19314,7 +19842,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L314",
+      "source_location": "L383",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation",
@@ -19325,7 +19853,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L299",
+      "source_location": "L368",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation",
@@ -19336,10 +19864,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L256",
+      "source_location": "L325",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "tests_test_pure_functions_rationale_256",
+      "source": "tests_test_pure_functions_rationale_325",
       "target": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation_test_config_structure_preserved",
       "confidence_score": 1.0
     },
@@ -19347,10 +19875,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L315",
+      "source_location": "L384",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "tests_test_pure_functions_rationale_315",
+      "source": "tests_test_pure_functions_rationale_384",
       "target": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation_test_patch_not_put_is_used",
       "confidence_score": 1.0
     },
@@ -19358,10 +19886,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L321",
+      "source_location": "L391",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "tests_test_pure_functions_rationale_321",
+      "source": "tests_test_pure_functions_rationale_391",
       "target": "tests_test_pure_functions_testpushroutestocaddyconfigpreservation_test_fetches_config_before_pushing",
       "confidence_score": 1.0
     },
@@ -19369,7 +19897,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L335",
+      "source_location": "L406",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testroleeventtypes",
@@ -19380,7 +19908,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L340",
+      "source_location": "L411",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testroleeventtypes",
@@ -19391,7 +19919,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L344",
+      "source_location": "L415",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testroleeventtypes",
@@ -19402,7 +19930,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L347",
+      "source_location": "L418",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testroleeventtypes",
@@ -19414,7 +19942,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L345",
+      "source_location": "L416",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testroleeventtypes_test_role_event_types_contains_required",
@@ -19426,7 +19954,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L349",
+      "source_location": "L420",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_pure_functions_testroleeventtypes_test_role_event_types_does_not_contain_non_triggering",
@@ -19437,10 +19965,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pure_functions.py",
-      "source_location": "L348",
+      "source_location": "L419",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "tests_test_pure_functions_rationale_348",
+      "source": "tests_test_pure_functions_rationale_419",
       "target": "tests_test_pure_functions_testroleeventtypes_test_role_event_types_does_not_contain_non_triggering",
       "confidence_score": 1.0
     },
@@ -21214,5 +21742,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "1637d23ccc38af2357ca07b4a5be1139d84d24d4"
+  "built_at_commit": "97dc2dabfe00384f6e2400dda88932c0e5116132"
 }
