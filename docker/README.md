@@ -274,9 +274,46 @@ This creates:
 
 **Important:** Keycloak 26 always generates a random client secret (ignoring any value passed in the request). The `keycloak_setup.py` script handles this automatically by reading back the generated secrets after client creation, printing them to stdout, and updating `docker/.env` with `OIDC_CLIENT_SECRET` and `CLIENT_API_CLIENT_SECRET`.
 
+### Sync Role Attributes to Keycloak
+
+After the initial Keycloak setup, the roles exist in Keycloak but **without attributes** (paths, messages). The `rbac_routes_to_keycloak.py` script reads `docker/rbac_routes.json` and injects the `paths` and `message` attributes into each Keycloak role.
+
+**When to run:**
+- After initial Keycloak setup (`keycloak_setup.py`)
+- When `rbac_routes.json` has been modified (new roles, paths, or messages)
+
+**Run via Docker (recommended):**
+
+```bash
+docker run --rm --network docker_app-network \
+  -v "$(pwd)/docker":/work python:3.12-slim \
+  bash -c "cd /work && pip install requests pydantic -q && python3 rbac_routes_to_keycloak.py"
+```
+
+**Run locally (with Keycloak URL override):**
+
+```bash
+cd docker
+KEYCLOAK_URL=http://localhost:8080/auth python rbac_routes_to_keycloak.py
+```
+
+This updates each role in Keycloak with:
+- `paths` — The paths protected by the role (from `rbac_routes.json`)
+- `message` — The access denied message for the role
+
+### Full Setup Sequence
+
+The complete order of operations to bootstrap the RBAC system:
+
+1. **Start services:** `docker compose up -d`
+2. **Wait for Keycloak to be ready:** `docker compose logs -f keycloak`
+3. **Run Keycloak setup:** (see "Initial Keycloak Configuration" above)
+4. **Inject role attributes:** (see "Sync Role Attributes to Keycloak" above)
+5. **Restart services:** (see "Restart Services After Setup" below)
+
 ### Restart Services After Setup
 
-After running the setup script, restart oauth2-proxy instances and role-sync to pick up the updated client secrets:
+After running the setup scripts, restart oauth2-proxy instances and role-sync to pick up the updated client secrets and role attributes:
 
 ```bash
 docker compose restart oidc-main oidc-two role-sync
@@ -314,14 +351,21 @@ To completely reset and regenerate the Keycloak configuration from scratch:
    ```
    Wait until you see the server is ready.
 
-6. **Run the setup script:**
+6. **Run the Keycloak setup:**
    ```bash
    docker run --rm --network docker_app-network \
      -v "$(pwd)/docker":/work python:3.12-slim \
      bash -c "cd /work && pip install requests pydantic -q && python3 keycloak_setup.py keycloak 8080"
    ```
 
-7. **Restart oauth2-proxy and role-sync:**
+7. **Inject role attributes:**
+   ```bash
+   docker run --rm --network docker_app-network \
+     -v "$(pwd)/docker":/work python:3.12-slim \
+     bash -c "cd /work && pip install requests pydantic -q && python3 rbac_routes_to_keycloak.py"
+   ```
+
+8. **Restart oauth2-proxy and role-sync:**
    ```bash
    docker compose restart oidc-main oidc-two role-sync
    ```

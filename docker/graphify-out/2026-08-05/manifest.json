@@ -1,0 +1,242 @@
+{
+  "debug/keycloak_debug_events.py": {
+    "mtime": 1785314017.29282,
+    "ast_hash": "7a9bf62226f18ecf01f007d0936e2bd2",
+    "semantic_hash": ""
+  },
+  "debug/keycloak_diagnose.py": {
+    "mtime": 1785314017.2933488,
+    "ast_hash": "baf43e694190cce88388c798a0faa807",
+    "semantic_hash": ""
+  },
+  "install-cert-linux.sh": {
+    "mtime": 1784786871.9655058,
+    "ast_hash": "2b0ce40feb2405ac2af5f4d77402e937",
+    "semantic_hash": ""
+  },
+  "install-cert-macos.sh": {
+    "mtime": 1784786871.9657688,
+    "ast_hash": "be526712e37355f17ce00a289cbd1bdf",
+    "semantic_hash": ""
+  },
+  "install-cert-windows.ps1": {
+    "mtime": 1784786871.9660354,
+    "ast_hash": "71c28bdf205d71a78e9aad38f0d62ba3",
+    "semantic_hash": ""
+  },
+  "keycloak_common.py": {
+    "mtime": 1785851135.4278286,
+    "ast_hash": "3d7a3a4f4f519f24c11656d9e546582e",
+    "semantic_hash": ""
+  },
+  "keycloak_setup.py": {
+    "mtime": 1785852981.69665,
+    "ast_hash": "c260e30fe6f2965b6f823fe12d72a428",
+    "semantic_hash": ""
+  },
+  "keycloak_setup/__init__.py": {
+    "mtime": 1785860812.7849867,
+    "ast_hash": "082d77c25d83ef12e56078c3adb3a797",
+    "semantic_hash": ""
+  },
+  "keycloak_setup/assignments.py": {
+    "mtime": 1785864550.8894787,
+    "ast_hash": "6717e7525aeb88927496fa91b996368b",
+    "semantic_hash": ""
+  },
+  "keycloak_setup/auth.py": {
+    "mtime": 1785867656.3062153,
+    "ast_hash": "9e1a492b0e754bd4f567f41dc482c20f",
+    "semantic_hash": ""
+  },
+  "keycloak_setup/claims.py": {
+    "mtime": 1785864594.7758698,
+    "ast_hash": "c9ae3adf8ecf14982646a0aa56597954",
+    "semantic_hash": ""
+  },
+  "keycloak_setup/clients.py": {
+    "mtime": 1785864571.0970788,
+    "ast_hash": "d007a15d760b00e56a4039ea4222e78a",
+    "semantic_hash": ""
+  },
+  "keycloak_setup/config.py": {
+    "mtime": 1785866017.1196074,
+    "ast_hash": "9943b626f02b2c5d8b1e34f7dc35099e",
+    "semantic_hash": ""
+  },
+  "keycloak_setup/env_update.py": {
+    "mtime": 1785864613.5531883,
+    "ast_hash": "0b1b3555078b91ce1988fab40fac38e6",
+    "semantic_hash": ""
+  },
+  "keycloak_setup/events.py": {
+    "mtime": 1785867453.701781,
+    "ast_hash": "32a56442d08939cc4b7c3a2e7ed083e7",
+    "semantic_hash": ""
+  },
+  "keycloak_setup/realms.py": {
+    "mtime": 1785867127.489708,
+    "ast_hash": "24569a6a7e82a1aae89ec97bcaf903a4",
+    "semantic_hash": ""
+  },
+  "keycloak_setup/roles.py": {
+    "mtime": 1785868071.2603557,
+    "ast_hash": "866d659c7e5bea22fc0e0bf310ff1edb",
+    "semantic_hash": ""
+  },
+  "keycloak_setup/summary.py": {
+    "mtime": 1785864653.629527,
+    "ast_hash": "60f7c16707de90973a56ad97c25b0bd5",
+    "semantic_hash": ""
+  },
+  "keycloak_setup/users.py": {
+    "mtime": 1785868099.9714477,
+    "ast_hash": "2e3117ca41f051525bc436f9e3610bc4",
+    "semantic_hash": ""
+  },
+  "rbac_file.py": {
+    "mtime": 1785865565.801983,
+    "ast_hash": "60cfd193cd19b2961b4327dd98094f1e",
+    "semantic_hash": ""
+  },
+  "rbac_models.py": {
+    "mtime": 1785865538.527465,
+    "ast_hash": "7720db2d992f26820071d10b9ebbb264",
+    "semantic_hash": ""
+  },
+  "rbac_routes.json": {
+    "mtime": 1785864819.268421,
+    "ast_hash": "ef7f1d6dc6174e9a98ac0539f2992ec7",
+    "semantic_hash": ""
+  },
+  "rbac_routes_to_keycloak.py": {
+    "mtime": 1785918987.9517267,
+    "ast_hash": "7bea98a30add69794356421da0a3abed",
+    "semantic_hash": ""
+  },
+  "rbac_sync/__init__.py": {
+    "mtime": 1785918975.8860517,
+    "ast_hash": "90766c05b88a778963ec2d366d6170a8",
+    "semantic_hash": ""
+  },
+  "rbac_sync/caddy_routes.py": {
+    "mtime": 1785857875.3366225,
+    "ast_hash": "47c3b71d507756d57400cddb4e217add",
+    "semantic_hash": ""
+  },
+  "rbac_sync/config.py": {
+    "mtime": 1785865629.0520492,
+    "ast_hash": "3f8ac2e3bc42671dca7c90908d365fac",
+    "semantic_hash": ""
+  },
+  "rbac_sync/event_polling.py": {
+    "mtime": 1785857941.6613965,
+    "ast_hash": "7c7758b99d0a3415de295be91d9c6af7",
+    "semantic_hash": ""
+  },
+  "rbac_sync/role_operations.py": {
+    "mtime": 1785869927.0549552,
+    "ast_hash": "db81f4a21af0e0974d717f5c9be58bda",
+    "semantic_hash": ""
+  },
+  "rbac_sync/routes_persistence.py": {
+    "mtime": 1785868627.7399435,
+    "ast_hash": "c8a9dfbcef3afbe559e6cb262edb84e7",
+    "semantic_hash": ""
+  },
+  "rbac_sync/session_management.py": {
+    "mtime": 1785858071.5750668,
+    "ast_hash": "748a314188a01b88accf6cbfb1819846",
+    "semantic_hash": ""
+  },
+  "rbac_sync/sync_orchestrator.py": {
+    "mtime": 1785868638.924488,
+    "ast_hash": "10114cd5488cd7d4b37d32601df9675e",
+    "semantic_hash": ""
+  },
+  "role_sync.py": {
+    "mtime": 1785865771.0966854,
+    "ast_hash": "82bf53913d72670aaaa4071689391f5b",
+    "semantic_hash": ""
+  },
+  "settings.py": {
+    "mtime": 1785865142.1811068,
+    "ast_hash": "58eddd424fe3f7d696f176e8bfaf76ed",
+    "semantic_hash": ""
+  },
+  "tests/conftest.py": {
+    "mtime": 1785869814.0656583,
+    "ast_hash": "d92ad813479b8647d3f663b653eb9c41",
+    "semantic_hash": ""
+  },
+  "tests/fixtures.py": {
+    "mtime": 1785870615.2126863,
+    "ast_hash": "c5b8e492ad64565d2c2fb2a286472ffd",
+    "semantic_hash": ""
+  },
+  "tests/helpers.py": {
+    "mtime": 1785870579.63253,
+    "ast_hash": "70cb184145f64d07f88304b98bd0f6e7",
+    "semantic_hash": ""
+  },
+  "tests/test_event_persistence.py": {
+    "mtime": 1785873117.5765486,
+    "ast_hash": "da9d88352785d7a4ad28dc5c833bda9e",
+    "semantic_hash": ""
+  },
+  "tests/test_keycloak_auth.py": {
+    "mtime": 1785867690.9612107,
+    "ast_hash": "c364070bfc838bcfb739bf028e49ac1a",
+    "semantic_hash": ""
+  },
+  "tests/test_keycloak_events.py": {
+    "mtime": 1785867467.4285476,
+    "ast_hash": "912c5b0f4add9b422ef41d89fac2b0b4",
+    "semantic_hash": ""
+  },
+  "tests/test_oidc_config.py": {
+    "mtime": 1785870758.054439,
+    "ast_hash": "50b4e956bdba4ada335714e1076a61c5",
+    "semantic_hash": ""
+  },
+  "tests/test_pure_functions.py": {
+    "mtime": 1785870823.4368215,
+    "ast_hash": "a648c8394f045ff4d72b402084897382",
+    "semantic_hash": ""
+  },
+  "tests/test_rbac_routes_to_keycloak.py": {
+    "mtime": 1785873161.3738732,
+    "ast_hash": "6aeb0983cda367003bbb6af2e7109364",
+    "semantic_hash": ""
+  },
+  "tests/test_routes_persistence.py": {
+    "mtime": 1785868667.0854273,
+    "ast_hash": "5a051726c50fe167782b94d3805e5449",
+    "semantic_hash": ""
+  },
+  "tests/test_sync_flow.py": {
+    "mtime": 1785871042.12044,
+    "ast_hash": "2468a059f98b358b174defc52fea93eb",
+    "semantic_hash": ""
+  },
+  "tests/test_valkey_session.py": {
+    "mtime": 1785873191.260868,
+    "ast_hash": "46c990b88bf066baf563c9e0d1a50b55",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1785919597.3633106,
+    "ast_hash": "cc1d73a72790d29d1057ecdd83497d9e",
+    "semantic_hash": ""
+  },
+  "docker-compose.pytest.yaml": {
+    "mtime": 1785315602.9037957,
+    "ast_hash": "d906b02ddd6c3caff0daf880edb646f7",
+    "semantic_hash": ""
+  },
+  "docker-compose.yaml": {
+    "mtime": 1785333510.8957965,
+    "ast_hash": "f43e76bfdaab428a6b4a1b4a657bb8db",
+    "semantic_hash": ""
+  }
+}
