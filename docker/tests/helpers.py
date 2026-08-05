@@ -284,16 +284,19 @@ def sample_rbac_json() -> list[dict[str, Any]]:
         {
             "role": "test:role1",
             "paths": ["/test1", "/test1/*"],
+            "menus": ["test1"],
             "message": "Access denied for test1",
         },
         {
             "role": "test:role2",
             "paths": ["/test2"],
+            "menus": [],
             "message": "Access denied for test2",
         },
         {
             "role": "test:role3",
             "paths": ["/test3/a", "/test3/b", "/test3/c"],
+            "menus": [],
             "message": "",
         },
     ]

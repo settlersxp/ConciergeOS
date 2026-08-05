@@ -79,17 +79,28 @@ def _authenticate_admin() -> str:
 
 
 def _fetch_roles_with_attrs(token: str) -> dict[str, dict[str, list[str]]]:
-    """Fetch all roles with their attributes from Keycloak Admin API."""
+    """Fetch all roles with their attributes from Keycloak Admin API.
+
+    NOTE: Keycloak's list endpoint does NOT return role attributes.
+    We must fetch each role individually via GET /roles/{name}.
+    """
     import requests as sync_requests
-    resp = sync_requests.get(
-        f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/roles",
-        headers={"Authorization": f"Bearer {token}"},
-    )
+    headers = {"Authorization": f"Bearer {token}"}
+    base = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
+
+    # Step 1: Get list of role names
+    resp = sync_requests.get(f"{base}/roles", headers=headers)
     resp.raise_for_status()
+
     result: dict[str, dict[str, list[str]]] = {}
+    # Step 2: Fetch each role individually to get attributes
     for role in resp.json():
         name = role["name"]
-        attrs = role.get("attributes") or {}
+        detail = sync_requests.get(f"{base}/roles/{name}", headers=headers)
+        if detail.status_code == 200:
+            attrs = detail.json().get("attributes") or {}
+        else:
+            attrs = {}
         result[name] = {
             "paths": attrs.get("paths", []),
             "menus": attrs.get("menus", []),

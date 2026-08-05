@@ -7,6 +7,7 @@
       "/api/settings",
       "/api/settings/*"
     ],
+    "menus": ["settings"],
     "message": "Access denied: /settings requires the settings:view role."
   },
   {
@@ -15,6 +16,7 @@
       "/api/models",
       "/api/models/*"
     ],
+    "menus": [],
     "message": "Access denied: /api/models requires the models:admin role."
   },
   {
@@ -28,6 +30,7 @@
       "/api/prompt-groups",
       "/api/prompt-groups/*"
     ],
+    "menus": ["prompts", "prompt-groups"],
     "message": "Access denied: prompt resources require the prompts:admin role."
   },
   {
@@ -38,6 +41,7 @@
       "/api/performance-testing",
       "/api/performance-testing/*"
     ],
+    "menus": ["performance-dashboard"],
     "message": "Access denied: performance resources require the performance:view role."
   },
   {
@@ -49,6 +53,7 @@
       "/api/performance-testing/generate-*",
       "/api/performance-testing/validate-guests"
     ],
+    "menus": [],
     "message": "Access denied: performance test execution requires the performance:run role."
   },
   {
@@ -58,6 +63,7 @@
       "/api/reservations",
       "/api/reservations/*"
     ],
+    "menus": ["reservations"],
     "message": "Access denied: /reservations requires the reservations:view role."
   },
   {
@@ -65,6 +71,7 @@
     "paths": [
       "/api/reservations/shift"
     ],
+    "menus": [],
     "message": "Access denied: shifting reservations requires the reservations:write role."
   },
   {
@@ -72,6 +79,7 @@
     "paths": [
       "/api/guest-search"
     ],
+    "menus": [],
     "message": "Access denied: guest search requires the guest-search:view role."
   },
   {
@@ -79,6 +87,7 @@
     "paths": [
       "/api/guest-search/extract-name"
     ],
+    "menus": [],
     "message": "Access denied: name extraction requires the guest-search:extract role."
   }
 ]

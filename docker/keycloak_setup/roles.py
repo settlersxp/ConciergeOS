@@ -220,27 +220,33 @@ def create_all_roles(token: str) -> dict[str, dict[str, str]]:
 
 
 def create_role_with_attributes(
-    token: str, realm: str, role_name: str, paths: list[str], message: str
+    token: str, realm: str, role_name: str, paths: list[str], menus: list[str], message: str
 ) -> bool:
-    """Create a new role with paths and message attributes.
+    """Create a new role with paths, menus, and message attributes.
 
     Args:
         token: Admin access token
         realm: Realm name
         role_name: Name of the role to create
         paths: List of path patterns
+        menus: List of frontend menu identifiers this role unlocks
         message: Custom 403 message
 
     Returns:
         True if successful, False otherwise
     """
+    attributes: dict[str, list[str]] = {
+        "paths": paths,
+    }
+    if menus:
+        attributes["menus"] = menus
+    if message:
+        attributes["message"] = [message]
+
     payload = {
         "name": role_name,
         "description": f"Role for {role_name}",
-        "attributes": {
-            "paths": paths,
-            "message": [message] if message else [],
-        },
+        "attributes": attributes,
     }
 
     resp = kc_request("POST", f"/admin/realms/{realm}/roles", token, payload)
@@ -258,15 +264,16 @@ def create_role_with_attributes(
 
 
 def update_role_attributes(
-    token: str, realm: str, role_name: str, paths: list[str], message: str
+    token: str, realm: str, role_name: str, paths: list[str], menus: list[str], message: str
 ) -> bool:
-    """Update an existing role's paths and message attributes.
+    """Update an existing role's paths, menus, and message attributes.
 
     Args:
         token: Admin access token
         realm: Realm name
         role_name: Name of the role to update
         paths: List of path patterns
+        menus: List of frontend menu identifiers this role unlocks
         message: Custom 403 message
 
     Returns:
@@ -278,16 +285,22 @@ def update_role_attributes(
         logger.error("  Role not found: %s", role_name)
         return False
 
+    # Build attributes dict
+    attributes: dict[str, list[str]] = {
+        "paths": paths,
+    }
+    if menus:
+        attributes["menus"] = menus
+    if message:
+        attributes["message"] = [message]
+
     # Build the updated payload with all existing fields plus new attributes
     payload = {
         "name": role_name,
         "description": role_data.get("description", f"Role for {role_name}"),
         "composite": role_data.get("composite", False),
         "composites": role_data.get("composites"),
-        "attributes": {
-            "paths": paths,
-            "message": [message] if message else [],
-        },
+        "attributes": attributes,
     }
 
     # Remove None values
@@ -312,13 +325,14 @@ def sync_role_to_keycloak(
         token: Admin access token
         realm: Realm name
         role_name: Name of the role
-        config: Role configuration with paths and message
+        config: Role configuration with paths, menus, and message
         create_if_missing: Whether to create role if it doesn't exist
 
     Returns:
         Tuple of (success: bool, action: str)
     """
     paths = config["paths"]
+    menus = config.get("menus", [])
     message = config["message"]
 
     # Check if role exists
@@ -326,12 +340,12 @@ def sync_role_to_keycloak(
 
     if role_data:
         # Update existing role
-        success = update_role_attributes(token, realm, role_name, paths, message)
+        success = update_role_attributes(token, realm, role_name, paths, menus, message)
         return success, "updated" if success else "failed"
     else:
         # Create new role if requested
         if create_if_missing:
-            success = create_role_with_attributes(token, realm, role_name, paths, message)
+            success = create_role_with_attributes(token, realm, role_name, paths, menus, message)
             return success, "created" if success else "failed"
         else:
             logger.warning("  Role not found and create_if_missing=False: %s", role_name)

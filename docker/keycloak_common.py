@@ -91,20 +91,31 @@ def fetch_all_roles(token: str, realm: str | None = None) -> set[str]:
 def fetch_all_roles_with_attrs(token: str, realm: str | None = None) -> dict[str, dict[str, list[str]]]:
     """Fetch all roles with their attributes from the given realm (defaults to settings.KEYCLOAK_REALM).
 
-    Returns {role_name: {"paths": [...], "menus": [...]}}.
+    Returns {role_name: {"paths": [...], "menus": [...], "message": [...]}}.
     Roles without attributes are included with empty lists.
+
+    NOTE: Keycloak's list endpoint does NOT return role attributes (even with shortCodes=false).
+    We must fetch each role individually via GET /roles/{name} to get attributes.
     """
     r = realm or settings.KEYCLOAK_REALM
+
+    # Step 1: Get list of role names (list endpoint doesn't include attributes)
     resp = kc_request("GET", f"/admin/realms/{r}/roles", token)
     resp.raise_for_status()
+
     result: dict[str, dict[str, list[str]]] = {}
+    # Step 2: Fetch each role individually to get attributes
     for role in resp.json():
         name = role["name"]
-        attrs = role.get("attributes") or {}
-        # Keycloak returns Map<String, List<String>>
+        detail_resp = kc_request("GET", f"/admin/realms/{r}/roles/{name}", token)
+        if detail_resp.status_code == 200:
+            attrs = detail_resp.json().get("attributes") or {}
+        else:
+            attrs = {}
         result[name] = {
             "paths": attrs.get("paths", []),
             "menus": attrs.get("menus", []),
+            "message": attrs.get("message", []),
         }
     return result
 

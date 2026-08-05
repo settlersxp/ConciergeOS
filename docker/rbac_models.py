@@ -33,12 +33,14 @@ class RBACRoute(BaseModel):
 
     Attributes:
         role: Role name (e.g., 'settings:view', 'models:admin')
-        paths: List of path patterns protected by this role
+        paths: List of path patterns protected by this role (frontend + API)
+        menus: List of menu identifiers this role unlocks in the frontend
         message: Custom 403 denial message shown when access is denied
     """
 
     role: str = Field(..., min_length=1, description="Role name (e.g., 'settings:view')")
     paths: list[str] = Field(default_factory=list, description="Protected path patterns")
+    menus: list[str] = Field(default_factory=list, description="Frontend menu identifiers this role unlocks")
     message: str = Field(default="", description="Custom 403 message")
 
     @property
@@ -63,6 +65,7 @@ class RBACRoute(BaseModel):
         """Return dict representation for backward compatibility."""
         return {
             "paths": self.paths,
+            "menus": self.menus,
             "message": self.message,
         }
 
@@ -158,7 +161,7 @@ class RBACRoutes(BaseModel):
 
         Args:
             roles_with_attrs: Dictionary from fetch_all_roles_with_attrs()
-                {role_name: {"paths": [...], "message": [...], ...}}
+                {role_name: {"paths": [...], "menus": [...], "message": [...], ...}}
 
         Returns:
             RBACRoutes instance
@@ -166,11 +169,12 @@ class RBACRoutes(BaseModel):
         routes = []
         for role_name, attrs in roles_with_attrs.items():
             paths = attrs.get("paths", [])
+            menus = attrs.get("menus", [])
             # Keycloak stores message as a list, extract first element if present
             message_list = attrs.get("message", [])
             message = message_list[0] if message_list else ""
 
-            routes.append(RBACRoute(role=role_name, paths=paths, message=message))
+            routes.append(RBACRoute(role=role_name, paths=paths, menus=menus, message=message))
 
         return cls(routes=routes)
 
@@ -179,11 +183,13 @@ class RBACRoutes(BaseModel):
 
         Returns:
             Dictionary suitable for setting as Keycloak role attributes:
-            {role_name: {"paths": [...], "message": [...]}}
+            {role_name: {"paths": [...], "menus": [...], "message": [...]}}
         """
         result = {}
         for route in self.routes:
             attrs: dict[str, list[str]] = {"paths": route.paths}
+            if route.menus:
+                attrs["menus"] = route.menus
             if route.message:
                 attrs["message"] = [route.message]
             result[route.role] = attrs

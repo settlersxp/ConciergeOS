@@ -574,7 +574,7 @@ def _is_api_path(path: str) -> bool:
 
 ### 5.7 Role-to-Path Mapping (`docker/rbac_routes.json`)
 
-The role-to-path mapping is a **JSON file**. It is the single source of truth for which roles protect which paths, and also serves as a fallback when Keycloak role attributes are not yet populated.
+The role-to-path mapping is a **JSON file**. It is the single source of truth for which roles protect which paths, which frontend menus are visible, and also serves as a fallback when Keycloak role attributes are not yet populated.
 
 **Schema:**
 
@@ -586,10 +586,34 @@ The role-to-path mapping is a **JSON file**. It is the single source of truth fo
       "<path_pattern>",
       "<path_pattern>"
     ],
+    "menus": [
+      "<menu_identifier>"
+    ],
     "message": "Custom 403 message"
   }
 ]
 ```
+
+**Field descriptions:**
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `role` | Keycloak role name | `settings:view` |
+| `paths` | Path patterns enforced by Caddy (frontend + API) | `/settings`, `/api/settings` |
+| `menus` | Frontend menu identifiers this role unlocks | `settings`, `prompts` |
+| `message` | Custom 403 denial message | `Access denied: ...` |
+
+**How `menus` controls frontend navigation visibility:**
+
+The `menus` field is the bridge between Keycloak role attributes and frontend navigation. The flow:
+
+1. **Role creation:** `keycloak_setup` writes `menus` as a Keycloak role attribute
+2. **Role sync:** `rbac_sync` preserves `menus` when syncing roles between Keycloak and `rbac_routes.json`
+3. **Frontend request:** On page load, `Header.tsx` calls `/client-api/me`
+4. **Menu resolution:** The client-backend reads user roles from `X-Forwarded-Groups`, queries Keycloak Admin API for role attributes (including `menus`), and aggregates menu identifiers across all user roles
+5. **Menu filtering:** The frontend filters its navigation links against the returned `menus` array
+
+Roles that only protect API endpoints (e.g., `reservations:write`, `guest-search:view`, `performance:run`) have an empty `menus: []` array since they do not correspond to a visible page.
 
 **Current mappings:**
 
