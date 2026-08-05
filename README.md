@@ -58,14 +58,27 @@ ConciergeOS/
 │   ├── alembic.ini             # Migration configuration
 │   ├── data/                   # Exported data files
 │   └── database.db             # SQLite database (auto-created)
+├── client_backend/             # Keycloak OIDC client (role sync, auth)
 ├── frontend/                   # React + TypeScript + Vite SPA
 │   └── src/                    # Source code
-└── docs/                       # Technical documentation
+├── docker/                     # Docker Compose, Caddy proxy, Keycloak, oauth2-proxy
+├── docs/                       # Technical documentation
+└── graphify-out/               # Codebase graph (Graphify output)
 ```
 
 ## 📖 Documentation
 
 For a complete list of documentation, see [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md).
+
+| Document | Description |
+|----------|-------------|
+| [Graphify](docs/IMPLEMENTATION_GRAPHIFY.md) | Codebase graph extraction and navigation |
+| [RBAC](docs/IMPLEMENTATION_RBAC.md) | Role-based access control with Keycloak, oauth2-proxy, and Caddy |
+| [Performance Dashboard](docs/IMPLEMENTATION_PERFORMANCE_DASHBOARD.md) | Performance testing dashboard |
+| [Prompt Versioning](docs/IMPLEMENTATION_PROMPT_VERSIONING.md) | Prompt versioning, CRUD, and structured storage |
+| [Prompting System](docs/IMPLEMENTATION_PROMPTING_SYSTEM.md) | Prompt chain execution and tool calling |
+| [LLM Model Management](docs/IMPLEMENTATION_LLM_MODEL_MANAGEMENT.md) | LLM model configuration and management |
+| [Chain Pages](docs/IMPLEMENTATION_SPEC_CHAIN_PAGES.md) | Chain pages specification |
 
 ## 🛠️ Development
 
