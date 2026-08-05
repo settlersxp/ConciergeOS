@@ -5,24 +5,22 @@
 ```
 Browser → Caddy (443)
          ├─ /auth/*        → Keycloak (8080)
-         ├─ /app1/*        → oauth2-proxy oidc     (4180) → frontend (80)
-         ├─ /app2/*        → oauth2-proxy oidc     (4180) → frontend-two (80)
-         ├─ /oauth2/*      → oauth2-proxy oidc     (4180)
-         ├─ /client-api/*  → oauth2-proxy oidc-client-api (4186) → client-backend (8000)
-         ├─ /api/*         → oauth2-proxy oidc-api (4184) → backend (8000)
-         └─ default        → oauth2-proxy oidc     (4180) → frontend (80)
+         └─ everything else → oauth2-proxy oidc (4180)
+                                  ├─ /api/*        → backend (8000)
+                                  ├─ /client-api/* → client-backend (8000)
+                                  └─ default       → frontend (80)
 ```
+
+A single oauth2-proxy instance handles all authenticated routes using path-based upstream routing.
 
 ### Services
 
 | Service | Image | Port | Description |
 |---------|-------|------|-------------|
-| **Caddy** | `caddy:2-alpine` | 80, 443, 2019 (admin) | Reverse proxy & HTTPS terminator using internal CA. Routes `/auth/*` to Keycloak, app routes and OAuth2 callbacks to oauth2-proxy instances, `/client-api/*` to oidc-client-api, `/api/*` to oidc-api. Admin API exposed on port 2019 for the role-sync service. |
-| **oauth2-proxy (oidc)** | `oauth2-proxy:v7.15.3` | 4180 | Handles OIDC authentication for frontend apps (App1, App2, root). Extracts user roles from access token via `realm_access.roles` claim and passes them through `X-Forwarded-Groups` header. Sessions stored in Valkey. |
-| **oauth2-proxy (oidc-api)** | `oauth2-proxy:v7.15.3` | 4184 | Handles OIDC authentication for backend API. Forwards authenticated requests to backend. |
-| **oauth2-proxy (oidc-client-api)** | `oauth2-proxy:v7.15.3` | 4186 | Handles OIDC authentication for client-backend. Forwards authenticated requests to client-backend. |
+| **Caddy** | `caddy:2-alpine` | 80, 443, 2019 (admin) | Reverse proxy & HTTPS terminator using internal CA. Routes `/auth/*` to Keycloak, all other traffic to the single oauth2-proxy instance. Admin API exposed on port 2019 for the role-sync service. |
+| **oauth2-proxy (oidc)** | `oauth2-proxy:v7.15.3` | 4180 | Single instance handling OIDC authentication for all routes. Uses path-based upstream routing: `/api/*` → backend, `/client-api/*` → client-backend, default → frontend. Extracts user roles from access token via `realm_access.roles` claim and passes them through `X-Forwarded-Groups` header. Sessions stored in Valkey. |
 | **role-sync** | `concos-role-sync:latest` | N/A | Background service that polls Keycloak's Admin Events API to detect role changes, regenerates Caddy deny rules, and pushes them via the Caddy Admin API. Also persists role attributes to `rbac_routes.json`. |
-| **valkey** | `valkey/valkey:8-alpine` | 6379 | Redis-compatible session store used by oauth2-proxy instances for session persistence and invalidation. |
+| **valkey** | `valkey/valkey:8-alpine` | 6379 | Redis-compatible session store used by oauth2-proxy for session persistence and invalidation. |
 | **frontend** | `concos-frontend:latest` | 80 | Node.js static file server (App1) serving the Vite SPA build. |
 | **frontend-two** | `concos-frontend-two:latest` | 80 | Node.js static file server (App2) serving a second tenant instance of the Vite SPA build (built with `BASE_URL=/app2`). |
 | **client-backend** | `concos-client-backend:latest` | 8000 | FastAPI service demonstrating service-to-service authentication via Keycloak (Client Credentials Grant). Exposes `/client-api/*` endpoints for health checks, token inspection, user info (RBAC menus), and backend proxying. |
@@ -314,10 +312,10 @@ The complete order of operations to bootstrap the RBAC system:
 
 ### Restart Services After Setup
 
-After running the setup scripts, restart oauth2-proxy instances and role-sync to pick up the updated client secrets and role attributes:
+After running the setup scripts, restart oauth2-proxy and role-sync to pick up the updated client secrets and role attributes:
 
 ```bash
-docker compose restart oidc oidc-api oidc-client-api role-sync
+docker compose restart oidc role-sync
 ```
 
 ### Regenerating the Keycloak Configuration
@@ -368,7 +366,7 @@ To completely reset and regenerate the Keycloak configuration from scratch:
 
 8. **Restart oauth2-proxy and role-sync:**
     ```bash
-    docker compose restart oidc oidc-api oidc-client-api role-sync
+    docker compose restart oidc role-sync
     ```
 
 ### Diagnostic Script

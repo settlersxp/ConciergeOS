@@ -1,9 +1,10 @@
 # ============================================================================
 # ConciergeOS Docker Compose
 # ============================================================================
-# Shared oauth2-proxy configuration using YAML anchors to avoid duplication.
-# Each oidc service (oidc, oidc-api, oidc-client-api) shares ~95% of config
-# and only overrides: redirect_url, upstreams, http_address, and depends_on.
+# oauth2-proxy instances handle authenticated routes:
+#   oidc            (4180) → frontend:80      (/ /app1/* /app2/*)
+#   oidc-api        (4184) → backend:8000     (/api/*)
+#   oidc-client-api (4186) → client-backend:8000 (/client-api/*)
 # ============================================================================
 
 # ─── Shared oauth2-proxy environment ────────────────────────────────────────
