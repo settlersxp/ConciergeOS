@@ -296,9 +296,9 @@ oidc {
 | Architecture complexity | High | Low |
 | Maturity | Production-tested | Active development |
 
-### Summary
+### Current Setup Summary (oauth2-proxy)
 
 - **1 Caddy instance** handles all path-based routing (optimal, already the case)
 - **3 oauth2-proxy instances** handle authentication for 3 different upstream backends (required by the library)
 - All instances **share sessions** via Valkey/Redis (single login experience)
-- Consolidation to 1 oauth2-proxy is **not possible** without replacing the library with custom code
+- Consolidation to 1 oauth2-proxy is **not possible** without replacing the library, but the [caddy-oidc alternative](#alternative-caddy-oidc) provides a viable path to eliminate all three instances
