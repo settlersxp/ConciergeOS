@@ -7,125 +7,25 @@ Validates the FULL session invalidation chain:
   oauth2-proxy returns 401 → browser redirected to Keycloak login
 """
 
-import os
-import sys
 import re
 import subprocess
 import time
 
 import requests
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-import role_sync
-import keycloak_setup
+from rbac_sync.config import VALKEY_URL, KEYCLOAK_REALM
+from rbac_sync import SESSION_KEY_PREFIX
+from settings import settings
 
-
-# ======================================================================
-# Helpers
-# ======================================================================
-
-# Public-facing URL through Caddy (self-signed cert, so verify=False)
-_PUBLIC_BASE = "https://out-customer.com"
-
-
-class _DockerExecValkeyClient:
-    """Proxy Valkey client that executes commands inside the valkey container via docker exec."""
-
-    def __init__(self):
-        self._container = "valkey"
-
-    def _exec(self, *args) -> str:
-        """Execute a valkey-cli command inside the container."""
-        cmd = ["docker", "exec", self._container, "valkey-cli"] + list(args)
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        if result.returncode != 0:
-            raise RuntimeError(f"valkey-cli failed: {result.stderr}")
-        return result.stdout.strip()
-
-    def ping(self) -> bool:
-        """PING the server."""
-        out = self._exec("PING")
-        return out == "PONG"
-
-    def scan(self, cursor: int = 0, match: str = "*", count: int = 100) -> tuple[int, list[bytes]]:
-        """SCAN for keys matching a pattern. Returns (next_cursor, [keys])."""
-        cmd = [
-            "docker", "exec", self._container, "valkey-cli",
-            "SCAN", str(cursor), "MATCH", match, "COUNT", str(count)
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        if result.returncode != 0:
-            raise RuntimeError(f"SCAN failed: {result.stderr}")
-        lines = result.stdout.strip().split("\n")
-        if not lines:
-            return (0, [])
-        next_cursor = int(lines[0])
-        keys = [line.encode() if isinstance(line, str) else line for line in lines[1:] if line]
-        return (next_cursor, keys)
-
-    def delete(self, *keys: bytes) -> int:
-        """Delete one or more keys."""
-        key_args = [k.decode() if isinstance(k, bytes) else k for k in keys]
-        out = self._exec("DEL", *key_args)
-        return int(out)
-
-    def get(self, key: bytes) -> bytes | None:
-        """Get the value of a key."""
-        k = key.decode() if isinstance(key, bytes) else key
-        out = self._exec("GET", k)
-        return out.encode() if out else None
-
-
-def _get_valkey_client():
-    """Connect to the live Valkey instance."""
-    import valkey as valkey_lib
-
-    # Try direct connection first (inside container on Docker network)
-    try:
-        r = valkey_lib.from_url(role_sync.VALKEY_URL)
-        r.ping()
-        return r
-    except Exception:
-        pass
-
-    # Fallback: connect via docker exec (from host)
-    try:
-        client = _DockerExecValkeyClient()
-        if client.ping():
-            return client
-    except Exception:
-        pass
-
-    raise RuntimeError(
-        "Cannot connect to Valkey. Ensure the Docker stack is running "
-        "and the 'valkey' container is accessible."
-    )
-
-
-def _count_oauth2_proxy_sessions(r) -> int:
-    """Count session keys matching the oauth2-proxy pattern in Valkey."""
-    count = 0
-    cursor = 0
-    pattern = f"{role_sync.SESSION_KEY_PREFIX}*"
-    while True:
-        cursor, keys = r.scan(cursor=cursor, match=pattern, count=100)
-        count += len(keys)
-        if cursor == 0:
-            break
-    return count
-
-
-def _list_oauth2_proxy_sessions(r) -> list[bytes]:
-    """List all session keys matching the oauth2-proxy pattern in Valkey."""
-    keys = []
-    cursor = 0
-    pattern = f"{role_sync.SESSION_KEY_PREFIX}*"
-    while True:
-        cursor, batch = r.scan(cursor=cursor, match=pattern, count=100)
-        keys.extend(batch)
-        if cursor == 0:
-            break
-    return keys
+from helpers import (
+    PUBLIC_BASE,
+    get_valkey_client,
+    list_oauth2_proxy_sessions,
+    count_oauth2_proxy_sessions,
+    ensure_test_user,
+    cleanup_user,
+    oauth2_login_flow,
+)
 
 
 # ======================================================================
@@ -138,13 +38,13 @@ class TestValkeyConnectivity:
 
     def test_valkey_ping(self):
         """Valkey responds to PING."""
-        r = _get_valkey_client()
+        r = get_valkey_client(VALKEY_URL)
         assert r.ping(), "Valkey PING failed"
 
     def test_valkey_session_key_pattern_exists(self, live_token):
         """After a user logs in through oauth2-proxy, session keys appear in Valkey."""
-        r = _get_valkey_client()
-        keys = _list_oauth2_proxy_sessions(r)
+        r = get_valkey_client(VALKEY_URL)
+        keys = list_oauth2_proxy_sessions(r, SESSION_KEY_PREFIX)
         assert isinstance(keys, list)
 
 
@@ -156,99 +56,49 @@ class TestValkeyConnectivity:
 class TestValkeySessionStorage:
     """Verify oauth2-proxy stores sessions in Valkey after user authentication."""
 
-    def _ensure_test_user(self, live_token, username: str, password: str) -> str | None:
-        """Create or find a test user in Keycloak."""
-        realm = role_sync.KEYCLOAK_REALM
-        base = role_sync.KEYCLOAK_URL
-        return keycloak_setup.create_user(base, live_token, realm, username, password) or None
-
     def test_session_key_appears_in_valkey_after_oauth2_login(self, live_token):
         """User login via oauth2-proxy → session key appears in Valkey."""
-        r = _get_valkey_client()
+        r = get_valkey_client(VALKEY_URL)
         username = "cof-valkey-storage-user"
         password = "ValkeyStore123!"
 
-        user_id = self._ensure_test_user(live_token, username, password)
+        user_id = ensure_test_user(live_token, KEYCLOAK_REALM, username, password)
         assert user_id, "Failed to create/find test user"
 
         try:
-            count_before = _count_oauth2_proxy_sessions(r)
+            count_before = count_oauth2_proxy_sessions(r, SESSION_KEY_PREFIX)
 
             # Authenticate through oauth2-proxy via full OIDC flow
-            sess = requests.Session()
-            sess.trust_env = False
-
-            resp = sess.get(
-                f"{_PUBLIC_BASE}/oauth2/start",
-                allow_redirects=True,
-                verify=False,
-                timeout=30,
+            sess, _ = oauth2_login_flow(
+                live_token, settings.KEYCLOAK_URL, KEYCLOAK_REALM, username, password
             )
 
-            # Submit Keycloak login form
-            form_data = {"username": username, "password": password, "credentialId": ""}
-            execution_match = re.search(r'name="execution"\s+value="([^"]+)"', resp.text)
-            if execution_match:
-                form_data["execution"] = execution_match.group(1)
-
-            action_match = re.search(r'action="([^"]+)"', resp.text)
-            if action_match:
-                form_action = action_match.group(1)
-                if form_action.startswith("/"):
-                    form_action = f"https://out-customer.com{form_action}"
-            else:
-                form_action = resp.url
-
-            sess.post(form_action, data=form_data, allow_redirects=True, verify=False, timeout=30)
             time.sleep(1)
 
+            count_after = count_oauth2_proxy_sessions(r, SESSION_KEY_PREFIX)
+            assert count_after >= count_before, \
+                f"Expected session count to increase: before={count_before}, after={count_after}"
+
         finally:
-            try:
-                requests.delete(
-                    f"{role_sync.KEYCLOAK_URL}/admin/realms/{role_sync.KEYCLOAK_REALM}/users/{user_id}",
-                    headers={"Authorization": f"Bearer {live_token}"},
-                )
-            except Exception:
-                pass
+            cleanup_user(live_token, settings.KEYCLOAK_URL, KEYCLOAK_REALM, user_id)
 
     def test_session_key_format_matches_pattern(self, live_token):
         """Session keys in Valkey match the expected oauth2-proxy format."""
-        r = _get_valkey_client()
+        r = get_valkey_client(VALKEY_URL)
         username = "cof-valkey-format-user"
         password = "ValkeyFmt123!"
 
-        user_id = self._ensure_test_user(live_token, username, password)
+        user_id = ensure_test_user(live_token, KEYCLOAK_REALM, username, password)
         assert user_id
 
         try:
-            sess = requests.Session()
-            sess.trust_env = False
-
-            resp = sess.get(
-                f"{_PUBLIC_BASE}/oauth2/start",
-                allow_redirects=True,
-                verify=False,
-                timeout=30,
+            oauth2_login_flow(
+                live_token, settings.KEYCLOAK_URL, KEYCLOAK_REALM, username, password
             )
-
-            form_data = {"username": username, "password": password, "credentialId": ""}
-            execution_match = re.search(r'name="execution"\s+value="([^"]+)"', resp.text)
-            if execution_match:
-                form_data["execution"] = execution_match.group(1)
-
-            action_match = re.search(r'action="([^"]+)"', resp.text)
-            if action_match:
-                form_action = action_match.group(1)
-                if form_action.startswith("/"):
-                    form_action = f"https://out-customer.com{form_action}"
-            else:
-                form_action = resp.url
-
-            sess.post(form_action, data=form_data, allow_redirects=True, verify=False, timeout=30)
             time.sleep(1)
 
             # Validate key format
-            keys = _list_oauth2_proxy_sessions(r)
+            keys = list_oauth2_proxy_sessions(r, SESSION_KEY_PREFIX)
             pattern = re.compile(rb"^_oauth2_proxy-[0-9a-f]{32}$")
 
             for key in keys:
@@ -256,13 +106,7 @@ class TestValkeySessionStorage:
                     f"Session key '{key.decode()}' does not match expected pattern '_oauth2_proxy-{{32-hex}}'"
 
         finally:
-            try:
-                requests.delete(
-                    f"{role_sync.KEYCLOAK_URL}/admin/realms/{role_sync.KEYCLOAK_REALM}/users/{user_id}",
-                    headers={"Authorization": f"Bearer {live_token}"},
-                )
-            except Exception:
-                pass
+            cleanup_user(live_token, settings.KEYCLOAK_URL, KEYCLOAK_REALM, user_id)
 
 
 # ======================================================================
@@ -273,48 +117,24 @@ class TestValkeySessionStorage:
 class TestValkeySessionInvalidation:
     """Verify deleting session keys from Valkey invalidates the oauth2-proxy session."""
 
-    def _ensure_test_user(self, live_token, username: str, password: str) -> str | None:
-        realm = role_sync.KEYCLOAK_REALM
-        base = role_sync.KEYCLOAK_URL
-        return keycloak_setup.create_user(base, live_token, realm, username, password) or None
-
     def test_delete_valkey_key_invalidates_oauth2_session(self, live_token):
         """Delete session key from Valkey → oauth2-proxy /oauth2/auth returns 401."""
-        r = _get_valkey_client()
+        r = get_valkey_client(VALKEY_URL)
         username = "cof-valkey-inval-user"
         password = "ValkeyInval123!"
 
-        user_id = self._ensure_test_user(live_token, username, password)
+        user_id = ensure_test_user(live_token, KEYCLOAK_REALM, username, password)
         assert user_id
 
         try:
             # PHASE 1: Authenticate through oauth2-proxy
-            sess = requests.Session()
-            sess.trust_env = False
-
-            resp = sess.get(
-                f"{_PUBLIC_BASE}/oauth2/start",
-                allow_redirects=True,
-                verify=False,
-                timeout=30,
+            sess, _ = oauth2_login_flow(
+                live_token, settings.KEYCLOAK_URL, KEYCLOAK_REALM, username, password
             )
-
-            form_data = {"username": username, "password": password, "credentialId": ""}
-            execution_match = re.search(r'name="execution"\s+value="([^"]+)"', resp.text)
-            if execution_match:
-                form_data["execution"] = execution_match.group(1)
-
-            action_match = re.search(r'action="([^"]+)"', resp.text)
-            form_action = action_match.group(1) if action_match else resp.url
-            if form_action.startswith("/"):
-                form_action = f"https://out-customer.com{form_action}"
-
-            sess.post(form_action, data=form_data, allow_redirects=True, verify=False, timeout=30)
-            time.sleep(1)
 
             # PHASE 2: Verify session is valid
             auth_resp = sess.get(
-                f"{_PUBLIC_BASE}/oauth2/auth",
+                f"{PUBLIC_BASE}/oauth2/auth",
                 verify=False,
                 timeout=10,
                 allow_redirects=False,
@@ -326,7 +146,7 @@ class TestValkeySessionInvalidation:
             assert session_cookie, "No _oauth2_proxy cookie set after login"
 
             # PHASE 3: Verify Valkey key exists
-            keys_before = _list_oauth2_proxy_sessions(r)
+            keys_before = list_oauth2_proxy_sessions(r, SESSION_KEY_PREFIX)
             assert len(keys_before) > 0, \
                 f"No session keys in Valkey after login. Cookie present but Valkey empty."
 
@@ -336,7 +156,7 @@ class TestValkeySessionInvalidation:
             time.sleep(0.5)
 
             # Verify keys are gone
-            keys_after = _list_oauth2_proxy_sessions(r)
+            keys_after = list_oauth2_proxy_sessions(r, SESSION_KEY_PREFIX)
             assert len(keys_after) == 0, \
                 f"Session keys not deleted from Valkey: {keys_after}"
 
@@ -346,7 +166,7 @@ class TestValkeySessionInvalidation:
             sess2.cookies.set("_oauth2_proxy", session_cookie, domain="out-customer.com")
 
             auth_resp2 = sess2.get(
-                f"{_PUBLIC_BASE}/oauth2/auth",
+                f"{PUBLIC_BASE}/oauth2/auth",
                 verify=False,
                 timeout=10,
                 allow_redirects=False,
@@ -357,53 +177,28 @@ class TestValkeySessionInvalidation:
                 f"Session was NOT invalidated by Valkey key deletion!"
 
         finally:
-            try:
-                requests.delete(
-                    f"{role_sync.KEYCLOAK_URL}/admin/realms/{role_sync.KEYCLOAK_REALM}/users/{user_id}",
-                    headers={"Authorization": f"Bearer {live_token}"},
-                )
-            except Exception:
-                pass
+            cleanup_user(live_token, settings.KEYCLOAK_URL, KEYCLOAK_REALM, user_id)
 
     def test_invalidate_all_sessions_function_works(self, live_token):
         """role_sync.invalidate_all_sessions() deletes all oauth2-proxy sessions from Valkey."""
-        r = _get_valkey_client()
+        r = get_valkey_client(VALKEY_URL)
         username = "cof-valkey-inval-all-user"
         password = "ValkeyInvalAll123!"
 
-        user_id = self._ensure_test_user(live_token, username, password)
+        user_id = ensure_test_user(live_token, KEYCLOAK_REALM, username, password)
         assert user_id
 
         try:
             # PHASE 1: Create session via oauth2-proxy
-            sess = requests.Session()
-            sess.trust_env = False
-
-            resp = sess.get(
-                f"{_PUBLIC_BASE}/oauth2/start",
-                allow_redirects=True,
-                verify=False,
-                timeout=30,
+            sess, _ = oauth2_login_flow(
+                live_token, settings.KEYCLOAK_URL, KEYCLOAK_REALM, username, password
             )
-
-            form_data = {"username": username, "password": password, "credentialId": ""}
-            execution_match = re.search(r'name="execution"\s+value="([^"]+)"', resp.text)
-            if execution_match:
-                form_data["execution"] = execution_match.group(1)
-
-            action_match = re.search(r'action="([^"]+)"', resp.text)
-            form_action = action_match.group(1) if action_match else resp.url
-            if form_action.startswith("/"):
-                form_action = f"https://out-customer.com{form_action}"
-
-            sess.post(form_action, data=form_data, allow_redirects=True, verify=False, timeout=30)
-            time.sleep(1)
 
             session_cookie = sess.cookies.get("_oauth2_proxy", "")
             assert session_cookie, "No _oauth2_proxy cookie after login"
 
             # PHASE 2: Verify keys exist
-            keys_before = _list_oauth2_proxy_sessions(r)
+            keys_before = list_oauth2_proxy_sessions(r, SESSION_KEY_PREFIX)
             assert len(keys_before) > 0, "No session keys in Valkey before invalidation"
             count_before = len(keys_before)
 
@@ -420,7 +215,7 @@ class TestValkeySessionInvalidation:
                 f"invalidate_all_sessions() reported 0 deleted, but {count_before} keys existed"
 
             # PHASE 4: Verify ALL keys gone
-            keys_after = _list_oauth2_proxy_sessions(r)
+            keys_after = list_oauth2_proxy_sessions(r, SESSION_KEY_PREFIX)
             assert len(keys_after) == 0, \
                 f"Keys remain after invalidate_all_sessions(): {keys_after}"
 
@@ -430,7 +225,7 @@ class TestValkeySessionInvalidation:
             sess2.cookies.set("_oauth2_proxy", session_cookie, domain="out-customer.com")
 
             auth_resp = sess2.get(
-                f"{_PUBLIC_BASE}/oauth2/auth",
+                f"{PUBLIC_BASE}/oauth2/auth",
                 verify=False,
                 timeout=10,
                 allow_redirects=False,
@@ -440,50 +235,25 @@ class TestValkeySessionInvalidation:
                 f"Expected 401/403/302 after invalidate_all_sessions(), got {auth_resp.status_code}"
 
         finally:
-            try:
-                requests.delete(
-                    f"{role_sync.KEYCLOAK_URL}/admin/realms/{role_sync.KEYCLOAK_REALM}/users/{user_id}",
-                    headers={"Authorization": f"Bearer {live_token}"},
-                )
-            except Exception:
-                pass
+            cleanup_user(live_token, settings.KEYCLOAK_URL, KEYCLOAK_REALM, user_id)
 
     def test_session_survives_when_valkey_key_present(self, live_token):
         """Negative test: with the key still in Valkey, the session remains valid."""
         username = "cof-valkey-survive-user"
         password = "ValkeySurvive123!"
 
-        user_id = self._ensure_test_user(live_token, username, password)
+        user_id = ensure_test_user(live_token, KEYCLOAK_REALM, username, password)
         assert user_id
 
         try:
             # PHASE 1: Authenticate
-            sess = requests.Session()
-            sess.trust_env = False
-
-            resp = sess.get(
-                f"{_PUBLIC_BASE}/oauth2/start",
-                allow_redirects=True,
-                verify=False,
-                timeout=30,
+            sess, _ = oauth2_login_flow(
+                live_token, settings.KEYCLOAK_URL, KEYCLOAK_REALM, username, password
             )
-
-            form_data = {"username": username, "password": password, "credentialId": ""}
-            execution_match = re.search(r'name="execution"\s+value="([^"]+)"', resp.text)
-            if execution_match:
-                form_data["execution"] = execution_match.group(1)
-
-            action_match = re.search(r'action="([^"]+)"', resp.text)
-            form_action = action_match.group(1) if action_match else resp.url
-            if form_action.startswith("/"):
-                form_action = f"https://out-customer.com{form_action}"
-
-            sess.post(form_action, data=form_data, allow_redirects=True, verify=False, timeout=30)
-            time.sleep(1)
 
             # PHASE 2: Verify session valid (key still present)
             auth_resp1 = sess.get(
-                f"{_PUBLIC_BASE}/oauth2/auth",
+                f"{PUBLIC_BASE}/oauth2/auth",
                 verify=False,
                 timeout=10,
                 allow_redirects=False,
@@ -494,7 +264,7 @@ class TestValkeySessionInvalidation:
             time.sleep(2)
 
             auth_resp2 = sess.get(
-                f"{_PUBLIC_BASE}/oauth2/auth",
+                f"{PUBLIC_BASE}/oauth2/auth",
                 verify=False,
                 timeout=10,
                 allow_redirects=False,
@@ -503,13 +273,7 @@ class TestValkeySessionInvalidation:
                 f"Session should remain valid when Valkey key is present, got {auth_resp2.status_code}"
 
         finally:
-            try:
-                requests.delete(
-                    f"{role_sync.KEYCLOAK_URL}/admin/realms/{role_sync.KEYCLOAK_REALM}/users/{user_id}",
-                    headers={"Authorization": f"Bearer {live_token}"},
-                )
-            except Exception:
-                pass
+            cleanup_user(live_token, settings.KEYCLOAK_URL, KEYCLOAK_REALM, user_id)
 
 
 # ======================================================================
@@ -520,52 +284,28 @@ class TestValkeySessionInvalidation:
 class TestOAuth2ProxySignOut:
     """Verify the oauth2-proxy /oauth2/sign_out endpoint correctly cleans up."""
 
-    def _ensure_test_user(self, live_token, username: str, password: str) -> str | None:
-        realm = role_sync.KEYCLOAK_REALM
-        base = role_sync.KEYCLOAK_URL
-        return keycloak_setup.create_user(base, live_token, realm, username, password) or None
-
     def test_sign_out_deletes_valkey_session(self, live_token):
         """HIT /oauth2/sign_out → session key deleted from Valkey."""
-        r = _get_valkey_client()
+        r = get_valkey_client(VALKEY_URL)
         username = "cof-signout-user"
         password = "SignOut123!"
 
-        user_id = self._ensure_test_user(live_token, username, password)
+        user_id = ensure_test_user(live_token, KEYCLOAK_REALM, username, password)
         assert user_id
 
         try:
             # PHASE 1: Authenticate
-            sess = requests.Session()
-            sess.trust_env = False
-
-            resp = sess.get(
-                f"{_PUBLIC_BASE}/oauth2/start",
-                allow_redirects=True,
-                verify=False,
-                timeout=30,
+            sess, _ = oauth2_login_flow(
+                live_token, settings.KEYCLOAK_URL, KEYCLOAK_REALM, username, password
             )
 
-            form_data = {"username": username, "password": password, "credentialId": ""}
-            execution_match = re.search(r'name="execution"\s+value="([^"]+)"', resp.text)
-            if execution_match:
-                form_data["execution"] = execution_match.group(1)
-
-            action_match = re.search(r'action="([^"]+)"', resp.text)
-            form_action = action_match.group(1) if action_match else resp.url
-            if form_action.startswith("/"):
-                form_action = f"https://out-customer.com{form_action}"
-
-            sess.post(form_action, data=form_data, allow_redirects=True, verify=False, timeout=30)
-            time.sleep(1)
-
             # PHASE 2: Verify session exists
-            keys_before = _list_oauth2_proxy_sessions(r)
+            keys_before = list_oauth2_proxy_sessions(r, SESSION_KEY_PREFIX)
             assert len(keys_before) > 0, "No session in Valkey before sign out"
 
             # PHASE 3: Hit /oauth2/sign_out
-            signout_resp = sess.get(
-                f"{_PUBLIC_BASE}/oauth2/sign_out",
+            sess.get(
+                f"{PUBLIC_BASE}/oauth2/sign_out",
                 verify=False,
                 timeout=10,
                 allow_redirects=False,
@@ -573,18 +313,12 @@ class TestOAuth2ProxySignOut:
             time.sleep(1)
 
             # PHASE 4: Verify session key DELETED
-            keys_after = _list_oauth2_proxy_sessions(r)
+            keys_after = list_oauth2_proxy_sessions(r, SESSION_KEY_PREFIX)
             assert len(keys_after) < len(keys_before) or len(keys_after) == 0, \
                 f"Sign out did not delete session: before={len(keys_before)}, after={len(keys_after)}"
 
         finally:
-            try:
-                requests.delete(
-                    f"{role_sync.KEYCLOAK_URL}/admin/realms/{role_sync.KEYCLOAK_REALM}/users/{user_id}",
-                    headers={"Authorization": f"Bearer {live_token}"},
-                )
-            except Exception:
-                pass
+            cleanup_user(live_token, settings.KEYCLOAK_URL, KEYCLOAK_REALM, user_id)
 
 
 # ======================================================================
@@ -595,21 +329,15 @@ class TestOAuth2ProxySignOut:
 class TestLiveSessionLifecycle:
     """End-to-end tests for session creation and deletion against live Keycloak."""
 
-    def _ensure_test_user(self, live_token, username: str, password: str) -> str | None:
-        """Create or find a test user using keycloak_setup.create_user."""
-        realm = role_sync.KEYCLOAK_REALM
-        base = role_sync.KEYCLOAK_URL
-        return keycloak_setup.create_user(base, live_token, realm, username, password) or None
-
     def test_create_session_validate_delete_validate(self, live_token):
         """CREATE session (via user login) → validate exists → DELETE session → validate gone."""
         username = "cof-test-session-user"
         password = "SessionTest123!"
-        realm = role_sync.KEYCLOAK_REALM
-        base = role_sync.KEYCLOAK_URL
+        realm = KEYCLOAK_REALM
+        base = settings.KEYCLOAK_URL
         headers = {"Authorization": f"Bearer {live_token}"}
 
-        user_id = self._ensure_test_user(live_token, username, password)
+        user_id = ensure_test_user(live_token, realm, username, password)
         assert user_id, "Failed to create/find test user"
 
         try:
@@ -663,12 +391,4 @@ class TestLiveSessionLifecycle:
                 f"Sessions should be deleted but still found: {len(sessions_after)} sessions"
 
         finally:
-            try:
-                resp = requests.delete(
-                    f"{base}/admin/realms/{realm}/users/{user_id}",
-                    headers=headers,
-                )
-                assert resp.status_code in (204, 200, 404), \
-                    f"Cleanup delete user failed: {resp.status_code}"
-            except Exception:
-                pass
+            cleanup_user(live_token, base, realm, user_id)

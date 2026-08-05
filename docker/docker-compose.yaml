@@ -1,3 +1,54 @@
+# ============================================================================
+# ConciergeOS Docker Compose
+# ============================================================================
+# oauth2-proxy instances handle authenticated routes:
+#   oidc            (4180) → frontend:80      (/ /app1/* /app2/*)
+#   oidc-api        (4184) → backend:8000     (/api/*)
+#   oidc-client-api (4186) → client-backend:8000 (/client-api/*)
+# ============================================================================
+
+# ─── Shared oauth2-proxy environment ────────────────────────────────────────
+x-oidc-env: &oidc-env
+  # Provider
+  OAUTH2_PROXY_PROVIDER: ${OAUTH2_PROXY_PROVIDER:-keycloak-oidc}
+  OAUTH2_PROXY_OIDC_ISSUER_URL: ${APP_DOMAIN:-https://out-customer.com}/auth/realms/${OIDC_REALM:-production}
+  OAUTH2_PROXY_CLIENT_ID: ${OIDC_CLIENT_ID:-concierge}
+  OAUTH2_PROXY_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+  OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: ${OAUTH2_PROXY_SKIP_PROVIDER_BUTTON:-true}
+  # Cookie
+  OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_COOKIE_SECRET:-}
+  OAUTH2_PROXY_COOKIE_SECURE: ${OAUTH2_PROXY_COOKIE_SECURE:-false}
+  OAUTH2_PROXY_COOKIE_REFRESH: ${OAUTH2_PROXY_COOKIE_REFRESH:-5m}
+  OAUTH2_PROXY_COOKIE_EXPIRE: ${OAUTH2_PROXY_COOKIE_EXPIRE:-1h}
+  OAUTH2_PROXY_COOKIE_PATH: /
+  # Server
+  OAUTH2_PROXY_REVERSE_PROXY: ${OAUTH2_PROXY_REVERSE_PROXY:-true}
+  # OIDC
+  OAUTH2_PROXY_SCOPE: ${OAUTH2_PROXY_SCOPE:-openid profile email roles}
+  OAUTH2_PROXY_EMAIL_DOMAINS: ${OAUTH2_PROXY_EMAIL_DOMAINS:-*}
+  OAUTH2_PROXY_OIDC_GROUPS_CLAIM: ${OAUTH2_PROXY_OIDC_GROUPS_CLAIM:-realm_access.roles}
+  OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY: ${OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY:-true}
+  OAUTH2_PROXY_CODE_CHALLENGE_METHOD: ${OAUTH2_PROXY_CODE_CHALLENGE_METHOD:-S256}
+  OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES: ${OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES:-account}
+  # Session storage (Valkey/Redis)
+  OAUTH2_PROXY_SESSION_STORE_TYPE: ${OAUTH2_PROXY_SESSION_STORE_TYPE:-redis}
+  OAUTH2_PROXY_REDIS_CONNECTION_URL: ${VALKEY_URL:-redis://valkey:6379/0}
+  # Backend logout
+  OAUTH2_PROXY_BACKEND_LOGOUT_URL: http://keycloak:8080/auth/realms/${OIDC_REALM:-production}/protocol/openid-connect/logout?id_token_hint={id_token}
+
+# ─── Shared oauth2-proxy service template ───────────────────────────────────
+x-oidc-common: &oidc-common
+  image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
+  restart: unless-stopped
+  extra_hosts:
+    - "out-customer.com:host-gateway"
+  environment: *oidc-env
+  depends_on:
+    - keycloak
+    - valkey
+  networks:
+    - app-network
+
 services:
   caddy:
     image: caddy:2-alpine
@@ -7,57 +58,62 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile.json:/etc/caddy/Caddyfile.json
+      - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
-    command: caddy run --config /etc/caddy/Caddyfile.json
     depends_on:
       - frontend
+      - frontend-two
       - keycloak
-      - oidc-main
+      - oidc
+      - oidc-api
+      - oidc-client-api
+      - client-backend
+      - backend
     networks:
       - app-network
 
-  oidc-main:
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
-    container_name: oidc-main
-    restart: unless-stopped
-    extra_hosts:
-      - "out-customer.com:host-gateway"
+  # ─── oauth2-proxy: Frontend (App1, App2, root) ─────────────────────────
+  oidc:
+    <<: *oidc-common
+    container_name: oidc
     environment:
-      # Provider
-      - OAUTH2_PROXY_PROVIDER=${OAUTH2_PROXY_PROVIDER:-keycloak-oidc}
-      - OAUTH2_PROXY_OIDC_ISSUER_URL=${APP_DOMAIN:-https://out-customer.com}/auth/realms/${OIDC_REALM:-production}
-      - OAUTH2_PROXY_CLIENT_ID=${OIDC_CLIENT_ID:-concierge}
-      - OAUTH2_PROXY_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
-      - OAUTH2_PROXY_REDIRECT_URL=${APP_DOMAIN:-https://out-customer.com}/oauth2/callback
-      - OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=${OAUTH2_PROXY_SKIP_PROVIDER_BUTTON:-true}
-      # Cookie
-      - OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_COOKIE_SECRET:-}
-      - OAUTH2_PROXY_COOKIE_SECURE=${OAUTH2_PROXY_COOKIE_SECURE:-false}
-      - OAUTH2_PROXY_COOKIE_REFRESH=${OAUTH2_PROXY_COOKIE_REFRESH:-5m}
-      - OAUTH2_PROXY_COOKIE_EXPIRE=${OAUTH2_PROXY_COOKIE_EXPIRE:-1h}
-      # Upstreams
-      - OAUTH2_PROXY_UPSTREAMS=${OAUTH2_PROXY_UPSTREAMS:-http://frontend:80/}
-      # Server
-      - OAUTH2_PROXY_HTTP_ADDRESS=${OAUTH2_PROXY_HTTP_ADDRESS:-0.0.0.0:4182}
-      - OAUTH2_PROXY_REVERSE_PROXY=${OAUTH2_PROXY_REVERSE_PROXY:-true}
-      # OIDC
-      - OAUTH2_PROXY_SCOPE=${OAUTH2_PROXY_SCOPE:-openid profile email roles}
-      - OAUTH2_PROXY_EMAIL_DOMAINS=${OAUTH2_PROXY_EMAIL_DOMAINS:-*}
-      - OAUTH2_PROXY_OIDC_GROUPS_CLAIM=${OAUTH2_PROXY_OIDC_GROUPS_CLAIM:-realm_access.roles}
-      - OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY=${OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY:-true}
-      - OAUTH2_PROXY_CODE_CHALLENGE_METHOD=${OAUTH2_PROXY_CODE_CHALLENGE_METHOD:-S256}
-      - OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES=${OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES:-account}
-      # Session storage (Valkey/Redis)
-      - OAUTH2_PROXY_SESSION_STORE_TYPE=${OAUTH2_PROXY_SESSION_STORE_TYPE:-redis}
-      - OAUTH2_PROXY_REDIS_CONNECTION_URL=${VALKEY_URL:-redis://valkey:6379/0}
+      <<: *oidc-env
+      OAUTH2_PROXY_REDIRECT_URL: ${APP_DOMAIN:-https://out-customer.com}/app1/oauth2/callback
+      OAUTH2_PROXY_UPSTREAMS: ${OAUTH2_PROXY_UPSTREAMS:-http://frontend:80/}
+      OAUTH2_PROXY_HTTP_ADDRESS: ${OAUTH2_PROXY_HTTP_ADDRESS:-0.0.0.0:4180}
     depends_on:
       - keycloak
       - frontend
       - valkey
-    networks:
-      - app-network
+
+  # ─── oauth2-proxy: Backend API ──────────────────────────────────────────
+  oidc-api:
+    <<: *oidc-common
+    container_name: oidc-api
+    environment:
+      <<: *oidc-env
+      OAUTH2_PROXY_REDIRECT_URL: ${APP_DOMAIN:-https://out-customer.com}/api/oauth2/callback
+      OAUTH2_PROXY_UPSTREAMS: http://backend:8000/
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4184
+    depends_on:
+      - keycloak
+      - backend
+      - valkey
+
+  # ─── oauth2-proxy: Client Backend API ───────────────────────────────────
+  oidc-client-api:
+    <<: *oidc-common
+    container_name: oidc-client-api
+    environment:
+      <<: *oidc-env
+      OAUTH2_PROXY_REDIRECT_URL: ${APP_DOMAIN:-https://out-customer.com}/client-api/oauth2/callback
+      OAUTH2_PROXY_UPSTREAMS: http://client-backend:8000/
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4186
+    depends_on:
+      - keycloak
+      - client-backend
+      - valkey
 
   role-sync:
     image: concos-role-sync:latest
@@ -69,14 +125,14 @@ services:
     env_file:
       - .env
     environment:
-      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080/auth}
-      - KEYCLOAK_REALM=${OIDC_REALM:-production}
-      - KEYCLOAK_ADMIN_USER=${KEYCLOAK_ADMIN_USER:-admin}
-      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
-      - CADDY_ADMIN_URL=${CADDY_ADMIN_URL:-http://caddy:2019}
-      - SYNC_INTERVAL=${SYNC_INTERVAL:-30}
-      - VALKEY_URL=${VALKEY_URL:-redis://valkey:6379/0}
-      - SESSION_COOKIE_NAME=${SESSION_COOKIE_NAME:-_oauth2_proxy}
+      KEYCLOAK_URL: ${KEYCLOAK_URL:-http://keycloak:8080/auth}
+      KEYCLOAK_REALM: ${OIDC_REALM:-production}
+      KEYCLOAK_ADMIN_USER: ${KEYCLOAK_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      CADDY_ADMIN_URL: ${CADDY_ADMIN_URL:-http://caddy:2019}
+      SYNC_INTERVAL: ${SYNC_INTERVAL:-30}
+      VALKEY_URL: ${VALKEY_URL:-redis://valkey:6379/0}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-_oauth2_proxy}
     depends_on:
       - keycloak
       - caddy
@@ -101,6 +157,18 @@ services:
     networks:
       - app-network
 
+  frontend-two:
+    image: concos-frontend-two:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        BASE_URL: /app2
+    container_name: frontend-two
+    restart: unless-stopped
+    networks:
+      - app-network
+
   backend:
     image: concos-backend:latest
     build:
@@ -108,6 +176,27 @@ services:
       dockerfile: docker/Dockerfile.backend
     container_name: backend
     restart: unless-stopped
+    networks:
+      - app-network
+
+  client-backend:
+    image: concos-client-backend:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.client-backend
+    container_name: client-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      KEYCLOAK_URL: ${KEYCLOAK_URL:-http://keycloak:8080/auth}
+      KEYCLOAK_REALM: ${OIDC_REALM:-production}
+      CLIENT_API_CLIENT_ID: ${CLIENT_API_CLIENT_ID:-client-api}
+      CLIENT_API_CLIENT_SECRET: ${CLIENT_API_CLIENT_SECRET:-}
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
+    depends_on:
+      - keycloak
+      - backend
     networks:
       - app-network
 
@@ -128,26 +217,6 @@ services:
       - "8080:8080"
     networks:
       - app-network
-
-  pytest:
-    image: concos-pytest:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.pytest
-    container_name: pytest
-    env_file:
-      - .env
-    environment:
-      - SYNC_INTERVAL=${SYNC_INTERVAL}
-    depends_on:
-      - keycloak
-      - caddy
-      - valkey
-    networks:
-      - app-network
-    extra_hosts:
-      - "host-gateway:host-gateway"
-      - "out-customer.com:host-gateway"
 
 volumes:
   caddy_data:

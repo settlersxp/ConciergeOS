@@ -2,10 +2,14 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN pip install pytest requests pyyaml valkey --no-cache-dir
+RUN pip install pytest requests pydantic valkey --no-cache-dir
 
 # Copy source modules
-COPY role_sync.py keycloak_setup.py settings.py rbac_routes.yaml ./
+COPY role_sync.py keycloak_setup.py settings.py rbac_models.py rbac_file.py rbac_routes.json ./
+
+# Copy package directories
+COPY keycloak_setup/ keycloak_setup/
+COPY rbac_sync/ rbac_sync/
 
 # Copy docker-compose.yaml (read by test_oidc_config.py)
 COPY docker-compose.yaml ./

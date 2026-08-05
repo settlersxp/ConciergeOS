@@ -2,11 +2,16 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN pip install requests pyyaml valkey --no-cache-dir
+RUN pip install requests pydantic valkey --no-cache-dir
 
 COPY role_sync.py .
 COPY settings.py .
-COPY rbac_routes.yaml .
+COPY keycloak_common.py .
+COPY rbac_models.py .
+COPY rbac_file.py .
+COPY rbac_routes.json .
+COPY rbac_sync/ ./rbac_sync/
+COPY keycloak_setup/ ./keycloak_setup/
 
 ENV KEYCLOAK_URL=http://keycloak:8080/auth
 ENV KEYCLOAK_REALM=production

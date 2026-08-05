@@ -60,7 +60,7 @@ class Settings:
 
     @property
     def MAPPING_FILE(self) -> str:
-        return os.environ.get("MAPPING_FILE", "/app/rbac_routes.yaml")
+        return os.environ.get("MAPPING_FILE", "/app/rbac_routes.json")
 
     # -- App Domain (used by OIDC redirect URIs, Keycloak client config) --
     @property

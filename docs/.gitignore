@@ -1,0 +1,5 @@
+/node_modules
+
+# Ignore all .md files in presentations/ except SLIDEV_PRESENTATION_PROMPT_TEMPLATE.md
+/presentations/*.md
+!presentations/SLIDEV_PRESENTATION_PROMPT_TEMPLATE.md

@@ -13,9 +13,10 @@ import { useChainPages } from './hooks/useChainPages';
 
 function App() {
   const chainPagesData = useChainPages();
+  const basename = import.meta.env.BASE_URL;
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <SettingsProvider>
         <ChainPagesProvider
           chainPages={chainPagesData.chainPages}

@@ -1,130 +1,147 @@
-# Role-Based Access Control (RBAC) Implementation Plan
+# Role-Based Access Control (RBAC) — Architecture & Implementation
 
-> **Status:** Draft — pending refinement
-> **Objective:** Replace the current group-based access model with a fine-grained role-based architecture using Keycloak roles, oauth2-proxy role extraction, and Caddy path-based enforcement — without modifying frontend or backend code. Role changes in Keycloak are automatically synced to Caddy via a polling-based sync service. User/session changes are detected and sessions are force-logged-out via Valkey server-side session storage.
+> **Status:** Implementation complete
+> **Objective:** Fine-grained role-based access control using Keycloak roles, oauth2-proxy role extraction, and Caddy path-based enforcement — without modifying frontend or backend application code. Role changes in Keycloak are automatically synced to Caddy via a polling-based sync service. User/session changes are detected and sessions are force-logged-out via Valkey server-side session storage.
 
 ---
 
 ## Table of Contents
 
-1. [Current State](#1-current-state)
-2. [Target State](#2-target-state)
-3. [Architecture](#3-architecture)
-   - [3.1 Session Invalidation (Force Logout)](#31-session-invalidation-force-logout)
+1. [Architecture Overview](#1-architecture-overview)
+2. [Authentication Flow](#2-authentication-flow)
+3. [Authorization Flow](#3-authorization-flow)
+   - [3.1 Frontend Request Flow](#31-frontend-request-flow)
+   - [3.2 Backend API Request Flow](#32-backend-api-request-flow)
+   - [3.3 Session Invalidation (Force Logout)](#33-session-invalidation-force-logout)
 4. [Role Naming Convention](#4-role-naming-convention)
-5. [Component Changes](#5-component-changes)
-   - [5.1 Keycloak Setup Script](#51-keycloak-setup-script-dockerkeycloak_setuppy)
-   - [5.2 oauth2-proxy Configuration](#52-oauth2-proxy-configuration-dockeroidc-maintoml)
-   - [5.3 Caddy Configuration](#53-caddy-configuration-dockercaddyfilejson)
-   - [5.4 Docker Compose](#54-docker-compose-dockerdocker-composeyaml)
-   - [5.5 Role Sync Service](#55-role-sync-service-dockerrole_syncpy)
-   - [5.6 Role-to-Path Mapping](#56-role-to-path-mapping-dockerrbac_routesyaml)
-6. [Implementation Steps](#6-implementation-steps)
-7. [Scaling Guidelines](#7-scaling-guidelines)
-8. [Trade-offs & Limitations](#8-trade-offs--limitations)
-9. [Testing Plan](#9-testing-plan)
+5. [Component Reference](#5-component-reference)
+   - [5.1 Keycloak Setup](#51-keycloak-setup-dockerkeycloak_setup)
+   - [5.2 oauth2-proxy Configuration](#52-oauth2-proxy-configuration)
+   - [5.3 Caddy Configuration](#53-caddy-configuration-dockercaddyfile)
+    - [5.4 Docker Compose](#54-docker-compose-dockerdocker-composeyaml)
+   - [5.6 Role Sync Service](#56-role-sync-service-docker-rbac-sync-package)
+   - [5.7 Role-to-Path Mapping](#57-role-to-path-mapping-dockerrbac_routesjson)
+   - [5.8 Shared Settings](#58-shared-settings-dockersettingspy)
+   - [5.9 RBAC File Utilities](#59-rbac-file-utilities-dockerrbac_filepy)
+6. [Scaling Guidelines](#6-scaling-guidelines)
+7. [Trade-offs & Limitations](#7-trade-offs--limitations)
+8. [Testing Plan](#8-testing-plan)
 
 ---
 
-## 1. Current State
+## 1. Architecture Overview
 
-### Authentication Flow
+ConciergeOS uses a **multi-layer authentication and authorization chain** with a single Caddy instance and three oauth2-proxy instances:
 
 ```
-Browser → Caddy (443) → oauth2-proxy (4182) → Caddy internal (8000) → frontend/backend
+Browser → Caddy (443)
+           ├─ /auth/*        → Keycloak (8080)
+           ├─ /app1/*        → oidc (4180) → frontend (80)
+           ├─ /app2/*        → oidc (4180) → frontend-two (80)
+           ├─ /oauth2/*      → oidc (4180)
+           ├─ /client-api/*  → oidc-client-api (4186) → client-backend (8000)
+           ├─ /api/*         → oidc-api (4184) → backend (8000)
+           └─ /* (default)   → oidc (4180)
 ```
 
-### Current Access Model
+| Layer | Component | Role |
+|-------|-----------|------|
+| **Identity Provider** | Keycloak (v26) | User authentication, role management, OIDC token issuance |
+| **Authentication Gateway** | oauth2-proxy (v7.15.3, three instances) | OIDC flow, session management, role extraction from tokens |
+| **Authorization** | Caddy (v2, single instance) | Path-based access control for all routes (frontend + API) using `header_regexp` on `X-Forwarded-Groups` |
+| **Session Store** | Valkey (v8) | Server-side session storage for all oauth2-proxy instances, enables force logout |
+| **Role Sync** | `rbac_sync` Python package | Polls Keycloak admin events, updates Caddy automatically |
 
-| Component | Mechanism | Details |
-|-----------|-----------|---------|
-| Keycloak | 2 realms (`testing`, `production`), 2 groups per realm (`single`, `all`) | `oidc-group-membership-mapper` exposes groups in ID token |
-| oauth2-proxy | `allowed_groups = ["single", "all"]` + `oidc_groups_claim = "groups"` | Passes groups via `X-Forwarded-Groups` header |
-| Caddy | `header_regexp` regex matching on `X-Forwarded-Groups` | 2 rules: deny `/settings` for `all`, deny everything else for `single` |
+### Key Design Decisions
 
-### Current Limitations
-
-1. **Only 2 access levels** — `single` (settings-only) and `all` (everything except settings)
-2. **No API-level control** — all authenticated users can call all `/api/*` endpoints
-3. **Configuration fragmentation** — access logic spread across 3 files
-4. **Realm duplication** — `testing` + `production` doubles configuration maintenance
-5. **Regex-based matching** — fragile, hard to read, error-prone
-
----
-
-## 2. Target State
-
-### Goals
-
-1. **Fine-grained access control** — each user can access specific frontend pages AND specific backend API endpoints
-2. **No frontend/backend code changes** — all authN/authZ handled by Keycloak + oauth2-proxy + Caddy
-3. **Single source of truth** — roles defined in Keycloak, enforced in Caddy
-4. **Scalable** — adding a new permission requires 1 role in Keycloak + 1 entry in mapping file (sync is automatic)
-5. **Realm switching** — controlled via environment variable for testing/production parity
-6. **Auto-sync** — role changes in Keycloak are automatically propagated to Caddy via a polling sync service
-7. **Session invalidation** — deleted users are detected via `/userinfo` returning 401 (within `cookie_refresh` interval), with optional Valkey session store for immediate force logout
-
-### Target Access Model
-
-| Component | Mechanism | Details |
-|-----------|-----------|---------|
-| Keycloak | Realm roles with naming convention | Auto-extracted from access token by oauth2-proxy |
-| oauth2-proxy | `allowed_groups = ["*"]` (deny-by-default pushed to Caddy) | Roles auto-extracted with `role:` prefix into `X-Forwarded-Groups` |
-| Role Sync Service | Polls Keycloak Admin Events API | Detects role CRUD operations, generates Caddy routes, pushes via Caddy Admin API |
-| Caddy | Explicit role-to-path deny rules (auto-generated) | `header_regexp` matches `role:<name>` patterns, deny-by-default |
-| Valkey (optional) | Server-side session store | Enables immediate force logout by deleting sessions when user deleted/terminated |
+1. **No frontend/backend code changes** — all authN/authZ handled by infrastructure components
+2. **Single source of truth** — roles defined in `rbac_routes.json`, created in Keycloak, enforced in Caddy
+3. **Deny-by-default** — Caddy blocks protected paths unless the user has the required role
+4. **Two realms** — `testing` and `production` for environment isolation, switched via `OIDC_REALM` env var
+5. **Three oauth2-proxy instances** — `oidc` (frontend apps), `oidc-api` (backend API), `oidc-client-api` (client-backend)
+6. **Single Caddy instance** — external gateway (443) + internal server (`:8000`) for all RBAC enforcement
+7. **Valkey session storage** — enables immediate server-side session invalidation
+8. **Role attributes** — roles in Keycloak store `paths`, `menus`, and `message` attributes for use by the sync service
 
 ---
 
-## 3. Architecture
+## 2. Authentication Flow
 
-### Data Flow: Roles from Keycloak to Caddy (Runtime Request)
+### User Login (Browser)
+
+```
+1. User visits https://out-customer.com
+2. Caddy proxies request to oauth2-proxy (oidc:4180)
+3. oauth2-proxy detects no valid session → redirects to Keycloak login
+4. User enters credentials on Keycloak login page
+5. Keycloak issues OIDC tokens (access token with realm_access.roles)
+6. oauth2-proxy extracts roles from access token
+7. oauth2-proxy creates session in Valkey (server-side store)
+8. oauth2-proxy sets session cookie in browser
+9. Request forwarded to frontend:80
+```
+
+### Backend API Authentication
+
+```
+1. User request to /api/* arrives at Caddy (:443)
+2. Caddy proxies to oidc-api (oauth2-proxy on :4184)
+3. oauth2-proxy validates session (Valkey) → extracts roles → sets X-Forwarded-Groups
+4. oauth2-proxy forwards to backend:8000
+5. Caddy internal-server checks X-Forwarded-Groups against deny rules (pushed by role sync)
+6. If role present → forward to backend:8000; else → 403
+```
+
+### Service-to-Service Authentication (client-backend)
+
+```
+1. client-backend uses Client Credentials Grant
+2. POST /realms/master/protocol/openid-connect/token
+   - client_id: "client-api"
+   - client_secret: "<configured>"
+3. Keycloak issues access token for service account
+4. client-backend uses token to authenticate to backend API
+```
+
+---
+
+## 3. Authorization Flow
+
+### 3.1 Frontend Request Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │ 1. User logs in via Keycloak                                        │
 │ 2. Keycloak issues access token with:                               │
 │    - realm_access.roles: ["reservations:view", "guest-search:view"] │
-│    - resource_access.client.roles: [...]                             │
-│ 3. oauth2-proxy (KeycloakOIDCProvider) extracts roles from token    │
-│    - Realm roles  → "role:reservations:view"                        │
-│    - Client roles → "role:concierge:role_name"                      │
+│ 3. oauth2-proxy (oidc) extracts roles via:                          │
+│    - oidc_groups_claim = "realm_access.roles"                       │
+│    - Roles are prefixed with "role:" → "role:reservations:view"     │
 │ 4. oauth2-proxy sets header:                                        │
 │    X-Forwarded-Groups: ["role:reservations:view", "role:guest-search:view"] │
-│ 5. Caddy reads X-Forwarded-Groups, matches against path rules       │
-│ 6. If no matching role → 403; otherwise → forward to frontend       │
+│ 5. Caddy internal-server reads X-Forwarded-Groups,                 │
+│    matches against header_regexp deny rules                         │
+│ 6. If required role NOT found → 403; otherwise → forward request   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Data Flow: Role Sync (Admin Operations)
+### 3.2 Backend API Request Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                                                                                     │
-│  Keycloak              Role Sync Service                 Caddy                      │
-│  ┌─────────────┐      (polling)            ┌─────────────────┐    (admin API)      │
-│  │             │  1. Admin creates/        │                 │                      │
-│  │  Admin      │ ── updates/deletes        │  Polling Loop:  │                      │
-│  │  API        │     a role in Keycloak    │  1. Query Admin │                      │
-│  │             │                           │     Events API  │                      │
-│  │  /admin/    │                           │  2. Detect ROLE │                      │
-│  │  realms/    │                           │     CRUD events │                      │
-│  │  roles      │                           │  3. Load role- │                      │
-│  │             │                           │     to-path     │                      │
-│  │             │                           │     mapping     │                      │
-│  │             │                           │  4. Generate    │                      │
-│  │             │                           │     Caddy       │ ─── PUT /config/     │
-│  │             │                           │     routes      │      apps/http/...   │
-│  │             │                           │  5. Push to     │                      │
-│  │             │                           │     Caddy API   │                      │
-│  └─────────────┘                           └─────────────────┘                      │
-│                                                                                     │
-│  On startup: Sync service queries GET /admin/realms/{realm}/roles to build          │
-│  routes from scratch (idempotent initial sync).                                     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 1. User request → Caddy (:443) → oidc-api (oauth2-proxy :4184)              │
+│ 2. oauth2-proxy validates session, extracts roles, sets X-Forwarded-Groups  │
+│ 3. oauth2-proxy → backend:8000 (upstream) but Caddy internal-server         │
+│    intercepts and checks X-Forwarded-Groups against deny rules               │
+│    pushed by the role sync service                                          │
+│ 4. If required role NOT found → 403; otherwise → backend:8000               │
+│                                                                             │
+│ Route generation:                                                            │
+│ - All routes pushed to single Caddy instance (internal-server)               │
+│ - All receive a full-access bypass route (role:full-access → skip deny)     │
+│ - All receive a catch-all reverse_proxy route                               │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
-
-### Technical Verification
 
 From `oauth2-proxy/providers/keycloak_oidc.go`:
 
@@ -146,9 +163,37 @@ func formatRole(role string) string {
 }
 ```
 
-This means `X-Forwarded-Groups` will contain values like:
+This means `X-Forwarded-Groups` contains values like:
 - `role:reservations:view` (realm role)
 - `role:concierge:admin` (client role)
+
+### Role Sync (Admin Operations)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                     │
+│  Keycloak          Role Sync Service              Valkey       Caddy                │
+│  ┌──────────┐     (rbac_sync package)       ┌──────────┐   ┌──────────┐            │
+│  │          │ 1. Admin creates/             │  Event   │   │  Admin   │            │
+│  │  Events  │ ── updates/deletes            │  Dedup   │   │  API     │            │
+│  │  API     │     a role in Keycloak        │  Seen    │   │  :2019   │            │
+│  │          │                               │  IDs     │   │          │            │
+│  │          │ 2. Sync polls events          │          │   │          │            │
+│  │          │ ──────────────────────────→   │  Sync    │   │          │            │
+│  │          │     (ROLE CRUD events)        │  Timestamp│   │          │            │
+│  │          │                               │          │   │          │            │
+│  │          │ 3. Regenerate routes          │          │   │          │            │
+│  │          │ ──────────────────────────→   │          │←──│  PATCH   │            │
+│  │          │     (all paths to Caddy)      │          │   │  /config  │            │
+│  │          │                               │          │   │          │            │
+│  └──────────┘                               └──────────┘   └──────────┘            │
+│                                                                                     │
+│  On startup: full sync from Keycloak roles + rbac_routes.json → Caddy               │
+│  Polling: every SYNC_INTERVAL seconds (default: 10s from settings,                  │
+│           overridden in docker-compose). Valkey tracks seen event                    │
+│  IDs and last sync timestamp for deduplication and stale detection.                 │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ### Decision: Realm Roles vs Client Roles
 
@@ -161,121 +206,55 @@ This means `X-Forwarded-Groups` will contain values like:
 
 **Decision:** Use **realm roles** for simplicity. Shorter header values, simpler Caddy regex patterns.
 
-### 3.1 Session Invalidation (Force Logout)
+### 3.3 Session Invalidation (Force Logout)
 
-#### Problem Statement
+#### Architecture: Valkey Server-Side Sessions (Deployed)
 
-When a user is deleted from Keycloak, or their session is manually terminated (e.g., via admin console or API), the user can **continue accessing the application** until their oauth2-proxy cookie expires. This is because:
+ConciergeOS **uses Valkey for server-side session storage**. All three oauth2-proxy instances (`oidc-main`, `oidc-two`, and `oidc-api`) are configured with:
 
-1. oauth2-proxy stores session state in **browser cookies** by default (no server-side store)
-2. Cookies cannot be revoked server-side — they persist until expiry (`cookie_expire = "1h"`)
-3. Role route updates via the sync service only affect **new** requests with updated headers, not existing cookies
-
-#### Detection Mechanism: Keycloak `/userinfo` Returns 401
-
-**Discovery:** When a user is deleted from Keycloak (or their session terminated), the Keycloak `/userinfo` endpoint returns `HTTP 401 Unauthorized`.
-
-```
-GET /auth/realms/{realm}/protocol/openid-connect/userinfo
-Authorization: Bearer <valid_jwt_token>
-
-Response: HTTP 401 (user no longer exists or session expired)
+```env
+OAUTH2_PROXY_SESSION_STORE_TYPE=redis
+OAUTH2_PROXY_REDIS_CONNECTION_URL=redis://valkey:6379/0
 ```
 
-**How oauth2-proxy uses this:** The `cookie_refresh` setting controls how often oauth2-proxy calls the `/userinfo` endpoint (via `ValidateURL`) to validate the session. On each validation:
+This enables **immediate server-side session invalidation** when a user is deleted or their session terminated.
 
-1. oauth2-proxy calls `GET /userinfo` with the current access token
-2. If the response is `HTTP 200`, the session is valid — tokens are refreshed
-3. If the response is `HTTP 401` (user deleted/session terminated), oauth2-proxy **invalidates the session** and redirects to login
-
-**Default behavior with `cookie_refresh = "1m"`:** A deleted user will be detected and forced to log out within **~1 minute** (bounded by the refresh interval).
-
-#### Limitation: Cookie-Only Session Storage
-
-With the default cookie-based session storage in oauth2-proxy:
-
-| Aspect | Behavior |
-|--------|----------|
-| Detection mechanism | `ValidateURL` calls `/userinfo` every `cookie_refresh` interval |
-| Max detection delay | `cookie_refresh` duration (1 minute with current config) |
-| Server-side invalidation | **Not possible** — cookies are client-side |
-| Immediate force logout | **Not possible** without Valkey session store |
-
-**The `cookie_refresh = "1m"` setting already provides bounded detection.** Reducing it further (e.g., `30s`) increases detection speed but also increases load on Keycloak's `/userinfo` endpoint.
-
-#### Optional: Real-Time Force Logout with Valkey Session Store
-
-If **immediate** force logout is required (e.g., for security-sensitive environments), oauth2-proxy supports **server-side session storage** via Valkey. This enables the sync service to actively delete sessions from Valkey when a user is deleted or session terminated.
-
-##### Architecture with Valkey
+#### How It Works
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                                                                             │
 │  Keycloak          Role Sync Service              Valkey        oauth2-proxy │
-│  ┌──────────┐     (extended polling)        ┌──────────┐   ┌──────────┐    │
-│  │          │ 1. Admin deletes user         │          │   │          │    │
-│  │  Events  │ ──────────────────────────→   │  Session │   │  Session │    │
+│  ┌──────────┐     (rbac_sync package)        ┌──────────┐   ┌──────────┐   │
+│  │          │ 1. Admin deletes user         │          │   │          │   │
+│  │  Events  │ ──────────────────────────→   │  Session │   │  Session │   │
 │  │  API     │     (USER_DELETE,             │  Store   │   │  Validation│   │
-│  │          │      SESSION_REMOVE)          │          │   │          │    │
-│  │          │ 2. Sync service detects       │          │   │          │    │
-│  │          │ ──────────────────────────→   │  DELETE  │←──│  CHECK   │    │
-│  │          │     session invalidation       │  session │   │  on req  │    │
-│  │          │                               │          │   │          │    │
+│  │          │      USER_SESSION DELETE)     │          │   │          │   │
+│  │          │ 2. Sync service detects       │          │   │          │   │
+│  │          │ ──────────────────────────→   │  DELETE  │←──│  CHECK   │   │
+│  │          │     session invalidation       │  session │   │  on req  │   │
+│  │          │                               │          │   │          │   │
 │  └──────────┘                               └──────────┘   └──────────┘    │
 │                                                                             │
 │  Result: User is immediately logged out on next request (session gone).     │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-##### Required Changes for Valkey Session Store
+**Flow:**
+1. Admin deletes a user or terminates their session in Keycloak
+2. Role sync service polls Keycloak Admin Events API (every `SYNC_INTERVAL` seconds)
+3. On detecting `USER_DELETE` or `USER_SESSION DELETE` events, the sync service invalidates all matching sessions in Valkey
+4. On the user's next request, oauth2-proxy finds no session in Valkey → returns 401 → redirects to login
 
-**oauth2-proxy configuration** (`docker/oidc-main.toml`):
+#### Fallback: Token Validation via `/userinfo`
 
-```toml
-# ADD these lines:
-session_store_type = "redis"
-session_store_clients = ["valkey:6379"]
-session_store_redis_options = "{\"Password\":\"\",\"DB\":0}"
+In addition to Valkey session deletion, oauth2-proxy also validates tokens by calling Keycloak's `/userinfo` endpoint every `cookie_refresh` interval (configured as `5m`). If the user was deleted from Keycloak, the `/userinfo` call returns `HTTP 401`, and oauth2-proxy invalidates the session as a fallback.
+
 ```
-
-**Docker Compose** — add Valkey service:
-
-```yaml
-valkey:
-  image: valkey/valkey:alpine
-  container_name: valkey
-  restart: unless-stopped
-  networks:
-    - app-network
+GET /auth/realms/{realm}/protocol/openid-connect/userinfo
+Authorization: Bearer <valid_jwt_token>
+Response: HTTP 401 (user no longer exists or session expired)
 ```
-
-**Role sync service** — extend event filtering:
-
-```python
-# ADD these event types to the filter:
-USER_EVENTS = ["USER_DELETE", "SESSION_REMOVE", "LOGIN_FAILURE"]  # Extend as needed
-
-# When detected, find all sessions in Valkey for the user and delete them:
-def invalidate_user_sessions(user_id: str, valkey_client):
-    """Delete all oauth2-proxy sessions for a given user."""
-    # oauth2-proxy stores sessions as: _oauth2-proxy:<hash>
-    # Scan for sessions containing the user_id and delete
-    for key in valkey_client.scan_iter(match=f"*{user_id}*"):
-        valkey_client.delete(key)
-```
-
-##### Trade-off: Valkey vs Cookie-Only
-
-| Factor | Cookie-Only (current) | Valkey (optional) |
-|--------|------------------------|-------------------|
-| Detection delay | Up to `cookie_refresh` (~1 min) | Near-instant (next request) |
-| Infrastructure | None | Additional Valkey container |
-| Complexity | Low | Medium (sync service extension) |
-| Scalability | Stateless oauth2-proxy | Shared state via Valkey |
-| Recommendation | ✅ **Start here** | Add if immediate invalidation required |
-
-**Recommendation:** Start with cookie-only (rely on `cookie_refresh = "1m"` for detection). Add Valkey session store in a follow-on phase if immediate force logout becomes a requirement.
 
 ---
 
@@ -337,220 +316,142 @@ Assign `full-access` to a user, and Keycloak automatically includes all child ro
 
 ---
 
-## 5. Component Changes
+## 5. Component Reference
 
-### 5.1 Keycloak Setup Script (`docker/keycloak_setup.py`)
+### 5.1 Keycloak Setup (`docker/keycloak_setup/`)
 
-#### Changes
+The Keycloak setup is a modular Python package that configures realms, roles, users, and OIDC clients.
 
-| Current | Target |
-|---------|--------|
-| Creates groups (`single`, `all`) | Creates realm roles (see [Defined Roles](#defined-roles)) |
-| Assigns users to groups | Assigns users to roles via `POST /users/{id}/role-mappings/realm` |
-| Configures `oidc-group-membership-mapper` | **No mapper needed** — roles are in access token by default |
-| 2 realms duplicated | 2 realms (kept), roles created in both |
+**Package structure:**
 
-#### API Endpoints Used
+| File | Purpose |
+|------|---------|
+| `docker/keycloak_setup.py` | Entry point — delegates to `keycloak_setup.summary.main()` |
+| `keycloak_setup/config.py` | Central config: realms, clients, roles (loaded from `rbac_routes.json`), users |
+| `keycloak_setup/roles.py` | Role and composite role creation in Keycloak |
+| `keycloak_setup/users.py` | User creation, password setting, required actions clearing |
+| `keycloak_setup/assignments.py` | Role-to-user assignment |
+| `keycloak_setup/claims.py` | OIDC protocol mapper configuration (`realm_access.roles`) |
+| `keycloak_setup/clients.py` | OIDC client creation and configuration |
+| `keycloak_setup/auth.py` | Admin authentication |
+| `keycloak_setup/summary.py` | Orchestration — runs all setup steps in order |
+| `keycloak_setup/events.py` | Admin events configuration |
+| `keycloak_setup/realms.py` | Realm creation |
 
+**Key details:**
+- Roles are loaded from `rbac_routes.json` at runtime via `get_roles()` which calls `load_rbac_routes()` from `rbac_file.py`
+- Roles are created with custom Keycloak attributes: `paths`, `menus`, and `message`
+- Two OIDC clients are configured: `concierge` (user-facing, OIDC) and `client-api` (service-to-service, Client Credentials)
+- Two realms: `testing` and `production`, both configured identically
+- `full-access` is a composite role inheriting all granular roles
+
+**Shared Keycloak helpers (`docker/keycloak_common.py`):**
+
+| Function | API Endpoint |
+|----------|-------------|
+| `authenticate()` | `POST /realms/master/protocol/openid-connect/token` |
+| `kc_request()` | Generic — prepends `KEYCLOAK_URL` to path |
+| `fetch_all_roles()` | `GET /admin/realms/{realm}/roles` |
+| `fetch_all_roles_with_attrs()` | `GET /admin/realms/{realm}/roles` (includes attributes) |
+| `get_role_by_name()` | `GET /admin/realms/{realm}/roles/{role_name}` |
+| `has_events()` | In-memory event filtering |
+
+**Users:**
+
+| User | Password | Roles |
+|------|----------|-------|
+| `user1` | `password1` | `reservations:view`, `guest-search:view` |
+| `user2` | `password2` | `full-access` |
+
+### 5.2 oauth2-proxy Configuration
+
+oauth2-proxy is configured **entirely via environment variables** in `docker/docker-compose.yaml` — no TOML config file is used.
+
+Three instances are deployed:
+
+| Instance | Service Name | Port | Upstream | Cookie Path | Purpose |
+|----------|-------------|------|----------|-------------|---------|
+| `oidc` | Frontend apps | 4180 | `http://caddy:8000/` | `/` | Frontend authentication (app1 + app2) |
+| `oidc-api` | Backend API | 4184 | `http://backend:8000/` | `/` | API authentication |
+| `oidc-client-api` | Client API | 4186 | `http://client-backend:8000/` | `/` | Client-backend authentication |
+
+**Key configuration (all instances share these settings):**
+
+| Environment Variable | Value |
+|---------------------|-------|
+| `OAUTH2_PROXY_PROVIDER` | `keycloak-oidc` |
+| `OAUTH2_PROXY_OIDC_ISSUER_URL` | `{APP_DOMAIN}/auth/realms/{OIDC_REALM}` |
+| `OAUTH2_PROXY_CLIENT_ID` | `concierge` |
+| `OAUTH2_PROXY_SCOPE` | `openid profile email roles` |
+| `OAUTH2_PROXY_OIDC_GROUPS_CLAIM` | `realm_access.roles` |
+| `OAUTH2_PROXY_EMAIL_DOMAINS` | `*` |
+| `OAUTH2_PROXY_COOKIE_REFRESH` | `5m` |
+| `OAUTH2_PROXY_COOKIE_EXPIRE` | `1h` |
+| `OAUTH2_PROXY_REVERSE_PROXY` | `true` |
+| `OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY` | `true` |
+| `OAUTH2_PROXY_CODE_CHALLENGE_METHOD` | `S256` |
+| `OAUTH2_PROXY_SESSION_STORE_TYPE` | `redis` |
+| `OAUTH2_PROXY_REDIS_CONNECTION_URL` | `redis://valkey:6379/0` |
+| `OAUTH2_PROXY_BACKEND_LOGOUT_URL` | Keycloak logout endpoint (server-side SSO termination) |
+| `OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES` | `account` |
+
+**Instance-specific differences:**
+
+| Setting | oidc | oidc-api | oidc-client-api |
+|---------|------|----------|-----------------|
+| `OAUTH2_PROXY_HTTP_ADDRESS` | `0.0.0.0:4180` | `0.0.0.0:4184` | `0.0.0.0:4186` |
+| `OAUTH2_PROXY_REDIRECT_URL` | `.../oauth2/callback` | `.../api/oauth2/callback` | `.../client-api/oauth2/callback` |
+| `OAUTH2_PROXY_UPSTREAMS` | `http://caddy:8000/` | `http://backend:8000/` | `http://client-backend:8000/` |
+
+### 5.3 Caddy Configuration (`docker/Caddyfile`)
+
+The single Caddy instance serves as the **external reverse proxy** (ports 80/443) and manages the **internal server** (`:8000`) for all RBAC enforcement.
+
+**External server** (`out-customer.com`):
+
+| Path | Backend | Notes |
+|------|---------|-------|
+| `/auth/*` | `keycloak:8080` | Keycloak OIDC endpoints |
+| `/app2/*` | `oidc:4180` | Second frontend (path rewrite via `path_regexp`) |
+| `/app1/*` | `oidc:4180` | Primary app (path rewrite via `path_regexp`) |
+| `/oauth2/*` | `oidc:4180` | oauth2-proxy callbacks/sign-out |
+| `/client-api/*` | `oidc-client-api:4186` | Client API (through oauth2-proxy) |
+| `/api/*` | `oidc-api:4184` | Backend API (through oauth2-proxy) |
+| `/*` (default) | `oidc:4180` | Fallback to oauth2-proxy |
+
+**Internal server** (`:8000`):
+- Proxies all traffic to `frontend:80`
+- Deny rules for all role-protected paths (frontend + API) are injected by the role sync service at runtime
+- Static assets are served directly from frontend without role checks
+- Users with `full-access` role bypass all deny rules
+
+**Admin API:** Enabled on `0.0.0.0:2019` for the role sync service (internal Docker network only).
+
+**Route structure** (managed by role sync service):
 ```
-POST   /admin/realms/{realm}/roles                    → Create role
-GET    /admin/realms/{realm}/roles/{role}             → Check if role exists
-POST   /admin/realms/{realm}/users/{id}/role-mappings/realm  → Assign roles to user
-GET    /admin/realms/{realm}/users/{id}/role-mappings/realm  → Check existing assignments
+[static_assets_route, full_access_bypass_route, ...deny_rules..., catch_all_route]
 ```
-
-#### New Data Structures
-
-```python
-ROLES = {
-    "reservations:view":        "Read-only reservation access",
-    "reservations:write":       "Modify reservation data",
-    "guest-search:view":        "Search for guests",
-    "guest-search:extract":     "Extract names from media",
-    "performance:view":         "View performance results",
-    "performance:run":          "Execute/manage performance tests",
-    "settings:view":            "View and edit application settings",
-    "models:admin":             "Full LLM model management",
-    "prompts:admin":            "Full prompt management",
-}
-
-# Composite role
-COMPOSITE_ROLES = {
-    "full-access": list(ROLES.keys()),
-}
-
-USERS = {
-    "user1": {
-        "password": "password1",
-        "roles": ["reservations:view", "guest-search:view"],
-    },
-    "user2": {
-        "password": "password2",
-        "roles": ["full-access"],  # or explicitly list all roles
-    },
-}
-```
-
-### 5.2 oauth2-proxy Configuration (`docker/oidc-main.toml`)
-
-#### Changes
-
-| Setting | Current | Target | Reason |
-|---------|---------|--------|--------|
-| `allowed_groups` | `["single", "all"]` | `["*"]` | Push authorization to Caddy (deny-by-default) |
-| `oidc_groups_claim` | `"groups"` | **Removed** | No longer needed — roles auto-extracted by KeycloakOIDCProvider |
-| `oidc_issuer_url` | Hardcoded realm | `${OIDC_REALM}` variable | Environment-based realm switching |
-
-#### Target Configuration
-
-```toml
-provider = "keycloak-oidc"
-oidc_issuer_url = "https://out-customer.com/auth/realms/production"
-client_id = "concierge"
-client_secret = "..."
-redirect_url = "https://out-customer.com/oauth2/callback"
-cookie_secret = "..."
-cookie_secure = false
-email_domains = ["*"]
-
-# Allow all authenticated users — Caddy enforces fine-grained access
-allowed_groups = ["*"]
-
-upstreams = ["http://caddy:8000/"]
-http_address = "0.0.0.0:4182"
-proxy_prefix = "/oauth2"
-reverse_proxy = true
-scope = "openid profile email"
-pass_access_token = false
-pass_authorization_header = false
-pass_user_headers = true
-ssl_insecure_skip_verify = true
-code_challenge_method = "S256"
-cookie_refresh = "1m"
-cookie_expire = "1h"
-```
-
-**Note:** The `scope` does not need `roles` because Keycloak includes `realm_access.roles` in the **access token** by default, and oauth2-proxy reads roles from the access token (not the ID token).
-
-### 5.3 Caddy Configuration (`docker/Caddyfile.json`)
-
-#### Changes
-
-| Current | Target |
-|---------|--------|
-| `"admin": {"disabled": true}` | `"admin": {"listen": "0.0.0.0:2019"}` — **Required** for the sync service to push route updates |
-| 2 regex rules (2 groups × 2 paths) | N explicit deny rules (1 per protected path), auto-generated by sync service |
-| Group-based regex: `.*all.*`, `.*single.*` | Role-based regex: `.*role:settings:view.*` |
-| Allow-by-default (last route is catch-all proxy) | Deny-by-default (last route is catch-all proxy, but all sensitive paths have explicit deny rules above) |
-
-#### Route Structure (Order Matters)
-
-```
-1. Static assets        → always allow → frontend:80
-2. /settings            → deny unless role:settings:view
-3. /performance-testing → deny unless role:performance:view
-4. /performance-dashboard → deny unless role:performance:view
-5. /prompt-management   → deny unless role:prompts:admin
-6. /prompt-groups       → deny unless role:prompts:admin
-7. /prompt-chain-page*  → deny unless role:prompts:admin
-8. /api/settings*       → deny unless role:settings:view
-9. /api/models*         → deny unless role:models:admin
-10. /api/prompts*        → deny unless role:prompts:admin
-11. /api/prompt-groups*  → deny unless role:prompts:admin
-12. /api/performance-testing* → deny unless role:performance:view
-13. /api/reservations/shift*  → deny unless role:reservations:write
-14. /api/guest-search/extract-name* → deny unless role:guest-search:extract
-15. Default             → allow → frontend:80
-```
-
-**Note:** Routes 2-14 are auto-generated by the sync service from the role-to-path mapping file. They are pushed to Caddy via the Admin API at `http://caddy:2019/config/apps/http/servers/internal-server/routes`.
-
-#### Route Template
-
-Every deny rule follows this pattern:
-
-```jsonc
-{
-  "handle": [
-    {
-      "handler": "static_response",
-      "status_code": "403",
-      "body": "Access denied: this resource requires the <role> role."
-    }
-  ],
-  "match": [
-    {
-      "path": ["<protected-path>"],
-      "not": [
-        {
-          "header_regexp": {
-            "X-Forwarded-Groups": {
-              "pattern": ".*role:<role_name>.*"
-            }
-          }
-        }
-      ]
-    }
-  ],
-  "terminal": true
-}
-```
-
-#### Admin API Security
-
-The Caddy admin endpoint (`:2019`) is bound to `0.0.0.0` but is **only accessible from the internal Docker network**. It must never be exposed to the host or external networks. The `docker-compose.yaml` ensures this by placing the sync service and Caddy on the same `app-network` with no port mapping for `2019`.
 
 ### 5.4 Docker Compose (`docker/docker-compose.yaml`)
 
-#### Changes
+**Services:**
 
-Add environment variable support for realm switching and the new `role-sync` service:
+| Service | Image | Host Port | Internal Port | Network |
+|---------|-------|-----------|---------------|---------|
+| `caddy` | `caddy:2-alpine` | 80, 443 | 80, 443 | app-network |
+| `keycloak` | `quay.io/keycloak/keycloak:26.0` | 8080 | 8080 | app-network |
+| `oidc` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.3` | — | 4180 | app-network |
+| `oidc-api` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.3` | — | 4184 | app-network |
+| `oidc-client-api` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.3` | — | 4186 | app-network |
+| `role-sync` | `concos-role-sync:latest` (custom Dockerfile) | — | — | app-network |
+| `valkey` | `valkey/valkey:8-alpine` | — | 6379 | app-network |
+| `frontend` | `concos-frontend:latest` | — | 80 | app-network |
+| `frontend-two` | `concos-frontend-two:latest` | — | 80 | app-network |
+| `backend` | `concos-backend:latest` | — | 8000 | app-network |
+| `client-backend` | `concos-client-backend:latest` | — | 8000 | app-network |
 
-```yaml
-oidc-main:
-  image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
-  container_name: oidc-main
-  restart: unless-stopped
-  extra_hosts:
-    - "out-customer.com:host-gateway"
-  volumes:
-    - ./oidc-main.toml:/cfg.toml
-  environment:
-    - OIDC_REALM=${OIDC_REALM:-production}  # ← NEW
-  command: >
-    oauth2-proxy --config /cfg.toml
-    --oidc-issuer-url=https://out-customer.com/auth/realms/${OIDC_REALM:-production}
-  depends_on:
-    - keycloak
-    - frontend
-  networks:
-    - app-network
+**Realm switching:** `OIDC_REALM` environment variable (default: `production`).
 
-# NEW: Role sync service
-role-sync:
-  image: python:3.12-slim
-  container_name: role-sync
-  restart: unless-stopped
-  volumes:
-    - ./role_sync.py:/app/role_sync.py
-    - ./rbac_routes.yaml:/app/rbac_routes.yaml
-  environment:
-    - KEYCLOAK_URL=http://keycloak:8080
-    - KEYCLOAK_REALM=${OIDC_REALM:-production}
-    - KEYCLOAK_ADMIN_USER=admin
-    - KEYCLOAK_ADMIN_PASSWORD=admin
-    - CADDY_ADMIN_URL=http://caddy:2019
-    - SYNC_INTERVAL=30
-  command: >
-    sh -c "pip install requests pyyaml -q && python3 /app/role_sync.py"
-  depends_on:
-    - keycloak
-    - caddy
-  networks:
-    - app-network
-```
-
-**Usage:**
 ```bash
 # Use production realm (default)
 docker compose up -d
@@ -559,196 +460,160 @@ docker compose up -d
 OIDC_REALM=testing docker compose up -d
 ```
 
-### 5.5 Role Sync Service (`docker/role_sync.py`)
+### 5.5 Role Sync Service (`docker/rbac_sync/` package)
 
-#### Purpose
+The role sync service is a modular Python package (not a single file). It polls Keycloak's Admin Events API and updates Caddy.
 
-A lightweight Python service that polls Keycloak's Admin Events API to detect role-related changes (CREATE, UPDATE, DELETE of roles; ADD/REMOVE role mappings), then regenerates Caddy route rules and pushes them via the Caddy Admin API.
+**Package structure:**
 
-#### Behavior
+| File | Purpose |
+|------|---------|
+| `sync_orchestrator.py` | Main orchestrator — polling loop, initial sync, event dispatch |
+| `config.py` | Configuration loading (delegates to shared `settings` module) |
+| `event_polling.py` | Keycloak Admin Events API polling |
+| `role_operations.py` | Role CRUD detection from events |
+| `caddy_routes.py` | Caddy route generation and pushing to Caddy |
+| `session_management.py` | Valkey session invalidation + event persistence |
+| `routes_persistence.py` | Local route state persistence (`rbac_routes.json` sync from Keycloak) |
+| `docker/role_sync.py` | Entry point — starts the orchestrator |
+
+**Behavior:**
 
 | Phase | Description |
 |-------|-------------|
-| **Startup (initial sync)** | On first run, queries `GET /auth/admin/realms/{realm}/roles` to fetch all roles, loads the role-to-path mapping file, generates all Caddy routes, and pushes them atomically via `PUT /config/apps/http/servers/internal-server/routes`. This ensures idempotent behavior on restart. |
-| **Polling loop** | Every `SYNC_INTERVAL` seconds (default: 30s), polls `GET /auth/admin/realms/{realm}/events?type=ADMIN&dateFrom={last_poll_ts}&dateTo={now}` to fetch admin events since the last poll. |
-| **Event filtering** | Filters events where `resourceType == "ROLE"` and `operationType` in `["CREATE", "UPDATE", "DELETE"]`. |
-| **Route regeneration** | On detecting a role change, re-queries `GET /auth/admin/realms/{realm}/roles` for the current state, regenerates all Caddy deny rules from the mapping file, and pushes the updated routes via `PUT /config/apps/http/servers/internal-server/routes`. |
-| **Error handling** | If polling or pushing fails, logs the error and retries on the next poll cycle. The existing Caddy config remains unchanged (fail-open). |
+| **Startup** | Waits for Keycloak + Caddy to be ready. Checks Valkey for last sync timestamp. If stale (> 2x `SYNC_INTERVAL`), performs full sync from Keycloak roles + `rbac_routes.json` |
+| **Polling loop** | Every `SYNC_INTERVAL` seconds (10s default from settings, 30s from docker-compose override), polls Keycloak admin events |
+| **Event deduplication** | Seen event IDs stored in Valkey (`role_sync:seen` set) to avoid duplicate processing |
+| **ROLE events** | On CREATE/UPDATE/DELETE, regenerates deny rules and pushes to Caddy's `internal-server` |
+| **USER events** | On USER_DELETE/USER_SESSION DELETE, invalidates all matching sessions in Valkey via `invalidate_all_sessions()` |
+| **Routes persistence** | After pushing routes to Caddy, syncs role attributes back to `rbac_routes.json` file |
+| **Error handling** | Fail-open — if polling or pushing fails, logs error and retries next cycle |
 
-#### Environment Variables
+**Configuration (from `rbac_sync/config.py`):**
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `KEYCLOAK_URL` | Yes | — | Keycloak server URL (e.g., `http://keycloak:8080`) |
-| `KEYCLOAK_REALM` | Yes | `production` | Realm to monitor |
-| `KEYCLOAK_ADMIN_USER` | Yes | — | Admin username for Keycloak API |
-| `KEYCLOAK_ADMIN_PASSWORD` | Yes | — | Admin password for Keycloak API |
-| `CADDY_ADMIN_URL` | Yes | `http://caddy:2019` | Caddy Admin API URL |
-| `SYNC_INTERVAL` | No | `30` | Polling interval in seconds |
-| `MAPPING_FILE` | No | `/app/rbac_routes.yaml` | Path to role-to-path mapping file |
+| Variable | Source | Default | Description |
+|----------|--------|---------|-------------|
+| `KEYCLOAK_URL` | `settings.KEYCLOAK_URL` | `http://keycloak:8080/auth` | Keycloak server URL |
+| `KEYCLOAK_REALM` | `settings.KEYCLOAK_REALM` | `production` | Realm to monitor |
+| `CADDY_ADMIN_URL` | `settings.CADDY_ADMIN_URL` | `http://caddy:2019` | Main Caddy Admin API |
+| `CADDY_RBAC_ADMIN_URL` | `settings.CADDY_RBAC_ADMIN_URL` | `http://caddy-rbac:2020` | RBAC gateway Admin API |
+| `SYNC_INTERVAL` | `settings.SYNC_INTERVAL` | `30` (docker-compose override) | Polling interval in seconds |
+| `VALKEY_URL` | `settings.VALKEY_URL` | `redis://valkey:6379/0` | Valkey connection URL |
+| `SESSION_COOKIE_NAME` | `settings.SESSION_COOKIE_NAME` | `_oauth2_proxy` | oauth2-proxy session cookie name |
+| `RBAC_ROUTES_FILE` | Computed | `docker/rbac_routes.json` | Role-to-path mapping file |
 
-#### Keycloak API Endpoints Used
-
-```
-POST   /auth/realms/master/protocol/openid-connect/token          → Authenticate as admin
-GET    /auth/admin/realms/{realm}/roles                           → Fetch all roles
-GET    /auth/admin/realms/{realm}/events?type=ADMIN&dateFrom=&dateTo=  → Poll admin events
-```
-
-#### Caddy API Endpoints Used
+**Keycloak API endpoints used:**
 
 ```
-PUT    /config/apps/http/servers/internal-server/routes           → Push updated routes atomically
-GET    /config/apps/http/servers/internal-server/routes           → Read current routes (for debug/verify)
+POST   {KEYCLOAK_URL}/realms/master/protocol/openid-connect/token  → Admin auth
+GET    {KEYCLOAK_URL}/admin/realms/{realm}/roles                   → Fetch roles
+GET    {KEYCLOAK_URL}/admin/realms/{realm}/admin-events            → Poll admin events
 ```
 
-### 5.6 Role-to-Path Mapping (`docker/rbac_routes.yaml`)
+**Caddy API endpoints used:**
 
-#### Purpose
-
-A human-readable YAML file that maps Keycloak role names to the Caddy paths they protect. The sync service reads this file to generate Caddy deny rules. When a new role is created in Keycloak, the admin adds an entry to this file, and the sync service picks it up on the next poll cycle.
-
-#### Format
-
-```yaml
-# Role-to-Path Mapping for RBAC Sync Service
-# Each role maps to one or more path patterns protected by that role.
-#
-# Format:
-#   role: "<role_name>"
-#   paths:
-#     - "<path_pattern>"
-#     - "<path_pattern>"
-#   message: "Optional custom 403 message"
-
-- role: "settings:view"
-  paths:
-    - "/settings"
-    - "/settings/*"
-    - "/api/settings"
-    - "/api/settings/*"
-  message: "Access denied: /settings requires the settings:view role."
-
-- role: "models:admin"
-  paths:
-    - "/api/models"
-    - "/api/models/*"
-  message: "Access denied: /api/models requires the models:admin role."
-
-- role: "prompts:admin"
-  paths:
-    - "/prompt-management"
-    - "/prompt-groups"
-    - "/prompt-chain-page*"
-    - "/api/prompts"
-    - "/api/prompts/*"
-    - "/api/prompt-groups"
-    - "/api/prompt-groups/*"
-  message: "Access denied: prompt resources require the prompts:admin role."
-
-- role: "performance:view"
-  paths:
-    - "/performance-testing"
-    - "/performance-dashboard"
-    - "/api/performance-testing"
-    - "/api/performance-testing/*"
-  message: "Access denied: performance resources require the performance:view role."
-
-- role: "performance:run"
-  paths:
-    - "/api/performance-testing"              # POST only (Caddy cannot distinguish method)
-    - "/api/performance-testing/batch/*"      # DELETE
-    - "/api/performance-testing/result/*"     # PATCH
-    - "/api/performance-testing/setup-guests"
-    - "/api/performance-testing/generate-*"
-    - "/api/performance-testing/validate-guests"
-  message: "Access denied: performance test execution requires the performance:run role."
-
-- role: "reservations:view"
-  paths:
-    - "/reservations"
-    - "/api/reservations"
-    - "/api/reservations/*"
-  message: "Access denied: /reservations requires the reservations:view role."
-
-- role: "reservations:write"
-  paths:
-    - "/api/reservations/shift"
-  message: "Access denied: shifting reservations requires the reservations:write role."
-
-- role: "guest-search:view"
-  paths:
-    - "/api/guest-search"
-  message: "Access denied: guest search requires the guest-search:view role."
-
-- role: "guest-search:extract"
-  paths:
-    - "/api/guest-search/extract-name"
-  message: "Access denied: name extraction requires the guest-search:extract role."
+```
+GET    {CADDY_ADMIN_URL}/config/                                   → Fetch Caddy config
+PATCH  {CADDY_ADMIN_URL}/config                                    → Push routes (internal-server)
 ```
 
-#### How the Sync Service Uses It
+### 5.7 Role-to-Path Mapping (`docker/rbac_routes.json`)
 
-1. Load the YAML file on startup and after each role change
-2. For each role entry, check if the role exists in Keycloak (via `GET /admin/realms/{realm}/roles`)
-3. If the role exists, generate a Caddy deny rule for each path using the [Route Template](#route-template)
-4. Assemble all rules in order (static assets route first, deny rules, catch-all proxy last)
-5. Push the complete routes array atomically to Caddy
+The role-to-path mapping is a **JSON file**. It is the single source of truth for which roles protect which paths, which frontend menus are visible, and also serves as a fallback when Keycloak role attributes are not yet populated.
+
+**Schema:**
+
+```json
+[
+  {
+    "role": "<role_name>",
+    "paths": [
+      "<path_pattern>",
+      "<path_pattern>"
+    ],
+    "menus": [
+      "<menu_identifier>"
+    ],
+    "message": "Custom 403 message"
+  }
+]
+```
+
+**Field descriptions:**
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `role` | Keycloak role name | `settings:view` |
+| `paths` | Path patterns enforced by Caddy (frontend + API) | `/settings`, `/api/settings` |
+| `menus` | Frontend menu identifiers this role unlocks | `settings`, `prompts` |
+| `message` | Custom 403 denial message | `Access denied: ...` |
+
+**How `menus` controls frontend navigation visibility:**
+
+The `menus` field is the bridge between Keycloak role attributes and frontend navigation. The flow:
+
+1. **Role creation:** `keycloak_setup` writes `menus` as a Keycloak role attribute
+2. **Role sync:** `rbac_sync` preserves `menus` when syncing roles between Keycloak and `rbac_routes.json`
+3. **Frontend request:** On page load, `Header.tsx` calls `/client-api/me`
+4. **Menu resolution:** The client-backend reads user roles from `X-Forwarded-Groups`, queries Keycloak Admin API for role attributes (including `menus`), and aggregates menu identifiers across all user roles
+5. **Menu filtering:** The frontend filters its navigation links against the returned `menus` array
+
+Roles that only protect API endpoints (e.g., `reservations:write`, `guest-search:view`, `performance:run`) have an empty `menus: []` array since they do not correspond to a visible page.
+
+**Current mappings:**
+
+| Role | Protected Paths |
+|------|----------------|
+| `settings:view` | `/settings`, `/settings/*`, `/api/settings`, `/api/settings/*` |
+| `models:admin` | `/api/models`, `/api/models/*` |
+| `prompts:admin` | `/prompt-management`, `/prompt-groups`, `/prompt-chain-page*`, `/api/prompts/*`, `/api/prompt-groups/*` |
+| `performance:view` | `/performance-testing`, `/performance-dashboard`, `/api/performance-testing/*` |
+| `performance:run` | `/api/performance-testing/batch/*`, `/api/performance-testing/result/*`, `/api/performance-testing/setup-guests`, `/api/performance-testing/generate-*`, `/api/performance-testing/validate-guests` |
+| `reservations:view` | `/reservations`, `/api/reservations/*` |
+| `reservations:write` | `/api/reservations/shift` |
+| `guest-search:view` | `/api/guest-search` |
+| `guest-search:extract` | `/api/guest-search/extract-name` |
+
+The Keycloak setup script (`keycloak_setup/config.py`) loads this file at runtime via `get_roles()` which calls `load_rbac_routes()` from `rbac_file.py`. This ensures roles in Keycloak always match the mapping file.
+
+### 5.8 Shared Settings (`docker/settings.py`)
+
+A shared Python settings module used by `role_sync`, `keycloak_setup`, and test fixtures. Provides a `settings` singleton with properties backed by environment variables.
+
+**Key settings:**
+
+| Property | Default | Used By |
+|----------|---------|---------|
+| `KEYCLOAK_URL` | `http://keycloak:8080/auth` | All scripts |
+| `KEYCLOAK_REALM` | `production` | All scripts |
+| `KEYCLOAK_ADMIN_USER` | `admin` | All scripts |
+| `KEYCLOAK_ADMIN_PASSWORD` | `admin` | All scripts |
+| `CADDY_ADMIN_URL` | `http://caddy:2019` | Role sync (main Caddy) |
+| `CADDY_RBAC_ADMIN_URL` | `http://caddy-rbac:2020` | Role sync (RBAC gateway) |
+| `VALKEY_URL` | `redis://valkey:6379/0` | Role sync, tests |
+| `SESSION_COOKIE_NAME` | `_oauth2_proxy` | Role sync |
+| `SYNC_INTERVAL` | `10` | Role sync |
+| `MAPPING_FILE` | `/app/rbac_routes.json` | Role sync, Keycloak setup |
+| `APP_DOMAIN` | `https://out-customer.com` | Keycloak setup |
+| `OIDC_REALM` | `production` | Keycloak setup |
+| `OIDC_CLIENT_ID` | `concierge` | Keycloak setup |
+| `MODELS_ENDPOINT` | `http://localhost:8000/v1` | Backend LLM |
+| `DATABASE_URL` | `sqlite:////app/database.db` | Backend |
+
+### 5.9 RBAC File Utilities (`docker/rbac_file.py`)
+
+Shared Python utilities for loading and writing the `rbac_routes.json` file. Uses Pydantic models (`rbac_models.py`) for validation.
+
+| Function | Purpose |
+|----------|---------|
+| `load_rbac_routes(path)` | Load JSON → `RBACRoutes` Pydantic model |
+| `load_role_definitions(path)` | Extract `{role: {"paths": [...], "message": ""}}` dict |
+| `load_role_descriptions(path)` | Extract `{role: description}` dict (for Keycloak role creation) |
+| `write_rbac_routes(path, roles_config)` | Write role config back to JSON |
 
 ---
 
-## 6. Implementation Steps
-
-### Phase 1: Keycloak Setup Script
-
-1. Replace `GROUPS = ["single", "all"]` with `ROLES = {...}` (see [Defined Roles](#defined-roles))
-2. Replace `create_group()` with `create_role()` using `POST /admin/realms/{realm}/roles`
-3. Replace `assign_user_to_group()` with `assign_user_to_roles()` using `POST /admin/realms/{realm}/users/{id}/role-mappings/realm`
-4. Remove `configure_groups_claim()` — no protocol mapper needed
-5. Add composite role creation for `full-access`
-6. Update summary output to list roles instead of groups
-
-### Phase 2: oauth2-proxy Configuration
-
-1. Remove `oidc_groups_claim = "groups"` from `oidc-main.toml`
-2. Replace `allowed_groups = ["single", "all"]` with `allowed_groups = ["*"]`
-3. Keep all other settings unchanged
-
-### Phase 3: Caddy Configuration
-
-1. Enable the Caddy Admin API: change `"admin": {"disabled": true}` to `"admin": {"listen": "0.0.0.0:2019"}` in `Caddyfile.json`
-2. In `internal-server` routes, keep the static assets route and the default catch-all proxy route — deny rules will be injected by the sync service at runtime
-3. Validate JSON syntax
-
-### Phase 4: Docker Compose
-
-1. Add `OIDC_REALM` environment variable to `oidc-main` service
-2. Pass realm as CLI flag to override TOML config
-3. Add `role-sync` service definition (see [Section 5.4](#54-docker-compose-dockerdocker-composeyaml))
-
-### Phase 5: Role Sync Service
-
-1. Create `docker/role_sync.py` implementing the polling loop (see [Section 5.5](#55-role-sync-service-dockerrole_syncpy))
-2. Create `docker/rbac_routes.yaml` with role-to-path mappings (see [Section 5.6](#56-role-to-path-mapping-dockerrbac_routesyaml))
-3. Verify the sync service starts, authenticates to Keycloak, and pushes initial routes to Caddy
-4. Test that role changes in Keycloak are detected and routes are updated
-
-### Phase 6: Documentation
-
-1. Update `docker/README.md` with:
-   - New architecture diagram (including sync service)
-   - Role naming convention and guidelines
-   - User access matrix
-   - Setup instructions
-2. Create this document (`docs/IMPLEMENTATION_RBAC.md`)
-
-### Phase 7: Testing
-
-(See [Testing Plan](#9-testing-plan))
-
----
-
-## 7. Scaling Guidelines
+## 6. Scaling Guidelines
 
 ### For the Keycloak Administrator
 
@@ -768,16 +633,14 @@ Or via the Keycloak admin console: Realm → Roles → Create Role.
 
 **Step 2 — Add the role-to-path mapping:**
 
-Add an entry to `docker/rbac_routes.yaml`:
+Add an entry to `docker/rbac_routes.json`:
 
-```yaml
-- role: "reports:view"
-  paths:
-    - "/reports"
-    - "/reports/*"
-    - "/api/reports"
-    - "/api/reports/*"
-  message: "Access denied: /reports requires the reports:view role."
+```json
+{
+  "role": "reports:view",
+  "paths": ["/reports", "/reports/*", "/api/reports", "/api/reports/*"],
+  "message": "Access denied: /reports requires the reports:view role."
+}
 ```
 
 **Step 3 — The sync service picks it up automatically:**
@@ -785,8 +648,8 @@ Add an entry to `docker/rbac_routes.yaml`:
 On the next poll cycle (default: 30 seconds), the sync service will:
 1. Detect the new role exists in Keycloak
 2. Find the matching entry in the mapping file
-3. Generate the Caddy deny rule
-4. Push the updated routes to Caddy via the Admin API
+3. Generate deny rules for all paths
+4. Push all rules to Caddy's `internal-server`
 
 **No manual Caddy restart required.**
 
@@ -797,6 +660,16 @@ On the next poll cycle (default: 30 seconds), the sync service will:
 1. Create user in Keycloak (realm → Users → Create user)
 2. Assign roles (Role mapping tab → Assign roles)
 3. No config file changes needed — roles are extracted from the JWT token at request time
+
+#### Adding a New API Endpoint
+
+1. Add the API path to the role's entry in `rbac_routes.json`
+2. The sync service will push the deny rule to Caddy's `internal-server` on the next poll cycle
+
+#### Adding a New Frontend Page
+
+1. Add the frontend path to the role's entry in `rbac_routes.json`
+2. The sync service will push the deny rule to Caddy's `internal-server` on the next poll cycle
 
 #### Creating a Permission Tier
 
@@ -810,21 +683,21 @@ For organizations that prefer tier-based management (e.g., "receptionist", "mana
    admin        → all roles
    ```
 3. Assign the composite role to users
-4. Add corresponding entries to `rbac_routes.yaml` for each granular role
+4. Add corresponding entries to `rbac_routes.json` for each granular role
 
 ### Decision Matrix: When to Create a New Role vs Reuse Existing
 
 | Scenario | Action |
 |----------|--------|
-| New frontend page | Create role `<module>:view`, add entry to `rbac_routes.yaml` |
+| New frontend page | Create role `<module>:view`, add entry to `rbac_routes.json` |
 | New API endpoint (read) | If module role exists (e.g., `reservations:view`), reuse; otherwise create role and add mapping |
-| New API endpoint (write) | Create role `<module>:write` (or `<module>:<action>` for granularity), add entry to `rbac_routes.yaml` |
-| New API endpoint (destructive) | Create role `<module>:admin`, add entry to `rbac_routes.yaml` |
-| User needs subset of existing module | Create finer-grained role: `<module>:<resource>:<action>`, add entry to `rbac_routes.yaml` |
+| New API endpoint (write) | Create role `<module>:write` (or `<module>:<action>` for granularity), add entry to `rbac_routes.json` |
+| New API endpoint (destructive) | Create role `<module>:admin`, add entry to `rbac_routes.json` |
+| User needs subset of existing module | Create finer-grained role: `<module>:<resource>:<action>`, add entry to `rbac_routes.json` |
 
 ---
 
-## 8. Trade-offs & Limitations
+## 7. Trade-offs & Limitations
 
 ### Caddy Cannot Distinguish HTTP Methods
 
@@ -845,7 +718,14 @@ For organizations that prefer tier-based management (e.g., "receptionist", "mana
 
 **Recommendation:** Start with path-level control. If method-level granularity is needed, use path separation (e.g., `/api/admin/*` for write-only endpoints).
 
-### oauth2-proxy `allowed_groups = ["*"]`
+### Single Caddy Instance
+
+The architecture uses a **single Caddy instance** with the external gateway (443) and an internal server (`:8000`) for RBAC enforcement. This simplifies operations:
+- Only one Caddy process to monitor and manage
+- All deny rules pushed to a single Admin API endpoint
+- The `internal-server` handles both frontend and API routes
+
+### oauth2-proxy `allowed_groups = []` (Accept All)
 
 **Concern:** Accepting all groups at the oauth2-proxy level means an authenticated user passes through oauth2-proxy and only gets blocked at Caddy.
 
@@ -858,7 +738,7 @@ For organizations that prefer tier-based management (e.g., "receptionist", "mana
 
 **Concern:** Multiple `header_regexp` patterns on every request.
 
-**Reality:** The `X-Forwarded-Groups` header is small (comma-separated list of role strings). Regex matching is fast for this size. Even with 15+ rules, the overhead is negligible (<1ms per request).
+**Reality:** The `X-Forwarded-Groups` header is small (comma-separated list of role strings). Regex matching is fast for this size. Even with 15+ rules across both Caddy instances, the overhead is negligible (<1ms per request).
 
 ### Realm Duplication
 
@@ -878,25 +758,31 @@ For organizations that prefer tier-based management (e.g., "receptionist", "mana
 
 **Concern:** Even after Caddy routes are updated, existing users with old JWT tokens won't have the new roles in their `X-Forwarded-Groups` header until their token expires and they re-authenticate.
 
-**Reality:** This is a Keycloak/JWT limitation, not a sync service issue. With `cookie_expire = "1h"` and `cookie_refresh = "1m"` in oauth2-proxy, tokens refresh frequently. Users will pick up new roles within ~1 minute after oauth2-proxy performs a token refresh.
+**Reality:** This is a Keycloak/JWT limitation, not a sync service issue. With `cookie_expire = "1h"` and `cookie_refresh = "5m"` in oauth2-proxy, tokens refresh every 5 minutes. Users will pick up new roles within ~5 minutes after oauth2-proxy performs a token refresh.
 
 ### Sync Service: Caddy Admin API Security
 
-**Concern:** The Caddy Admin API (`:2019`) allows modifying the live Caddy configuration.
+**Concern:** The Caddy Admin API (`:2019` for main, `:2020` for RBAC gateway) allows modifying the live Caddy configuration.
 
-**Mitigation:** The admin endpoint is only accessible from the internal Docker network. No port mapping exposes `2019` to the host. The sync service is the only container with access. If additional hardening is needed, the Caddy admin API supports authentication (via `auth` module) in future implementations.
+**Mitigation:** Both admin endpoints are only accessible from the internal Docker network. No port mapping exposes `2019` or `2020` to the host. The sync service is the only container with access. If additional hardening is needed, the Caddy admin API supports authentication (via `auth` module) in future implementations.
 
 ### Sync Service: Mapping File Maintenance
 
-**Concern:** The `rbac_routes.yaml` file must be kept in sync with the roles created in Keycloak.
+**Concern:** The `rbac_routes.json` file must be kept in sync with the roles created in Keycloak.
 
-**Mitigation:** The sync service only generates routes for roles that exist in **both** Keycloak and the mapping file. If a role exists in Keycloak but not in the mapping file, no deny rule is generated (the resource remains accessible). If a role exists in the mapping file but not in Keycloak, the sync service logs a warning but skips it.
+**Mitigation:** The sync service only generates routes for roles that exist in **both** Keycloak and the mapping file. If a role exists in Keycloak but not in the mapping file, no deny rule is generated (the resource remains accessible). If a role exists in the mapping file but not in Keycloak, the sync service logs a warning but skips it. The sync service also writes routes back to `rbac_routes.json` after syncing from Keycloak, helping keep the file in sync.
+
+### Three oauth2-proxy Instances: Resource Usage
+
+**Concern:** Running three oauth2-proxy instances consumes more memory and CPU than a single instance.
+
+**Reality:** Each oauth2-proxy instance is lightweight (~10-20MB RAM idle). The separation is necessary because each instance has a different upstream and redirect URL. The additional resource usage is negligible in a Docker environment.
 
 ---
 
-## 9. Testing Plan
+## 8. Testing Plan
 
-### 9.1 Unit Tests (Setup Script)
+### 8.1 Unit Tests (Setup Script)
 
 | Test | Assertion |
 |------|-----------|
@@ -905,21 +791,21 @@ For organizations that prefer tier-based management (e.g., "receptionist", "mana
 | Composite role | `full-access` user has all child roles in access token |
 | Idempotency | Running setup twice does not duplicate roles/users |
 
-### 9.2 Integration Tests (Full Flow)
+### 8.2 Integration Tests (Full Flow)
 
 | Scenario | User | Expected Result |
 |----------|------|-----------------|
 | Access `/reservations` | `receptionist` (`reservations:view`) | 200 OK |
 | Access `/settings` | `receptionist` (`reservations:view`) | 403 Forbidden |
 | Access `/api/reservations/shift` (POST) | `receptionist` (`reservations:view`) | 403 Forbidden |
-| Access `/api/reservations` (GET) | `receptionist` | 200 OK (proxied through) |
+| Access `/api/reservations` (GET) | `receptionist` | 200 OK (proxied through oidc-api) |
 | Access `/settings` | `admin` (`full-access`) | 200 OK |
 | Access `/api/models` | `operator` (no `models:admin`) | 403 Forbidden |
 | Access `/api/models` | `admin` (`models:admin` via `full-access`) | 200 OK |
 | Access any page | Unauthenticated user | Redirect to Keycloak login |
 | Static assets | Any authenticated user | 200 OK (no role check) |
 
-### 9.3 Sync Service Tests
+### 8.3 Sync Service Tests
 
 | Test | Assertion |
 |------|-----------|
@@ -934,7 +820,7 @@ For organizations that prefer tier-based management (e.g., "receptionist", "mana
 | Role in mapping but not in Keycloak | Sync service logs warning, route skipped |
 | ETag handling | Caddy returns 304 when no config changes; sync service handles gracefully |
 
-### 9.4 Session Invalidation Tests
+### 8.4 Session Invalidation Tests
 
 | Test | Assertion |
 |------|-----------|
@@ -944,19 +830,20 @@ For organizations that prefer tier-based management (e.g., "receptionist", "mana
 | (Valkey) User deleted from Keycloak | Session deleted from Valkey immediately, user logged out on next request |
 | (Valkey) SESSION_REMOVE event | Sync service detects event, deletes session from Valkey |
 
-### 9.5 Manual Verification Steps
+### 8.5 Manual Verification Steps
 
 1. Start all services: `docker compose up -d`
 2. Run setup script: `docker run --rm --network docker_app-network -v "$(pwd)/docker":/work python:3.12-slim bash -c "cd /work && pip install requests -q && python3 keycloak_setup.py keycloak 8080"`
 3. Verify sync service logs: `docker compose logs role-sync` — should show initial sync completing
-4. Verify Caddy routes: `curl http://localhost:2019/config/apps/http/servers/internal-server/routes` — should show deny rules
-5. Login as `user1` → verify access to assigned pages only
-6. Login as `user2` → verify access to all pages
-7. Create a new role in Keycloak admin console
-8. Add entry to `rbac_routes.yaml`
-9. Wait up to `SYNC_INTERVAL` seconds; check Caddy logs for updated routes
-10. Check Caddy logs for 403 responses on denied paths
-11. Switch realm: `OIDC_REALM=testing docker compose up -d` → verify same behavior
+4. Verify main Caddy routes: `curl http://localhost:2019/config/apps/http/servers/internal-server/routes` — should show frontend deny rules
+5. Verify Caddy internal-server routes: `curl http://localhost:2019/config/apps/http/servers/internal-server/routes` — should show deny rules for all protected paths
+6. Login as `user1` → verify access to assigned pages only
+7. Login as `user2` → verify access to all pages
+8. Create a new role in Keycloak admin console
+9. Add entry to `rbac_routes.json`
+10. Wait up to `SYNC_INTERVAL` seconds; check Caddy logs for updated routes
+11. Check Caddy logs for 403 responses on denied paths
+12. Switch realm: `OIDC_REALM=testing docker compose up -d` → verify same behavior
 
 ---
 
@@ -1007,17 +894,25 @@ For organizations that prefer tier-based management (e.g., "receptionist", "mana
 
 ---
 
-## Appendix C: Files to Modify or Create
+## Appendix C: Key Files Reference
 
-| File | Action | Description |
-|------|--------|-------------|
-| `docker/keycloak_setup.py` | Modify | Group → Role throughout |
-| `docker/oidc-main.toml` | Modify | Remove `oidc_groups_claim`, set `allowed_groups = ["*"]` |
-| `docker/Caddyfile.json` | Modify | Enable admin endpoint (`"listen": "0.0.0.0:2019"`), simplify routes (deny rules injected by sync service) |
-| `docker/docker-compose.yaml` | Modify | Add `OIDC_REALM` env var to `oidc-main`; add `role-sync` service |
-| `docker/role_sync.py` | **Create** | Python sync service: polls Keycloak admin events, generates Caddy routes, pushes via Caddy Admin API |
-| `docker/rbac_routes.yaml` | **Create** | Role-to-path mapping: YAML file that maps role names to protected Caddy paths |
-| `docker/README.md` | Modify | Update architecture diagram, role naming convention, user access matrix, setup instructions |
-| `docs/IMPLEMENTATION_RBAC.md` | Create | This document |
-| `docker/docker-compose.yaml` | Modify (optional) | Add Valkey service for immediate session invalidation |
-| `docker/oidc-main.toml` | Modify (optional) | Add `session_store_type = "redis"` for immediate session invalidation (Valkey is protocol-compatible) |
+| File | Description |
+|------|-------------|
+| `docker/keycloak_setup/` | Modular Keycloak setup package (realms, roles, users, clients) |
+| `docker/keycloak_common.py` | Shared Keycloak API helpers |
+| `docker/rbac_routes.json` | Role-to-path mapping (single source of truth) |
+| `docker/rbac_file.py` | Shared RBAC file utilities |
+| `docker/rbac_models.py` | Pydantic models for RBAC routes |
+| `docker/rbac_sync/` | Role sync service package |
+| `docker/rbac_sync/sync_orchestrator.py` | Main orchestrator — polling loop, initial sync, event dispatch |
+| `docker/rbac_sync/config.py` | Configuration (delegates to shared settings) |
+| `docker/rbac_sync/caddy_routes.py` | Route generation + pushing to both Caddy instances |
+| `docker/rbac_sync/event_polling.py` | Keycloak Admin Events API polling |
+| `docker/rbac_sync/session_management.py` | Valkey session invalidation + event persistence |
+| `docker/rbac_sync/routes_persistence.py` | Route file persistence (sync from Keycloak) |
+| `docker/role_sync.py` | Role sync entry point |
+| `docker/settings.py` | Shared settings module |
+| `docker/Caddyfile` | Main Caddy configuration (external gateway + frontend RBAC) |
+| `docker/Caddyfile.rbac` | Caddy RBAC gateway configuration (API authorization) |
+| `docker/docker-compose.yaml` | Docker Compose service definitions |
+| `docs/IMPLEMENTATION_RBAC.md` | This document |
