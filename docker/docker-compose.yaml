@@ -14,8 +14,7 @@ services:
       - frontend
       - frontend-two
       - keycloak
-      - oidc-main
-      - oidc-two
+      - oidc
       - oidc-api
       - oidc-client-api
       - client-backend
@@ -23,20 +22,9 @@ services:
     networks:
       - app-network
 
-  caddy-rbac:
-    image: caddy:2-alpine
-    container_name: caddy-rbac
-    restart: unless-stopped
-    volumes:
-      - ./Caddyfile.rbac:/etc/caddy/Caddyfile
-    depends_on:
-      - backend
-    networks:
-      - app-network
-
-  oidc-main:
+  oidc:
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
-    container_name: oidc-main
+    container_name: oidc
     restart: unless-stopped
     extra_hosts:
       - "out-customer.com:host-gateway"
@@ -57,7 +45,7 @@ services:
       # Upstreams
       - OAUTH2_PROXY_UPSTREAMS=${OAUTH2_PROXY_UPSTREAMS:-http://frontend:80/}
       # Server
-      - OAUTH2_PROXY_HTTP_ADDRESS=${OAUTH2_PROXY_HTTP_ADDRESS:-0.0.0.0:4182}
+      - OAUTH2_PROXY_HTTP_ADDRESS=${OAUTH2_PROXY_HTTP_ADDRESS:-0.0.0.0:4180}
       - OAUTH2_PROXY_REVERSE_PROXY=${OAUTH2_PROXY_REVERSE_PROXY:-true}
       # OIDC
       - OAUTH2_PROXY_SCOPE=${OAUTH2_PROXY_SCOPE:-openid profile email roles}
@@ -69,8 +57,7 @@ services:
       # Session storage (Valkey/Redis)
       - OAUTH2_PROXY_SESSION_STORE_TYPE=${OAUTH2_PROXY_SESSION_STORE_TYPE:-redis}
       - OAUTH2_PROXY_REDIS_CONNECTION_URL=${VALKEY_URL:-redis://valkey:6379/0}
-      # Backend logout — server-side call to Keycloak (internal URL) to terminate SSO session
-      # {id_token} is replaced by oauth2-proxy with the user's ID token at logout time
+      # Backend logout
       - OAUTH2_PROXY_BACKEND_LOGOUT_URL=http://keycloak:8080/auth/realms/${OIDC_REALM:-production}/protocol/openid-connect/logout?id_token_hint={id_token}
     depends_on:
       - keycloak
@@ -99,8 +86,8 @@ services:
       - OAUTH2_PROXY_COOKIE_REFRESH=${OAUTH2_PROXY_COOKIE_REFRESH:-5m}
       - OAUTH2_PROXY_COOKIE_EXPIRE=${OAUTH2_PROXY_COOKIE_EXPIRE:-1h}
       - OAUTH2_PROXY_COOKIE_PATH=/
-      # Upstreams — forward to the RBAC gateway
-      - OAUTH2_PROXY_UPSTREAMS=http://caddy-rbac:4185/
+      # Upstreams — forward to backend directly (Caddy handles RBAC via dynamic routes)
+      - OAUTH2_PROXY_UPSTREAMS=http://backend:8000/
       # Server
       - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4184
       - OAUTH2_PROXY_REVERSE_PROXY=${OAUTH2_PROXY_REVERSE_PROXY:-true}
@@ -114,11 +101,55 @@ services:
       # Session storage (Valkey/Redis)
       - OAUTH2_PROXY_SESSION_STORE_TYPE=${OAUTH2_PROXY_SESSION_STORE_TYPE:-redis}
       - OAUTH2_PROXY_REDIS_CONNECTION_URL=${VALKEY_URL:-redis://valkey:6379/0}
-      # Backend logout — server-side call to Keycloak (internal URL) to terminate SSO session
+      # Backend logout
       - OAUTH2_PROXY_BACKEND_LOGOUT_URL=http://keycloak:8080/auth/realms/${OIDC_REALM:-production}/protocol/openid-connect/logout?id_token_hint={id_token}
     depends_on:
       - keycloak
-      - caddy-rbac
+      - backend
+      - valkey
+    networks:
+      - app-network
+
+  oidc-client-api:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
+    container_name: oidc-client-api
+    restart: unless-stopped
+    extra_hosts:
+      - "out-customer.com:host-gateway"
+    environment:
+      # Provider
+      - OAUTH2_PROXY_PROVIDER=${OAUTH2_PROXY_PROVIDER:-keycloak-oidc}
+      - OAUTH2_PROXY_OIDC_ISSUER_URL=${APP_DOMAIN:-https://out-customer.com}/auth/realms/${OIDC_REALM:-production}
+      - OAUTH2_PROXY_CLIENT_ID=${OIDC_CLIENT_ID:-concierge}
+      - OAUTH2_PROXY_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
+      - OAUTH2_PROXY_REDIRECT_URL=${APP_DOMAIN:-https://out-customer.com}/client-api/oauth2/callback
+      - OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=${OAUTH2_PROXY_SKIP_PROVIDER_BUTTON:-true}
+      # Cookie
+      - OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_COOKIE_SECRET:-}
+      - OAUTH2_PROXY_COOKIE_SECURE=${OAUTH2_PROXY_COOKIE_SECURE:-false}
+      - OAUTH2_PROXY_COOKIE_REFRESH=${OAUTH2_PROXY_COOKIE_REFRESH:-5m}
+      - OAUTH2_PROXY_COOKIE_EXPIRE=${OAUTH2_PROXY_COOKIE_EXPIRE:-1h}
+      - OAUTH2_PROXY_COOKIE_PATH=/
+      # Upstreams
+      - OAUTH2_PROXY_UPSTREAMS=http://client-backend:8000/
+      # Server
+      - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4186
+      - OAUTH2_PROXY_REVERSE_PROXY=${OAUTH2_PROXY_REVERSE_PROXY:-true}
+      # OIDC
+      - OAUTH2_PROXY_SCOPE=${OAUTH2_PROXY_SCOPE:-openid profile email roles}
+      - OAUTH2_PROXY_EMAIL_DOMAINS=${OAUTH2_PROXY_EMAIL_DOMAINS:-*}
+      - OAUTH2_PROXY_OIDC_GROUPS_CLAIM=${OAUTH2_PROXY_OIDC_GROUPS_CLAIM:-realm_access.roles}
+      - OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY=${OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY:-true}
+      - OAUTH2_PROXY_CODE_CHALLENGE_METHOD=${OAUTH2_PROXY_CODE_CHALLENGE_METHOD:-S256}
+      - OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES=${OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES:-account}
+      # Session storage (Valkey/Redis)
+      - OAUTH2_PROXY_SESSION_STORE_TYPE=${OAUTH2_PROXY_SESSION_STORE_TYPE:-redis}
+      - OAUTH2_PROXY_REDIS_CONNECTION_URL=${VALKEY_URL:-redis://valkey:6379/0}
+      # Backend logout
+      - OAUTH2_PROXY_BACKEND_LOGOUT_URL=http://keycloak:8080/auth/realms/${OIDC_REALM:-production}/protocol/openid-connect/logout?id_token_hint={id_token}
+    depends_on:
+      - keycloak
+      - client-backend
       - valkey
     networks:
       - app-network
@@ -138,14 +169,12 @@ services:
       - KEYCLOAK_ADMIN_USER=${KEYCLOAK_ADMIN_USER:-admin}
       - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
       - CADDY_ADMIN_URL=${CADDY_ADMIN_URL:-http://caddy:2019}
-      - CADDY_RBAC_ADMIN_URL=${CADDY_RBAC_ADMIN_URL:-http://caddy-rbac:2020}
       - SYNC_INTERVAL=${SYNC_INTERVAL:-30}
       - VALKEY_URL=${VALKEY_URL:-redis://valkey:6379/0}
       - SESSION_COOKIE_NAME=${SESSION_COOKIE_NAME:-_oauth2_proxy}
     depends_on:
       - keycloak
       - caddy
-      - caddy-rbac
       - valkey
     networks:
       - app-network
@@ -179,51 +208,6 @@ services:
     networks:
       - app-network
 
-  oidc-two:
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
-    container_name: oidc-two
-    restart: unless-stopped
-    extra_hosts:
-      - "out-customer.com:host-gateway"
-    environment:
-      # Provider
-      - OAUTH2_PROXY_PROVIDER=${OAUTH2_PROXY_PROVIDER:-keycloak-oidc}
-      - OAUTH2_PROXY_OIDC_ISSUER_URL=${APP_DOMAIN:-https://out-customer.com}/auth/realms/${OIDC_REALM:-production}
-      - OAUTH2_PROXY_CLIENT_ID=${OIDC_CLIENT_ID:-concierge}
-      - OAUTH2_PROXY_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
-      - OAUTH2_PROXY_REDIRECT_URL=${APP_DOMAIN:-https://out-customer.com}/app2/oauth2/callback
-      - OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=${OAUTH2_PROXY_SKIP_PROVIDER_BUTTON:-true}
-      # Cookie
-      - OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_COOKIE_SECRET:-}
-      - OAUTH2_PROXY_COOKIE_SECURE=${OAUTH2_PROXY_COOKIE_SECURE:-false}
-      - OAUTH2_PROXY_COOKIE_REFRESH=${OAUTH2_PROXY_COOKIE_REFRESH:-5m}
-      - OAUTH2_PROXY_COOKIE_EXPIRE=${OAUTH2_PROXY_COOKIE_EXPIRE:-1h}
-      - OAUTH2_PROXY_COOKIE_PATH=/
-      # Upstreams
-      - OAUTH2_PROXY_UPSTREAMS=http://frontend-two:80/
-      # Server
-      - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4183
-      - OAUTH2_PROXY_REVERSE_PROXY=${OAUTH2_PROXY_REVERSE_PROXY:-true}
-      # OIDC
-      - OAUTH2_PROXY_SCOPE=${OAUTH2_PROXY_SCOPE:-openid profile email roles}
-      - OAUTH2_PROXY_EMAIL_DOMAINS=${OAUTH2_PROXY_EMAIL_DOMAINS:-*}
-      - OAUTH2_PROXY_OIDC_GROUPS_CLAIM=${OAUTH2_PROXY_OIDC_GROUPS_CLAIM:-realm_access.roles}
-      - OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY=${OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY:-true}
-      - OAUTH2_PROXY_CODE_CHALLENGE_METHOD=${OAUTH2_PROXY_CODE_CHALLENGE_METHOD:-S256}
-      - OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES=${OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES:-account}
-      # Session storage (Valkey/Redis)
-      - OAUTH2_PROXY_SESSION_STORE_TYPE=${OAUTH2_PROXY_SESSION_STORE_TYPE:-redis}
-      - OAUTH2_PROXY_REDIS_CONNECTION_URL=${VALKEY_URL:-redis://valkey:6379/0}
-      # Backend logout — server-side call to Keycloak (internal URL) to terminate SSO session
-      # {id_token} is replaced by oauth2-proxy with the user's ID token at logout time
-      - OAUTH2_PROXY_BACKEND_LOGOUT_URL=http://keycloak:8080/auth/realms/${OIDC_REALM:-production}/protocol/openid-connect/logout?id_token_hint={id_token}
-    depends_on:
-      - keycloak
-      - frontend-two
-      - valkey
-    networks:
-      - app-network
-
   backend:
     image: concos-backend:latest
     build:
@@ -231,50 +215,6 @@ services:
       dockerfile: docker/Dockerfile.backend
     container_name: backend
     restart: unless-stopped
-    networks:
-      - app-network
-
-  oidc-client-api:
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
-    container_name: oidc-client-api
-    restart: unless-stopped
-    extra_hosts:
-      - "out-customer.com:host-gateway"
-    environment:
-      # Provider
-      - OAUTH2_PROXY_PROVIDER=${OAUTH2_PROXY_PROVIDER:-keycloak-oidc}
-      - OAUTH2_PROXY_OIDC_ISSUER_URL=${APP_DOMAIN:-https://out-customer.com}/auth/realms/${OIDC_REALM:-production}
-      - OAUTH2_PROXY_CLIENT_ID=${OIDC_CLIENT_ID:-concierge}
-      - OAUTH2_PROXY_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
-      - OAUTH2_PROXY_REDIRECT_URL=${APP_DOMAIN:-https://out-customer.com}/client-api/oauth2/callback
-      - OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=${OAUTH2_PROXY_SKIP_PROVIDER_BUTTON:-true}
-      # Cookie
-      - OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_COOKIE_SECRET:-}
-      - OAUTH2_PROXY_COOKIE_SECURE=${OAUTH2_PROXY_COOKIE_SECURE:-false}
-      - OAUTH2_PROXY_COOKIE_REFRESH=${OAUTH2_PROXY_COOKIE_REFRESH:-5m}
-      - OAUTH2_PROXY_COOKIE_EXPIRE=${OAUTH2_PROXY_COOKIE_EXPIRE:-1h}
-      - OAUTH2_PROXY_COOKIE_PATH=/
-      # Upstreams — forward to client-backend (hardcoded to avoid .env override)
-      - OAUTH2_PROXY_UPSTREAMS=http://client-backend:8000/
-      # Server
-      - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4186
-      - OAUTH2_PROXY_REVERSE_PROXY=${OAUTH2_PROXY_REVERSE_PROXY:-true}
-      # OIDC
-      - OAUTH2_PROXY_SCOPE=${OAUTH2_PROXY_SCOPE:-openid profile email roles}
-      - OAUTH2_PROXY_EMAIL_DOMAINS=${OAUTH2_PROXY_EMAIL_DOMAINS:-*}
-      - OAUTH2_PROXY_OIDC_GROUPS_CLAIM=${OAUTH2_PROXY_OIDC_GROUPS_CLAIM:-realm_access.roles}
-      - OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY=${OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY:-true}
-      - OAUTH2_PROXY_CODE_CHALLENGE_METHOD=${OAUTH2_PROXY_CODE_CHALLENGE_METHOD:-S256}
-      - OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES=${OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES:-account}
-      # Session storage (Valkey/Redis) — shared with other oauth2-proxy instances
-      - OAUTH2_PROXY_SESSION_STORE_TYPE=${OAUTH2_PROXY_SESSION_STORE_TYPE:-redis}
-      - OAUTH2_PROXY_REDIS_CONNECTION_URL=${VALKEY_URL:-redis://valkey:6379/0}
-      # Backend logout
-      - OAUTH2_PROXY_BACKEND_LOGOUT_URL=http://keycloak:8080/auth/realms/${OIDC_REALM:-production}/protocol/openid-connect/logout?id_token_hint={id_token}
-    depends_on:
-      - keycloak
-      - client-backend
-      - valkey
     networks:
       - app-network
 

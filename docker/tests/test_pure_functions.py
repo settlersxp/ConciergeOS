@@ -19,7 +19,6 @@ from rbac_sync import (
     has_role_events,
     generate_deny_rules,
     build_caddy_routes,
-    build_rbac_routes,
     push_routes_to_caddy,
     get_menus_for_roles,
     ROLE_EVENT_TYPES,
@@ -80,10 +79,8 @@ class TestGenerateDenyRules:
                 "models:admin": {"paths": ["/models", "/models/*"], "menus": ["models"]},
             }
         )
-        frontend_rules, api_rules = generate_deny_rules(roles_with_attrs)
-        # Non-API paths → frontend rules only
-        assert len(frontend_rules) == 2
-        assert len(api_rules) == 0
+        deny_rules = generate_deny_rules(roles_with_attrs)
+        assert len(deny_rules) == 2
 
     def test_skips_roles_without_paths(self):
         roles_with_attrs = make_roles_with_attrs(
@@ -92,17 +89,16 @@ class TestGenerateDenyRules:
                 "settings:view": {"paths": ["/settings"], "menus": ["settings"]},
             }
         )
-        frontend_rules, api_rules = generate_deny_rules(roles_with_attrs)
-        assert len(frontend_rules) == 1
-        assert len(api_rules) == 0
+        deny_rules = generate_deny_rules(roles_with_attrs)
+        assert len(deny_rules) == 1
 
     def test_rule_structure(self):
         """Verify the deny rule structure uses header_regexp with X-Forwarded-Groups."""
         roles_with_attrs = make_roles_with_attrs(
             **{"settings:view": {"paths": ["/settings", "/settings/*"], "menus": ["settings"]}}
         )
-        frontend_rules, _ = generate_deny_rules(roles_with_attrs)
-        rule = frontend_rules[0]
+        deny_rules = generate_deny_rules(roles_with_attrs)
+        rule = deny_rules[0]
 
         # Terminal flag
         assert rule["terminal"] is True
@@ -127,8 +123,8 @@ class TestGenerateDenyRules:
         roles_with_attrs = make_roles_with_attrs(
             **{"settings:view": {"paths": ["/settings"], "menus": ["settings"]}}
         )
-        frontend_rules, _ = generate_deny_rules(roles_with_attrs)
-        rule = frontend_rules[0]
+        deny_rules = generate_deny_rules(roles_with_attrs)
+        rule = deny_rules[0]
         assert "settings:view" in rule["handle"][0]["body"]
         assert "Access denied" in rule["handle"][0]["body"]
 
@@ -136,9 +132,8 @@ class TestGenerateDenyRules:
         # When no roles and no fallback file, should return empty
         from unittest.mock import patch
         with patch("rbac_sync.caddy_routes._load_fallback_roles", return_value={}):
-            frontend_rules, api_rules = generate_deny_rules({})
-        assert frontend_rules == []
-        assert api_rules == []
+            deny_rules = generate_deny_rules({})
+        assert deny_rules == []
 
     def test_all_empty_paths_returns_no_rules(self):
         roles_with_attrs = make_roles_with_attrs(
@@ -150,22 +145,11 @@ class TestGenerateDenyRules:
         # Fallback may add roles with paths, so mock it away
         from unittest.mock import patch
         with patch("rbac_sync.caddy_routes._load_fallback_roles", return_value={}):
-            frontend_rules, api_rules = generate_deny_rules(roles_with_attrs)
-        assert frontend_rules == []
-        assert api_rules == []
+            deny_rules = generate_deny_rules(roles_with_attrs)
+        assert deny_rules == []
 
-    def test_api_paths_go_to_api_rules(self):
-        """Paths starting with /api/ should produce API deny rules, not frontend rules."""
-        roles_with_attrs = make_roles_with_attrs(
-            **{"models:admin": {"paths": ["/api/models", "/api/models/*"], "menus": ["models"]}}
-        )
-        frontend_rules, api_rules = generate_deny_rules(roles_with_attrs)
-        assert len(frontend_rules) == 0
-        assert len(api_rules) == 1
-        assert "/api/models" in api_rules[0]["match"][0]["path"]
-
-    def test_mixed_paths_split_correctly(self):
-        """Roles with both API and non-API paths should produce rules for both."""
+    def test_includes_all_paths_in_single_rule(self):
+        """All paths (API and non-API) are now in a single deny rule per role."""
         roles_with_attrs = make_roles_with_attrs(
             **{
                 "admin": {
@@ -174,11 +158,11 @@ class TestGenerateDenyRules:
                 }
             }
         )
-        frontend_rules, api_rules = generate_deny_rules(roles_with_attrs)
-        assert len(frontend_rules) == 1
-        assert len(api_rules) == 1
-        assert "/admin" in frontend_rules[0]["match"][0]["path"]
-        assert "/api/admin" in api_rules[0]["match"][0]["path"]
+        deny_rules = generate_deny_rules(roles_with_attrs)
+        assert len(deny_rules) == 1
+        assert "/admin" in deny_rules[0]["match"][0]["path"]
+        assert "/api/admin" in deny_rules[0]["match"][0]["path"]
+        assert "/api/admin/*" in deny_rules[0]["match"][0]["path"]
 
 
 # ======================================================================
@@ -258,35 +242,6 @@ class TestBuildCaddyRoutes:
         assert "match" not in last
         assert last["handle"][0]["handler"] == "reverse_proxy"
         assert last["handle"][0]["upstreams"][0]["dial"] == "frontend:80"
-
-    def test_empty_rbac_produces_two_routes(self):
-        """Empty deny rules produces 2 routes for RBAC gateway: full_access_bypass, catch-all."""
-        routes = build_rbac_routes([])
-        assert len(routes) == 2
-        # First route: full-access bypass
-        assert routes[0]["terminal"] is True
-        assert routes[0]["handle"][0]["handler"] == "reverse_proxy"
-        assert routes[0]["handle"][0]["upstreams"][0]["dial"] == "backend:8000"
-        assert "role:full-access" in routes[0]["match"][0]["header_regexp"]["X-Forwarded-Groups"]["pattern"]
-        # Last route: catch-all
-        assert "terminal" not in routes[-1]
-        assert "match" not in routes[-1]
-        assert routes[-1]["handle"][0]["handler"] == "reverse_proxy"
-        assert routes[-1]["handle"][0]["upstreams"][0]["dial"] == "backend:8000"
-
-    def test_rbac_full_access_bypass_before_deny_rules(self):
-        """Verify full-access bypass is the first route in RBAC gateway."""
-        deny = [{"deny": "api-rule"}]
-        routes = build_rbac_routes(deny)
-        assert len(routes) == 3
-        # First: full-access bypass
-        assert routes[0]["terminal"] is True
-        assert "role:full-access" in str(routes[0])
-        # Second: deny rule
-        assert routes[1] == {"deny": "api-rule"}
-        # Third: catch-all
-        assert "terminal" not in routes[2]
-        assert "match" not in routes[2]
 
     def test_empty_produces_three_routes(self):
         """Empty deny rules produces 3 routes: static_assets, full_access_bypass, catch-all."""

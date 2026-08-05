@@ -102,8 +102,7 @@ export default function Header() {
     [menus],
   );
 
-  const baseUrl = import.meta.env.BASE_URL;
-  const currentApp = baseUrl === '/app2' ? 'app2' : 'app1';
+  const currentApp = window.location.pathname.startsWith('/app2') ? 'app2' : 'app1';
   const otherApp = currentApp === 'app1' ? 'app2' : 'app1';
   const switchUrl = `https://${window.location.host}/${otherApp}`;
 
@@ -223,8 +222,8 @@ export default function Header() {
               {debugOpen && (
                 <div className="absolute right-0 z-50 mt-1 min-w-[280px] rounded-md bg-primary-800 shadow-lg ring-1 ring-black/10 p-4 space-y-3">
                   <div className="text-sm">
-                    <span className="text-primary-300">Base URL:</span>{' '}
-                    <code className="bg-primary-900 px-1 rounded text-yellow-300">{baseUrl}</code>
+                    <span className="text-primary-300">Path:</span>{' '}
+                    <code className="bg-primary-900 px-1 rounded text-yellow-300">{window.location.pathname}</code>
                   </div>
                   <div className="text-sm">
                     <span className="text-primary-300">Current App:</span>{' '}

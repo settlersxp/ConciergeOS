@@ -55,30 +55,49 @@ out-customer.com {
         }
     }
 
-    # 2. App2 — proxy to oidc-two with path rewrite
+    # 2. App2 — proxy to oidc with path rewrite
     @app2 path_regexp app2 ^/app2(/.*)?$
     handle @app2 {
         rewrite {re.app2.1}
-        reverse_proxy oidc-two:4183 {
+        reverse_proxy oidc:4180 {
             header_up X-Forwarded-By out-customer.com
             header_up X-Forwarded-Proto https
         }
     }
 
-    # 3. App1 — proxy to oidc-main with path rewrite
+    # 3. App1 — proxy to oidc with path rewrite
     @app1 path_regexp app1 ^/app1(/.*)?$
     handle @app1 {
         rewrite {re.app1.1}
-        reverse_proxy oidc-main:4182 {
+        reverse_proxy oidc:4180 {
             header_up X-Forwarded-By out-customer.com
             header_up X-Forwarded-Proto https
         }
     }
 
-    # 4. OAuth2-proxy endpoints (sign_out, callback, etc.) — scalable for any number of apps
-    @oauth2 path /oauth2/*
+    # 4. OAuth2-proxy endpoints (sign_out, callback, etc.)
+    #    oidc-api handles /api/oauth2/*
+    #    oidc-client-api handles /client-api/oauth2/*
+    #    oidc handles everything else (/oauth2/*, /app1/oauth2/*, /app2/oauth2/*)
+    @api_oauth2 path /api/oauth2/*
+    handle @api_oauth2 {
+        reverse_proxy oidc-api:4184 {
+            header_up X-Forwarded-By out-customer.com
+            header_up X-Forwarded-Proto https
+        }
+    }
+
+    @client_api_oauth2 path /client-api/oauth2/*
+    handle @client_api_oauth2 {
+        reverse_proxy oidc-client-api:4186 {
+            header_up X-Forwarded-By out-customer.com
+            header_up X-Forwarded-Proto https
+        }
+    }
+
+    @oauth2 path /oauth2/* /login/*
     handle @oauth2 {
-        reverse_proxy oidc-main:4182 {
+        reverse_proxy oidc:4180 {
             header_up X-Forwarded-By out-customer.com
             header_up X-Forwarded-Proto https
         }
@@ -95,9 +114,9 @@ out-customer.com {
         }
     }
 
-    # 6. Backend API — proxy through oidc-api (oauth2-proxy) for RBAC enforcement
-    #    Flow: Caddy → oidc-api(oauth2-proxy) → caddy-rbac(gateway) → backend
-    #    oauth2-proxy sets X-Forwarded-Groups, caddy-rbac enforces deny rules
+    # 6. Backend API — proxy through oidc-api (oauth2-proxy) for auth + RBAC
+    #    Flow: Caddy → oidc-api(oauth2-proxy) → backend
+    #    oauth2-proxy sets X-Forwarded-Groups, Caddy internal-server enforces deny rules
     @backendapi path /api/*
     handle @backendapi {
         reverse_proxy oidc-api:4184 {
@@ -106,9 +125,9 @@ out-customer.com {
         }
     }
 
-    # 7. Default fallback — proxy to oidc-main
+    # 7. Default fallback — proxy to oidc
     handle {
-        reverse_proxy oidc-main:4182 {
+        reverse_proxy oidc:4180 {
             header_up X-Forwarded-By out-customer.com
             header_up X-Forwarded-Proto https
         }
@@ -118,7 +137,8 @@ out-customer.com {
 
 # ─── Internal Server — :8000 (not exposed to the internet) ──────────────────
 #
-# Proxies all internal traffic to the frontend service.
+# Proxies all internal traffic to the frontend services.
+# Used by role-sync to push dynamic RBAC deny rules via Caddy Admin API.
 #
 
 :8000 {

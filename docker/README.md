@@ -5,21 +5,22 @@
 ```
 Browser → Caddy (443)
          ├─ /auth/*        → Keycloak (8080)
-         ├─ /app1/*        → oauth2-proxy oidc-main (4182) → frontend (80)
-         ├─ /app2/*        → oauth2-proxy oidc-two  (4183) → frontend-two (80)
-         ├─ /oauth2/*      → oauth2-proxy oidc-main (4182)
-         ├─ /client-api/*  → client-backend (8000)
-         ├─ /api/*         → backend (8000)
-         └─ default        → oauth2-proxy oidc-main (4182) → frontend (80)
+         ├─ /app1/*        → oauth2-proxy oidc     (4180) → frontend (80)
+         ├─ /app2/*        → oauth2-proxy oidc     (4180) → frontend-two (80)
+         ├─ /oauth2/*      → oauth2-proxy oidc     (4180)
+         ├─ /client-api/*  → oauth2-proxy oidc-client-api (4186) → client-backend (8000)
+         ├─ /api/*         → oauth2-proxy oidc-api (4184) → backend (8000)
+         └─ default        → oauth2-proxy oidc     (4180) → frontend (80)
 ```
 
 ### Services
 
 | Service | Image | Port | Description |
 |---------|-------|------|-------------|
-| **Caddy** | `caddy:2-alpine` | 80, 443, 2019 (admin) | Reverse proxy & HTTPS terminator using internal CA. Routes `/auth/*` to Keycloak, `/app1/*` and `/app2/*` to respective oauth2-proxy instances, `/client-api/*` to client-backend, `/api/*` to backend. Admin API exposed on port 2019 for the role-sync service. |
-| **oauth2-proxy (oidc-main)** | `oauth2-proxy:v7.15.3` | 4182 | Handles OIDC authentication for App1. Extracts user roles from access token via `realm_access.roles` claim and passes them through `X-Forwarded-Groups` header. Sessions stored in Valkey. |
-| **oauth2-proxy (oidc-two)** | `oauth2-proxy:v7.15.3` | 4183 | Handles OIDC authentication for App2 (second tenant instance). Same configuration as oidc-main but with separate redirect URI (`/app2/oauth2/callback`). |
+| **Caddy** | `caddy:2-alpine` | 80, 443, 2019 (admin) | Reverse proxy & HTTPS terminator using internal CA. Routes `/auth/*` to Keycloak, app routes and OAuth2 callbacks to oauth2-proxy instances, `/client-api/*` to oidc-client-api, `/api/*` to oidc-api. Admin API exposed on port 2019 for the role-sync service. |
+| **oauth2-proxy (oidc)** | `oauth2-proxy:v7.15.3` | 4180 | Handles OIDC authentication for frontend apps (App1, App2, root). Extracts user roles from access token via `realm_access.roles` claim and passes them through `X-Forwarded-Groups` header. Sessions stored in Valkey. |
+| **oauth2-proxy (oidc-api)** | `oauth2-proxy:v7.15.3` | 4184 | Handles OIDC authentication for backend API. Forwards authenticated requests to backend. |
+| **oauth2-proxy (oidc-client-api)** | `oauth2-proxy:v7.15.3` | 4186 | Handles OIDC authentication for client-backend. Forwards authenticated requests to client-backend. |
 | **role-sync** | `concos-role-sync:latest` | N/A | Background service that polls Keycloak's Admin Events API to detect role changes, regenerates Caddy deny rules, and pushes them via the Caddy Admin API. Also persists role attributes to `rbac_routes.json`. |
 | **valkey** | `valkey/valkey:8-alpine` | 6379 | Redis-compatible session store used by oauth2-proxy instances for session persistence and invalidation. |
 | **frontend** | `concos-frontend:latest` | 80 | Node.js static file server (App1) serving the Vite SPA build. |
@@ -123,7 +124,7 @@ docker compose logs -f
 ```bash
 docker compose logs -f role-sync
 docker compose logs -f keycloak
-docker compose logs -f oidc-main
+docker compose logs -f oidc
 ```
 
 ### Rebuild and restart (after code changes)
@@ -316,7 +317,7 @@ The complete order of operations to bootstrap the RBAC system:
 After running the setup scripts, restart oauth2-proxy instances and role-sync to pick up the updated client secrets and role attributes:
 
 ```bash
-docker compose restart oidc-main oidc-two role-sync
+docker compose restart oidc oidc-api oidc-client-api role-sync
 ```
 
 ### Regenerating the Keycloak Configuration
@@ -366,9 +367,9 @@ To completely reset and regenerate the Keycloak configuration from scratch:
    ```
 
 8. **Restart oauth2-proxy and role-sync:**
-   ```bash
-   docker compose restart oidc-main oidc-two role-sync
-   ```
+    ```bash
+    docker compose restart oidc oidc-api oidc-client-api role-sync
+    ```
 
 ### Diagnostic Script
 

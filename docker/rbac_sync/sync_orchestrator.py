@@ -35,8 +35,6 @@ from .session_management import (
 )
 from .caddy_routes import (
     generate_deny_rules,
-    build_caddy_routes,
-    build_rbac_routes,
     push_routes_to_caddy,
 )
 from .routes_persistence import sync_rbac_routes
@@ -72,20 +70,10 @@ def initial_sync() -> bool:
         len(available_roles), KEYCLOAK_REALM, sorted(available_roles)
     )
 
-    frontend_deny_rules, api_deny_rules = generate_deny_rules(roles_with_attrs)
-    logger.info(
-        "Generated %d frontend deny rule(s) and %d API deny rule(s)",
-        len(frontend_deny_rules), len(api_deny_rules)
-    )
+    deny_rules = generate_deny_rules(roles_with_attrs)
+    logger.info("Generated %d deny rule(s)", len(deny_rules))
 
-    frontend_routes = build_caddy_routes(frontend_deny_rules)
-    api_routes = build_rbac_routes(api_deny_rules)
-    logger.debug(
-        "Built %d frontend route(s) and %d API route(s)",
-        len(frontend_routes), len(api_routes)
-    )
-
-    if push_routes_to_caddy(frontend_routes, api_routes):
+    if push_routes_to_caddy(deny_rules):
         logger.info("Initial sync complete!")
 
         # Also write to file for persistence
@@ -174,11 +162,9 @@ def poll_and_sync() -> bool:
     available_roles = set(roles_with_attrs.keys())
     logger.info("Current roles in Keycloak: %s", sorted(available_roles))
 
-    frontend_deny_rules, api_deny_rules = generate_deny_rules(roles_with_attrs)
-    frontend_routes = build_caddy_routes(frontend_deny_rules)
-    api_routes = build_rbac_routes(api_deny_rules)
+    deny_rules = generate_deny_rules(roles_with_attrs)
 
-    if push_routes_to_caddy(frontend_routes, api_routes):
+    if push_routes_to_caddy(deny_rules):
         logger.info("Incremental sync complete!")
 
         # Also write to file for persistence
