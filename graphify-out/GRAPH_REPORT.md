@@ -1,16 +1,15 @@
-# Graph Report - ConciergeOS  (2026-08-05)
+# Graph Report - .  (2026-08-05)
 
 ## Corpus Check
-- 233 files · ~195,844 words
-- Verdict: corpus is large enough that graph structure adds value.
+- cluster-only mode — file stats not available
 
 ## Summary
-- 2793 nodes · 4768 edges · 230 communities (204 shown, 26 thin omitted)
+- 2793 nodes · 4768 edges · 229 communities (203 shown, 26 thin omitted)
 - Extraction: 91% EXTRACTED · 9% INFERRED · 0% AMBIGUOUS · INFERRED: 415 edges (avg confidence: 0.62)
-- Token cost: 0 input · 0 output
+- Token cost: 26,305 input · 23,568 output
 
 ## Graph Freshness
-- Built from commit: `4e30a591`
+- Built from commit: `80fcab40`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -24,7 +23,7 @@
 - ReservationStatus
 - rbac_sync/__init__.py
 - performance_testing.py
-- test_rbac_routes_to_keycloak.py
+- roles.py
 - keycloak_setup/__init__.py
 - ConciergeOS Docker Setup
 - routes_persistence.py
@@ -74,7 +73,7 @@
 - Session
 - generator_utils.py
 - llm.py
-- BaseCacheEntry
+- HttpCacheEntry
 - ConciergeOS Backend
 - TestLiveKeycloakEvents
 - test_keycloak_auth.py
@@ -86,7 +85,7 @@
 - utils.py
 - keycloak_diagnose.py
 - CompareModal.tsx
-- UpdateIdentifierRequest
+- BaseCacheEntry
 - ReservationResponse
 - Implementation Spec: Prompt Chain Pages
 - api_extract_name
@@ -144,7 +143,7 @@
 - 8. Testing Plan
 - 1. Overview & Architecture
 - 6. Phase 4: Frontend Components
-- roles.py
+- sync_all_roles
 - PromptImprovementChat.tsx
 - env.py
 - 5970a2463784_add_is_active_column_to_promptgroup.py
@@ -169,7 +168,7 @@
 - 3.1 Files Modified
 - 5. Phase 3: Frontend Types & API Client
 - d3f04a295bc8_add_hotel_tables_rooms_guests_.py
-- get
+- _prompt_to_schema
 - query_guest_with_llm
 - shift_reservations.py
 - run_script
@@ -216,11 +215,10 @@
 - UV
 - Uvicorn
 - conciergeos
-- GuestDetailSchema
-- schedule_group
+- _group_with_relations
+- live_token
 - _classify_response
 - 9. Migration Guide
-- toggle_item
 - create_openai_client
 - _generate_guest_information
 - _generate_schema_from_database
@@ -256,7 +254,7 @@
 ## Hyperedges (group relationships)
 - **Docker Deployment Infrastructure** — docker_docker_compose_caddy, docker_docker_compose_keycloak, docker_docker_compose_oauth2_proxy, docker_docker_compose_role_sync, docker_docker_compose_valkey, docker_docker_compose_backend, docker_docker_compose_frontend, docker_docker_compose_client_backend [EXTRACTED 0.95]
 
-## Communities (230 total, 26 thin omitted)
+## Communities (229 total, 26 thin omitted)
 
 ### Community 0 - "types/index.ts"
 Cohesion: 0.05
@@ -264,7 +262,7 @@ Nodes (54): BatchLegend(), getBatchColor(), hashString(), PerformanceChart(), Pe
 
 ### Community 1 - "BookingSource"
 Cohesion: 0.05
-Nodes (84): BookingSource, Where a reservation was created / booked from., Maps to the Reservations table. Set __expose_in_prompt__ = True to include this…, Reservation, ChainExecutionRequest, ChainExecutionResultSchema, ChainStepRequest, ChainStepResponse (+76 more)
+Nodes (90): BookingSource, Where a reservation was created / booked from., Maps to the Reservations table. Set __expose_in_prompt__ = True to include this…, Reservation, ChainExecutionRequest, ChainExecutionResultSchema, ChainStepRequest, ChainStepResponse (+82 more)
 
 ### Community 2 - "PerformanceTesting/__init__.py"
 Cohesion: 0.17
@@ -291,12 +289,12 @@ Cohesion: 0.08
 Nodes (48): fetch_all_roles_with_attrs(), has_events(), Check if any event matches the given resource and operation types., Fetch all roles with their attributes from the given realm (defaults to…, push_routes_to_caddy(), Caddy Route Generation module. Handles generating Caddy deny rules from…, Push the updated routes to Caddy via the Admin API. Args: routes: List of route…, Read current routes from Caddy for verification/debugging. Returns: List of… (+40 more)
 
 ### Community 8 - "performance_testing.py"
-Cohesion: 0.08
-Nodes (42): api_check_duplicate_test_guests(), api_delete_batch(), api_generate_xml(), api_get_all_performance_results(), api_get_performance_batches(), api_get_performance_results(), api_get_performance_stats(), api_get_prompt_batches() (+34 more)
+Cohesion: 0.06
+Nodes (55): api_check_duplicate_test_guests(), api_delete_batch(), api_generate_xml(), api_get_all_performance_results(), api_get_guest_detail(), api_get_performance_batches(), api_get_performance_results(), api_get_performance_stats() (+47 more)
 
-### Community 9 - "test_rbac_routes_to_keycloak.py"
-Cohesion: 0.07
-Nodes (32): get_role_by_name(), Return role data dict if found, else None., create_role_with_attributes(), Create a new role with paths and message attributes. Args: token: Admin access…, Update an existing role's paths and message attributes. Args: token: Admin…, Sync a single role to Keycloak. Args: token: Admin access token realm: Realm…, sync_role_to_keycloak(), update_role_attributes() (+24 more)
+### Community 9 - "roles.py"
+Cohesion: 0.09
+Nodes (28): get_role_by_name(), Return role data dict if found, else None., create_composite_role(), create_role(), create_role_with_attributes(), print_summary(), Create a realm role. Returns the role name (Keycloak roles are identified by…, Create a composite role that inherits from the given composite roles. (+20 more)
 
 ### Community 10 - "keycloak_setup/__init__.py"
 Cohesion: 0.10
@@ -311,12 +309,12 @@ Cohesion: 0.07
 Nodes (33): load_rbac_routes(), load_role_definitions(), load_role_descriptions(), Path, Shared RBAC utilities for ConciergeOS. This module provides common functions…, Load role definitions from RBAC routes file. Args: routes_path: Path to the…, Load role names with human-readable descriptions from RBAC routes file. This is…, Write role configurations to an RBAC routes JSON file. Args: routes_path: Path… (+25 more)
 
 ### Community 13 - "PromptStore"
-Cohesion: 0.08
-Nodes (22): build_system_prompt(), PromptStore, Any, Session, Get a specific version, or the default if version is None., List all versions for a prompt ID, ordered by version number., Summary of all prompt IDs with default version and count., Update an existing prompt version. (+14 more)
+Cohesion: 0.07
+Nodes (26): delete_version(), delete, patch, Set a specific version as the default., set_default_version(), build_system_prompt(), PromptStore, Any (+18 more)
 
 ### Community 14 - "routes/prompts.py"
-Cohesion: 0.11
-Nodes (30): PromptVersion, Maps to the prompt_versions table. Each prompt is identified by a unique…, ai_improve_prompt(), AiImproveRequest, AiImproveResponse, ChatMessage, create_version(), CreatePromptRequest (+22 more)
+Cohesion: 0.16
+Nodes (22): PromptVersion, Maps to the prompt_versions table. Each prompt is identified by a unique…, ai_improve_prompt(), AiImproveRequest, AiImproveResponse, ChatMessage, create_version(), CreatePromptRequest (+14 more)
 
 ### Community 15 - "Phase 4: Frontend Components"
 Cohesion: 0.06
@@ -351,8 +349,8 @@ Cohesion: 0.10
 Nodes (15): KeycloakClient, Response, Keycloak OAuth2 Client — Client Credentials Grant Flow. This module handles…, Return a valid access token, refreshing if necessary., Force-fetch a new token (ignores the cached one)., Minimally decode the JWT payload (middle segment) without crypto. This is for…, Return human-readable information about the current token., Make an authenticated request to the main backend service. The access token is… (+7 more)
 
 ### Community 23 - "kc_request"
-Cohesion: 0.09
-Nodes (29): fetch_all_roles(), kc_request(), Response, Make an authenticated request to the Keycloak Admin API. Args: method: HTTP…, Fetch all role names in the given realm (defaults to settings.KEYCLOAK_REALM)., fetch_events_with_params(), get_realm_events(), Fetch realm events with custom query parameters. Returns the raw Response… (+21 more)
+Cohesion: 0.08
+Nodes (33): fetch_all_roles(), kc_request(), Response, Make an authenticated request to the Keycloak Admin API. Args: method: HTTP…, Fetch all role names in the given realm (defaults to settings.KEYCLOAK_REALM)., fetch_events_with_params(), get_realm_events(), Fetch realm events with custom query parameters. Returns the raw Response… (+25 more)
 
 ### Community 24 - "authenticate"
 Cohesion: 0.10
@@ -372,7 +370,7 @@ Nodes (30): StatusBanner(), StatusBannerProps, styleMap, useSettings(), BatchLis
 
 ### Community 28 - "placeholders.py"
 Cohesion: 0.10
-Nodes (22): preview_prompt(), Resolve all placeholders and return the fully rendered prompt., _get_db_schema(), _get_exposed_tables(), Generate a schema description by introspecting exposed database tables. Only…, Generate a list of all guests in the database for context., Generate a list of all hotel rooms., Generate high-level hotel statistics. (+14 more)
+Nodes (21): _get_db_schema(), _get_exposed_tables(), Generate a schema description by introspecting exposed database tables. Only…, Generate a list of all guests in the database for context., Generate a list of all hotel rooms., Generate high-level hotel statistics., Return today's date in ISO format., Generate human-readable description of available database query tools. (+13 more)
 
 ### Community 29 - "client_backend/main.py"
 Cohesion: 0.13
@@ -423,24 +421,24 @@ Cohesion: 0.19
 Nodes (16): booking_channel_to_source(), Determine booking_source based on room's allowed_booking_channel., Split a full name string into (first_name, last_name)., split_name(), create_collision_reservations(), insert_guest(), insert_reservation(), load_names() (+8 more)
 
 ### Community 41 - "PromptScheduler"
-Cohesion: 0.16
-Nodes (9): PromptScheduler, datetime, Cancel a scheduled job by its database schedule_id., Save active job info to JSON for recovery after restart., On startup: reload pending schedules from the database. Re-schedules any active…, Background scheduler for prompt group chain executions., Start the scheduler and recover persisted schedules., Shutdown the scheduler gracefully. (+1 more)
+Cohesion: 0.13
+Nodes (10): PromptScheduler, datetime, Cancel a scheduled job by its database schedule_id., Callback invoked by APScheduler to run a prompt chain. Checks if the group is…, Save active job info to JSON for recovery after restart., On startup: reload pending schedules from the database. Re-schedules any active…, Background scheduler for prompt group chain executions., Start the scheduler and recover persisted schedules. (+2 more)
 
 ### Community 42 - "LLM Model Management — Multi-Model Support with Prompt-Level Assignment"
 Cohesion: 0.11
 Nodes (19): 11.1 Model Resolution per Step, 11. Phase 7: Backend Prompt Chain, 12.1 Model Resolution in Performance Testing, 12. Phase 8: Backend Performance Testing, 13.1 Current State of `backend/app/config.py`, 13. Phase 9: Backend Config Deprecation, 15.1 Add Model CRUD Methods, 15.2 Update `promptsApi.ts` (+11 more)
 
 ### Community 43 - "prompt_groups.py"
-Cohesion: 0.17
-Nodes (19): create_group(), download_result(), get_group(), _group_to_schema(), _group_with_relations(), list_groups(), Any, get (+11 more)
+Cohesion: 0.22
+Nodes (14): create_group(), get_group(), _group_to_schema(), patch, PromptGroup, Convert a PromptGroup ORM object to the response schema., Create a new prompt group with optional items., Get a single prompt group with all details. (+6 more)
 
 ### Community 44 - "debug.py"
-Cohesion: 0.12
-Nodes (22): cleanup_expired_http_cache(), clear_all_caches(), clear_http_cache(), clear_llm_cache(), post, ShiftRequest, ShiftResponse, Clear the LLM response cache. (+14 more)
+Cohesion: 0.15
+Nodes (17): cleanup_expired_http_cache(), clear_all_caches(), clear_http_cache(), clear_llm_cache(), post, ShiftRequest, ShiftResponse, Clear the LLM response cache. (+9 more)
 
 ### Community 45 - "response_cache.py"
 Cohesion: 0.15
-Nodes (15): cache_stats(), call_llm_with_db_tools(), call_llm_with_db_tools_with_cache_flag(), generate_cache_key(), generate_http_cache_key(), _get_cache(), Generate a SHA256 cache key from the input string. Normalizes the input…, Generate a SHA256 cache key from an HTTP URL. Parses the URL and normalizes… (+7 more)
+Nodes (17): cache_clear(), cache_stats(), CacheStore, call_llm_with_db_tools(), call_llm_with_db_tools_with_cache_flag(), generate_cache_key(), _get_cache(), In-memory LLM response cache with TTL-based expiration. Single-process use.… (+9 more)
 
 ### Community 46 - "Any"
 Cohesion: 0.16
@@ -455,8 +453,8 @@ Cohesion: 0.07
 Nodes (29): ChainInputSection(), ChainInputSectionProps, ChartWithLegendProps, FormField(), FormFieldProps, Input, InputProps, PromptTextareaProps (+21 more)
 
 ### Community 49 - ".__call__"
-Cohesion: 0.19
-Nodes (7): HttpCacheMiddleware, Captures response body from a streaming response., ASGI middleware that caches GET responses by URI + query parameters. - Only…, _StreamingResponseCapture, Receive, Scope, Send
+Cohesion: 0.16
+Nodes (9): HttpCacheMiddleware, Captures response body from a streaming response., ASGI middleware that caches GET responses by URI + query parameters. - Only…, _StreamingResponseCapture, generate_http_cache_key(), Generate a SHA256 cache key from an HTTP URL. Parses the URL and normalizes…, Receive, Scope (+1 more)
 
 ### Community 50 - "app/config.py"
 Cohesion: 0.15
@@ -494,9 +492,9 @@ Nodes (13): classify_reservation_type(), _coerce_date(), is_checked_in_type(), i
 Cohesion: 0.22
 Nodes (16): _build_client_from_model(), _get_base_client(), get_llm_config(), get_llm_config_by_model_id(), get_llm_config_by_name(), _get_shared_http_client(), OpenAI, Return a module-level singleton httpx.Client with connection pooling. Created… (+8 more)
 
-### Community 59 - "BaseCacheEntry"
-Cohesion: 0.08
-Nodes (18): BaseCacheEntry, CacheEntry, CacheStore, HttpCacheEntry, HttpCacheStore, A generic cached entry with expiration tracking. Type parameter T represents…, In-memory LLM response cache with TTL-based expiration. Single-process use.…, Initialize the cache store. Args: ttl: Time-to-live in seconds (default 3600 =… (+10 more)
+### Community 59 - "HttpCacheEntry"
+Cohesion: 0.15
+Nodes (9): HttpCacheEntry, HttpCacheStore, Initialize the cache store. Args: ttl: Time-to-live in seconds (default 3600 =…, Get a cached entry by key. Returns None if expired., A single cached HTTP response with expiration tracking., In-memory HTTP response cache with TTL-based expiration. Stores full HTTP…, Initialize the HTTP cache store. Args: ttl: Time-to-live in seconds (default…, Get a cached HTTP response entry by key. Returns None if expired. (+1 more)
 
 ### Community 60 - "ConciergeOS Backend"
 Cohesion: 0.12
@@ -523,8 +521,8 @@ Cohesion: 0.15
 Nodes (18): api_generate_all(), Regenerate all 3 data file formats (CSV, JSON, XML) and return their paths., build_user_prompt(), fetch_all_as_json(), fetch_all_as_xml(), fetch_all_guests_and_reservations(), Build the user prompt for querying a guest by name., Returns CSV string and saves to disk. (+10 more)
 
 ### Community 66 - "execute_chain_step_route"
-Cohesion: 0.22
-Nodes (11): execute_chain_page(), execute_chain_step_route(), execute_group(), post, Request, Execute the prompt chain now (Recalculate Now)., Execute chain with user inputs (page mode). The first step receives user_inputs…, Execute a single step in a prompt chain (page mode, step-by-step). Accepts both… (+3 more)
+Cohesion: 0.16
+Nodes (14): execute_chain_page(), execute_chain_step_route(), execute_group(), post, Request, Execute the prompt chain now (Recalculate Now)., Execute chain with user inputs (page mode). The first step receives user_inputs…, Execute a single step in a prompt chain (page mode, step-by-step). Accepts both… (+6 more)
 
 ### Community 67 - "guest_extraction.py"
 Cohesion: 0.21
@@ -542,9 +540,9 @@ Nodes (13): authenticate(), get_base_url(), get_user_groups(), list_clients(), l
 Cohesion: 0.23
 Nodes (12): CompareModal(), CompareModalProps, getElapsed(), MetaInfo(), DiffOp, DiffResult, computeJsonDiff(), computeLineDiff() (+4 more)
 
-### Community 71 - "UpdateIdentifierRequest"
-Cohesion: 0.15
-Nodes (13): api_update_identifier(), api_update_valid_response(), patch, Update the identifier for a specific test result., Update the valid_response flag for a specific test result., Request body for patching the valid_response flag., Response from the update-valid-response endpoint., Request body for updating the identifier on a test result. (+5 more)
+### Community 71 - "BaseCacheEntry"
+Cohesion: 0.18
+Nodes (7): BaseCacheEntry, CacheEntry, A generic cached entry with expiration tracking. Type parameter T represents…, Cache a value with the default TTL., Base cached entry with expiration tracking., Return True if this entry has exceeded its TTL., T
 
 ### Community 72 - "ReservationResponse"
 Cohesion: 0.18
@@ -560,7 +558,7 @@ Nodes (11): api_extract_name(), api_guest_search(), post, Query the LLM for all 
 
 ### Community 75 - "BaseCacheStore"
 Cohesion: 0.14
-Nodes (10): BaseCacheStore, http_cache_cleanup_expired(), setter, Return cache hit/miss stats., Remove all expired HTTP cache entries. Returns count of removed entries., Base in-memory cache store with TTL-based expiration. Single-process use.…, Initialize the cache store. Args: ttl: Time-to-live in seconds (default 3600 =…, Current TTL in seconds. (+2 more)
+Nodes (10): BaseCacheStore, http_cache_clear(), setter, Return cache hit/miss stats., Clear the HTTP response cache and return the number of cleared entries., Base in-memory cache store with TTL-based expiration. Single-process use.…, Initialize the cache store. Args: ttl: Time-to-live in seconds (default 3600 =…, Current TTL in seconds. (+2 more)
 
 ### Community 77 - "Client Backend — Dummy Service-to-Service Client"
 Cohesion: 0.17
@@ -635,8 +633,8 @@ Cohesion: 0.28
 Nodes (7): lifespan(), Start up and shut down the prompt group scheduler., _count_endpoints(), export_openapi(), Export the FastAPI OpenAPI spec to a JSON file., Count endpoints by method from the OpenAPI spec., FastAPI
 
 ### Community 95 - "_get_http_cache"
-Cohesion: 0.18
-Nodes (10): ASGIApp, delete_http_cache_entry(), get_cache_stats(), delete, Delete a specific HTTP cache entry by cache key. Query param: key=sha256hex..., Return statistics for both LLM and HTTP response caches., _get_http_cache(), http_cache_stats() (+2 more)
+Cohesion: 0.13
+Nodes (13): ASGIApp, delete_http_cache_entry(), get_cache_stats(), delete, Delete a specific HTTP cache entry by cache key. Query param: key=sha256hex..., Return statistics for both LLM and HTTP response caches., _get_http_cache(), http_cache_cleanup_expired() (+5 more)
 
 ### Community 96 - "update_oidc_configs"
 Cohesion: 0.31
@@ -754,9 +752,9 @@ Nodes (6): 1. Overview & Architecture, Execution Order Diagram, Step Reference S
 Cohesion: 0.33
 Nodes (6): 6.1 Component Architecture, 6.2 `ChainInputSection.tsx` (401 lines), 6.3 `ChainStepStatus.tsx` (106 lines), 6.4 `ChainOutputSection.tsx` (109 lines), 6.5 `PromptChainPage.tsx` (323 lines), 6. Phase 4: Frontend Components
 
-### Community 129 - "roles.py"
-Cohesion: 0.20
-Nodes (10): create_composite_role(), create_role(), list_roles_with_attrs(), print_summary(), Create a realm role. Returns the role name (Keycloak roles are identified by…, Create a composite role that inherits from the given composite roles., Print a summary table of all operations., Fetch all roles with their attributes from the given realm. Returns {role_name:… (+2 more)
+### Community 129 - "sync_all_roles"
+Cohesion: 0.22
+Nodes (7): main(), Path, Sync all roles from a routes file (JSON) to Keycloak. Parses the routes file,…, sync_all_roles(), Tests for the full sync flow., Test syncing all roles from a JSON file., TestSyncAllRoles
 
 ### Community 130 - "PromptImprovementChat.tsx"
 Cohesion: 0.40
@@ -850,9 +848,9 @@ Nodes (5): 3.1 Files Modified, 3. Phase 1: Backend Infrastructure, `backend/alem
 Cohesion: 0.40
 Nodes (5): 5.1 TypeScript Types, 5.2 API Client, 5. Phase 3: Frontend Types & API Client, `frontend/src/services/promptGroupsApi.ts`, `frontend/src/types/prompt.ts`
 
-### Community 154 - "get"
-Cohesion: 0.15
-Nodes (13): get_default(), get_field_schema(), list_all_prompts(), list_available_placeholders(), list_versions(), get, List summary of all prompt IDs., Return all available placeholder definitions for the frontend. (+5 more)
+### Community 154 - "_prompt_to_schema"
+Cohesion: 0.12
+Nodes (18): get_default(), get_field_schema(), get_version(), list_all_prompts(), list_available_placeholders(), list_versions(), _prompt_to_schema(), Any (+10 more)
 
 ### Community 155 - "query_guest_with_llm"
 Cohesion: 0.50
@@ -970,13 +968,13 @@ Nodes (3): 9.1 Update `backend/app/services/guest_extraction.py`, 9.2 Update `ba
 Cohesion: 0.67
 Nodes (3): 11.1 — Implement `seed_default_prompts()`, 11.2 — Update app navigation, Phase 11: Migration & Polish
 
-### Community 221 - "GuestDetailSchema"
-Cohesion: 0.33
-Nodes (6): api_get_guest_detail(), Get detailed information for a single guest including all reservations., GuestDetailSchema, Detailed reservation information for guest detail view., Detailed guest information including all reservations., ReservationDetailSchema
+### Community 221 - "_group_with_relations"
+Cohesion: 0.25
+Nodes (8): download_result(), _group_with_relations(), list_groups(), Any, get, List all prompt groups., Return a PromptGroup query with items, schedules, and results joined., Download a result file for a specific execution result.
 
-### Community 222 - "schedule_group"
-Cohesion: 0.33
-Nodes (4): Schedule a prompt chain execution at a specific time., schedule_group(), Callback invoked by APScheduler to run a prompt chain. Checks if the group is…, PromptGroupScheduleCreate
+### Community 222 - "live_token"
+Cohesion: 0.67
+Nodes (3): live_token(), fixture, Get a live authentication token.
 
 ### Community 223 - "_classify_response"
 Cohesion: 0.50
@@ -985,10 +983,6 @@ Nodes (3): _classify_response(), Insert a single performance test result (thread
 ### Community 224 - "9. Migration Guide"
 Cohesion: 0.50
 Nodes (4): 9. Migration Guide, Running the Migration, Seed Data, Verifying
-
-### Community 225 - "toggle_item"
-Cohesion: 0.67
-Nodes (3): patch, Toggle the active state of a single prompt group item., toggle_item()
 
 ### Community 226 - "create_openai_client"
 Cohesion: 0.67
