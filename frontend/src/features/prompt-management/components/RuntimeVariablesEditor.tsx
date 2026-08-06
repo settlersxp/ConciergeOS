@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { FormField, Input } from "./index";
+import FormField from "@/shared/ui/FormField";
+import Input from "@/shared/ui/Input";
 
 interface RuntimeVariablesEditorProps {
   /** The key for the runtime variable (e.g. "customer_name") */

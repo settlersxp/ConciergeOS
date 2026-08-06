@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
-import type { TestResult } from "../../types";
-import { computeLineDiff } from "../../utils/diff";
+import type { TestResult } from "@/shared/types";
+import { computeLineDiff } from "@/shared/lib/diff";
 
 interface CompareModalProps {
   resultA: TestResult;

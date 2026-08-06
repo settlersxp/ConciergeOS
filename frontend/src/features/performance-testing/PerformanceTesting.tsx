@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { performanceApi } from "../services/api";
-import { useSettings } from "../context/SettingsContext";
+import { performanceApi } from "../../shared/api/api";
+import { useSettings } from "../../shared/context/SettingsContext";
 import { useNavigate } from "react-router-dom";
 import type {
   TestResult,
@@ -13,8 +13,10 @@ import type {
   SummaryData,
   SingleGuestValidation,
   ValidateGuestsResponse,
-} from "../types";
-import { PageHeader, Card, PerformancePromptSelector, StatusBanner, RuntimeVariablesEditor } from "../components/ui";
+} from "../../shared/types";
+import { PageHeader, Card, StatusBanner } from "../../shared/ui";
+import PerformancePromptSelector from "./components/PerformancePromptSelector";
+import RuntimeVariablesEditor from "../prompt-management/components/RuntimeVariablesEditor";
 
 import TestConfigCard from "./components/TestConfigCard";
 import GuestConfigCard from "./components/GuestConfigCard";

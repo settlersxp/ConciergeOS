@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { modelsApi } from '../services/api';
-import type { LLMModel } from '../types';
-import { PageHeader, Card, Button, Toast } from '../components/ui';
-import ModelManager from '../components/ui/ModelManager';
+import { modelsApi } from "../../shared/api/api";
+import type { LLMModel } from "../../shared/types";
+import { PageHeader, Card, Button, Toast } from "../../shared/ui";
+import ModelManager from './components/ModelManager';
 
 export default function Settings() {
   const [models, setModels] = useState<LLMModel[]>([]);

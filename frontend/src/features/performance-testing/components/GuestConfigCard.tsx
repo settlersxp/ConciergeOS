@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from "react";
-import type { TestGuest, GuestDetail } from "../../types";
-import { Card, Button, Badge } from "../../components/ui";
-import { performanceApi } from "../../services/api";
+import type { TestGuest, GuestDetail } from "@/shared/types";
+import { Card, Button, Badge } from "@/shared/ui";
+import { performanceApi } from "@/shared/api/api";
 
 interface GuestConfigCardProps {
   guests: TestGuest[];

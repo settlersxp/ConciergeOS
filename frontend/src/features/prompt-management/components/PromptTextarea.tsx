@@ -1,6 +1,6 @@
 import { forwardRef } from "react";
-import Textarea from "./Textarea";
-import FormField from "./FormField";
+import Textarea from "@/shared/ui/Textarea";
+import FormField from "@/shared/ui/FormField";
 
 interface PromptTextareaProps {
   label?: string;

@@ -1,5 +1,5 @@
-import type { TestMode } from "../../types";
-import { Card, FormField, Input } from "../../components/ui";
+import type { TestMode } from "@/shared/types";
+import { Card, FormField, Input } from "@/shared/ui";
 
 interface TestConfigCardProps {
   testMode: TestMode;

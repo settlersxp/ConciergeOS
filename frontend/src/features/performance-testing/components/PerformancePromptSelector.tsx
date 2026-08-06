@@ -1,4 +1,4 @@
-import { PromptSelector } from "../../components/ui";
+import PromptSelector from "../../prompt-management/components/PromptSelector";
 
 interface PerformancePromptSelectorProps {
   value?: { prompt_id: string; version?: number };

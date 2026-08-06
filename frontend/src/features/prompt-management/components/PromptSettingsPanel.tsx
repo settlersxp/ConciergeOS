@@ -1,8 +1,8 @@
-import Card from "./Card";
-import Select from "./Select";
+import Card from "@/shared/ui/Card";
+import Select from "@/shared/ui/Select";
 import PromptTextarea from "./PromptTextarea";
-import type { PromptSummary, PromptVersion } from "../../types/prompt";
-import type { LLMModel } from "../../types";
+import type { PromptSummary, PromptVersion } from "@/shared/types/prompt";
+import type { LLMModel } from "@/shared/types";
 
 interface PromptSettingsPanelProps {
   allPrompts: PromptSummary[];

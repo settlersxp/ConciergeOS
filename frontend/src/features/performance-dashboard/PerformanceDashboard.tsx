@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
-import { performanceApi } from "../services/api";
-import type { PerformanceStats, PromptBatchStatsResponse, GroupedBatch, BatchTypeRow } from "../types";
-import { PageHeader, Card, StatusBanner, PerformanceChart, PromptSelector } from "../components/ui";
+import { performanceApi } from "../../shared/api/api";
+import type { PerformanceStats, PromptBatchStatsResponse, GroupedBatch, BatchTypeRow } from "../../shared/types";
+import { PageHeader, Card, StatusBanner } from "../../shared/ui";
+import PerformanceChart from "../../shared/ui/PerformanceChart";
+import PromptSelector from "../prompt-management/components/PromptSelector";
 
 interface SortConfig {
   key: keyof PerformanceStats;

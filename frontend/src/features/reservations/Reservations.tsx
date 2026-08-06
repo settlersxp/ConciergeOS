@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { reservationsApi } from '../services/api';
-import type { ReservationsSummary } from '../types';
-import { PageHeader, RoomCard, Badge, Card, Button } from '../components/ui';
+import { reservationsApi } from "../../shared/api/api";
+import type { ReservationsSummary } from "../../shared/types";
+import { PageHeader, RoomCard, Badge, Card, Button } from "../../shared/ui";
 
 export default function Reservations() {
   const [summary, setSummary] = useState<ReservationsSummary | null>(null);

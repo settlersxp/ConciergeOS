@@ -1,18 +1,21 @@
 import { useState, useEffect, useRef } from "react";
-import {
-  PageHeader, Card, Button, Toast,
-  PlaceholderPalette, PreviewPanel, PromptEditorSection,
-  PromptSelector, CreatePromptModal, PromptImprovementChat, CloneSectionModal,
-} from "../components/ui";
+import { PageHeader, Card, Button, Toast } from "../../shared/ui";
+import PlaceholderPalette from "./components/PlaceholderPalette";
+import PreviewPanel from "./components/PreviewPanel";
+import PromptEditorSection from "./components/PromptEditorSection";
+import PromptSelector from "./components/PromptSelector";
+import CreatePromptModal from "./components/CreatePromptModal";
+import PromptImprovementChat from "../prompt-chains/components/PromptImprovementChat";
+import CloneSectionModal from "../prompt-chains/components/CloneSectionModal";
 import {
   listVersions, create as createPrompt,
   update as updatePrompt, remove as deletePrompt,
   setDefault as setDefaultPrompt,
   listPlaceholders, previewPrompt,
   listAllPrompts, duplicate,
-} from "../services/promptsApi";
-import type { PromptVersion, PromptSummary } from "../types/prompt";
-import type { PlaceholderDefinition } from "../types/placeholder";
+} from "../../shared/api/promptsApi";
+import type { PromptVersion, PromptSummary } from "../../shared/types/prompt";
+import type { PlaceholderDefinition } from "../../shared/types/placeholder";
 
 export default function PromptManagement() {
   const [, setAllPrompts] = useState<PromptSummary[]>([]);

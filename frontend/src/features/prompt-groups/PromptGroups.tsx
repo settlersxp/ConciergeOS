@@ -1,20 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
-import PageHeader from '../components/ui/PageHeader';
-import Card from '../components/ui/Card';
-import Button from '../components/ui/Button';
-import Textarea from '../components/ui/Textarea';
-import Badge from '../components/ui/Badge';
-import StatusBanner from '../components/ui/StatusBanner';
-import Toast from '../components/ui/Toast';
-import { promptGroupsApi } from '../services/promptGroupsApi';
-import { listAllPrompts, listVersions } from '../services/promptsApi';
+import PageHeader from "../../shared/ui/PageHeader";
+import Card from "../../shared/ui/Card";
+import Button from "../../shared/ui/Button";
+import Textarea from "../../shared/ui/Textarea";
+import Badge from "../../shared/ui/Badge";
+import StatusBanner from "../../shared/ui/StatusBanner";
+import Toast from "../../shared/ui/Toast";
+import { promptGroupsApi } from "../../shared/api/promptGroupsApi";
+import { listAllPrompts, listVersions } from "../../shared/api/promptsApi";
 import type {
   PromptGroup,
   PromptGroupItemCreate,
   PromptGroupResult,
   PromptGroupSchedule,
-} from '../types/prompt';
-import type { PromptSummary, PromptVersion } from '../types/prompt';
+} from "../../shared/types/prompt";
+import type { PromptSummary, PromptVersion } from "../../shared/types/prompt";
 
 const FONT_FAMILY =
   '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif';

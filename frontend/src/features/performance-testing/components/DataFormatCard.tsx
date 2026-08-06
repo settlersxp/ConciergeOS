@@ -1,5 +1,5 @@
-import type { DataFormat } from "../../types";
-import { Card, FormField, Select } from "../../components/ui";
+import type { DataFormat } from "@/shared/types";
+import { Card, FormField, Select } from "@/shared/ui";
 
 interface DataFormatCardProps {
   dataFormat: DataFormat;

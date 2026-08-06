@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Card, Input, Select, Button, FormField } from './';
-import { modelsApi } from '../../services/api';
-import type { LLMModel } from '../../types';
+import Card from "@/shared/ui/Card";
+import Input from "@/shared/ui/Input";
+import Select from "@/shared/ui/Select";
+import Button from "@/shared/ui/Button";
+import FormField from "@/shared/ui/FormField";
+import { modelsApi } from "@/shared/api/api";
+import type { LLMModel } from "@/shared/types";
 
 interface ModelManagerProps {
   open: boolean;

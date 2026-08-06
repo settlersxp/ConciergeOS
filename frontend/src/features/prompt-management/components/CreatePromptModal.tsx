@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { Button, Input, Card } from './';
-import { promptsApi } from '../../services/promptsApi';
+import Button from "@/shared/ui/Button";
+import Input from "@/shared/ui/Input";
+import Card from "@/shared/ui/Card";
+import { promptsApi } from "@/shared/api/promptsApi";
 
 interface CreatePromptModalProps {
   open: boolean;

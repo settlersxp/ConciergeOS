@@ -1,5 +1,5 @@
 import PromptTextarea from "./PromptTextarea";
-import Button from "./Button";
+import Button from "@/shared/ui/Button";
 
 interface PromptEditorSectionProps {
   label: string;

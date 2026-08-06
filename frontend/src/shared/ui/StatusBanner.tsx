@@ -1,4 +1,4 @@
-import type { StatusType } from "../../types";
+import type { StatusType } from "../types";
 
 interface StatusBannerProps {
   message: string;

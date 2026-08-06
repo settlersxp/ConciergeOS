@@ -1,5 +1,5 @@
-import type { SingleGuestValidation } from "../../types";
-import { Badge } from "../../components/ui";
+import type { SingleGuestValidation } from "@/shared/types";
+import { Badge } from "@/shared/ui";
 import { JsonPanel } from "./JsonPanel";
 
 interface GuestComparisonViewProps {

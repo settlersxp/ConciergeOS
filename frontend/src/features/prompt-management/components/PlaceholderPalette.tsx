@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import Card from "./Card";
+import Card from "@/shared/ui/Card";
 import PlaceholderCategorySection from "./PlaceholderCategorySection";
-import { Button, Input } from "./";
+import Button from "@/shared/ui/Button";
+import Input from "@/shared/ui/Input";
 import FieldBrowser from "./FieldBrowser";
-import { getFieldSchema } from "../../services/promptsApi";
-import type { FieldSchema } from "../../types";
+import { getFieldSchema } from "@/shared/api/promptsApi";
+import type { FieldSchema } from "@/shared/types";
 
 type Item = { key: string; description: string; category: string; dynamic: boolean; example: string };
 

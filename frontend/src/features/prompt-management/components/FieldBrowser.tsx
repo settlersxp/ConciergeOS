@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Badge } from "./";
+import Badge from "@/shared/ui/Badge";
 
 type FieldInfo = {
   field: string;

@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Batch } from '../../types';
+import type { Batch } from "@/shared/types";
 
 interface BatchListProps {
   batches: Batch[];

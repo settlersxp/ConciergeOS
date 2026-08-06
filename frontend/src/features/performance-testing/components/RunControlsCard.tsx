@@ -1,6 +1,6 @@
 import type { ChangeEvent } from "react";
-import type { Batch } from "../../types";
-import { Card, Button, Select } from "../../components/ui";
+import type { Batch } from "@/shared/types";
+import { Card, Button, Select } from "@/shared/ui";
 
 interface RunControlsCardProps {
   batches: Batch[];

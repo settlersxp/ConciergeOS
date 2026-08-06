@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { listAllPrompts, getByVersion, listVersions } from '../../services/promptsApi';
-import type { PromptSummary, PromptVersion } from '../../types/prompt';
-import { Button, Select, Card } from './';
+import { listAllPrompts, getByVersion, listVersions } from "@/shared/api/promptsApi";
+import type { PromptSummary, PromptVersion } from "@/shared/types/prompt";
+import Button from "@/shared/ui/Button";
+import Select from "@/shared/ui/Select";
+import Card from "@/shared/ui/Card";
 
 interface CloneSectionModalProps {
   open: boolean;

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { ChainStepResult } from "../../types/prompt";
-import Badge from "./Badge";
+import type { ChainStepResult } from "@/shared/types/prompt";
+import Badge from "@/shared/ui/Badge";
 
 interface ChainStepStatusProps {
   step: ChainStepResult;

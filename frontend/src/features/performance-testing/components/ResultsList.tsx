@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { TestResult } from "../../types";
-import { Button } from "../../components/ui";
+import type { TestResult } from "@/shared/types";
+import { Button } from "@/shared/ui";
 
 interface ResultsListProps {
   results: TestResult[];

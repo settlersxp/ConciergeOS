@@ -1,16 +1,18 @@
 import { useEffect } from "react";
+import type { ToastType } from "@/shared/hooks/useToast";
 
 interface ToastProps {
   message: string;
-  type: "success" | "error" | "info";
+  type: ToastType;
   onHidden: () => void;
   duration?: number;
 }
 
-const typeClasses: Record<string, string> = {
+const typeClasses: Record<ToastType, string> = {
   success: "bg-secondary-500",
   error: "bg-accent-600",
   info: "bg-primary-600",
+  warning: "bg-amber-500",
 };
 
 export default function Toast({ message, type, onHidden, duration = 3000 }: ToastProps) {

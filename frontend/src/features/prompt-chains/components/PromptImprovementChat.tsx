@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { Button, Card } from './';
-import { aiImprove } from '../../services/promptsApi';
+import Button from "@/shared/ui/Button";
+import Card from "@/shared/ui/Card";
+import { aiImprove } from "@/shared/api/promptsApi";
 
 interface ChatMessage {
   role: 'user' | 'assistant';

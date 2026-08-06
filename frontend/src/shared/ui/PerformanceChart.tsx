@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { PerformanceStats } from "../../types";
+import type { PerformanceStats } from "../types";
 import {
   ScatterChart,
   Scatter,

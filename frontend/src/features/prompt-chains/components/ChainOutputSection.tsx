@@ -1,8 +1,8 @@
 import { useState, useCallback } from "react";
-import type { ChainStepResult } from "../../types/prompt";
-import Button from "./Button";
-import Card from "./Card";
-import Badge from "./Badge";
+import type { ChainStepResult } from "@/shared/types/prompt";
+import Button from "@/shared/ui/Button";
+import Card from "@/shared/ui/Card";
+import Badge from "@/shared/ui/Badge";
 
 interface ChainOutputSectionProps {
   step: ChainStepResult;

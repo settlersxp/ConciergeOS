@@ -1,12 +1,12 @@
 import React from "react";
-import type { PromptGroupItem } from "../../types/prompt";
-import Button from "./Button";
-import Input from "./Input";
-import Card from "./Card";
-import FormField from "./FormField";
+import type { PromptGroupItem } from "@/shared/types/prompt";
+import Button from "@/shared/ui/Button";
+import Input from "@/shared/ui/Input";
+import Card from "@/shared/ui/Card";
+import FormField from "@/shared/ui/FormField";
 import { RegionSelector } from "./RegionSelector";
-import { useMediaExtraction } from "../../hooks/useMediaExtraction";
-import { inferInputFields } from "../../utils/inputFields";
+import { useMediaExtraction } from "@/shared/hooks/useMediaExtraction";
+import { inferInputFields } from "@/shared/lib/inputFields";
 
 export interface ChainInputSectionProps {
   step: PromptGroupItem;

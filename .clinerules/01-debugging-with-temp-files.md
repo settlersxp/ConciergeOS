@@ -20,7 +20,7 @@ Instead of:
 
 ```bash
 # Direct execution ❌
-cat somefile.json | python3 -c "import sys, json; print(json.load(sys.stdin)['key'])"
+cat somefile.json | python3 -c "import sys, json; print(json.load(sys.stdin)['key'])" 2>&1
 ```
 
 I will:
@@ -41,3 +41,5 @@ python3 /tmp/cof_extract_key.py
 # 4. At end of task: delete the temp file
 rm /tmp/cof_extract_key.py
 ```
+
+The scripts ending with "2>&1" keep crashing. Do not use them

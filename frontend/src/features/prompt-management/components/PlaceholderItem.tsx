@@ -1,6 +1,6 @@
 import { useState } from "react";
-import Badge from "./Badge";
-import Button from "./Button";
+import Badge from "@/shared/ui/Badge";
+import Button from "@/shared/ui/Button";
 interface Props {
   placeholder: { key: string; description: string; category: string; dynamic: boolean; example: string };
 }

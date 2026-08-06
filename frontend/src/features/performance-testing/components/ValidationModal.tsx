@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Badge, Button } from "../../components/ui";
-import type { SingleGuestValidation } from "../../types";
+import { Badge, Button } from "@/shared/ui";
+import type { SingleGuestValidation } from "@/shared/types";
 import { GuestComparisonView } from "./GuestComparisonView";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

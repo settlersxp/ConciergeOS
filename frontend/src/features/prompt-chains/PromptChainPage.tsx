@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
-import { PageHeader, Card, Button, ChainInputSection, ChainStepStatus, ChainOutputSection } from "../components/ui";
-import { useChainPageData } from "../hooks/useChainPageData";
-import { useChainExecution } from "../hooks/useChainExecution";
+import { PageHeader, Card, Button } from "../../shared/ui";
+import ChainInputSection from "./components/ChainInputSection";
+import ChainStepStatus from "./components/ChainStepStatus";
+import ChainOutputSection from "./components/ChainOutputSection";
+import { useChainPageData } from "../../shared/hooks/useChainPageData";
+import { useChainExecution } from "../../shared/hooks/useChainExecution";
 
 /**
  * PromptChainPage renders a prompt group as a full page.

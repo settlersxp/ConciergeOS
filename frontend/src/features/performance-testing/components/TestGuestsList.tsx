@@ -1,5 +1,5 @@
 import React from 'react';
-import type { TestGuest } from '../../types';
+import type { TestGuest } from "@/shared/types";
 
 interface TestGuestsListProps {
   testGuests: TestGuest[];

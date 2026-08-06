@@ -1,195 +1,119 @@
 # Frontend Development Guide
 
-> Development commands and scripts for the ConciergeOS frontend.
+Architecture rules and conventions for the ConciergeOS frontend.
 
-## Prerequisites
+## Architecture Rules
 
-- Node.js 18+
-- npm (comes with Node.js)
+### Path Aliases
 
-## Quick Start
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open **http://localhost:5173** in your browser.
-
-## Available Scripts
-
-| Script | Command | Description |
-|--------|---------|-------------|
-| Development | `npm run dev` | Start Vite dev server with hot reload |
-| Build | `npm run build` | Build for production (type check + bundle) |
-| Preview | `npm run preview` | Preview production build locally |
-| Lint | `npm run lint` | Run oxlint for code quality checks |
-
-## Project Structure
-
-```
-frontend/
-├── public/                     # Static assets
-│   ├── favicon.svg             # Site favicon
-│   └── icons.svg               # SVG sprite sheet
-├── src/
-│   ├── main.tsx                # React entry point
-│   ├── App.tsx                 # Router configuration
-│   ├── App.css                 # App-level styles
-│   ├── index.css               # Global styles (Tailwind)
-│   ├── components/             # Reusable components
-│   │   ├── Header.tsx          # Navigation header
-│   │   └── ui/                 # UI primitives
-│   │       ├── Badge.tsx
-│   │       ├── Button.tsx
-│   │       ├── Card.tsx
-│   │       ├── Input.tsx
-│   │       ├── Textarea.tsx
-│   │       ├── Select.tsx
-│   │       └── ... (20+ components)
-│   ├── pages/                  # Page components
-│   │   ├── Reservations.tsx    # Reservations dashboard
-│   │   ├── GuestSearch.tsx     # AI guest search
-│   │   ├── PerformanceTesting.tsx
-│   │   ├── PerformanceDashboard.tsx
-│   │   ├── Settings.tsx
-│   │   ├── PromptManagement.tsx
-│   │   ├── PromptGroups.tsx
-│   │   └── components/         # Page-specific components
-│   ├── services/               # API clients
-│   │   ├── api.ts              # Main API client
-│   │   ├── promptsApi.ts       # Prompts API
-│   │   └── promptGroupsApi.ts  # Prompt groups API
-│   ├── hooks/                  # Custom React hooks
-│   │   ├── usePromptData.ts    # Prompt data fetching
-│   │   └── index.ts
-│   ├── context/                # React context providers
-│   │   └── SettingsContext.tsx # Settings provider
-│   ├── types/                  # TypeScript type definitions
-│   │   ├── index.ts
-│   │   ├── placeholder.ts
-│   │   └── prompt.ts
-│   └── utils/                  # Utility functions
-│       └── diff.ts             # Diff utilities
-├── index.html                  # HTML entry point
-├── package.json                # Dependencies & scripts
-├── vite.config.ts              # Vite configuration
-├── tsconfig.json               # TypeScript configuration
-├── tailwind.config.*           # Tailwind CSS configuration
-└── .oxlintrc.json              # Oxlint configuration
-```
-
-## Architecture
-
-### Tech Stack
-
-- **React 19** — UI framework
-- **TypeScript** — Type safety
-- **Vite 8** — Build tool and dev server
-- **React Router 7** — Client-side routing
-- **Tailwind CSS 4** — Utility-first CSS framework
-- **Recharts** — Charting and visualization
-- **Oxlint** — Fast JavaScript/TypeScript linter
-
-### API Integration
-
-The frontend communicates with the backend via REST API. API requests are proxied through Vite during development:
+All imports must use the `@/` path alias (resolved to `./src/`):
 
 ```typescript
-// vite.config.ts
-server: {
-  proxy: {
-    '/api': {
-      target: 'http://localhost:8000',
-      changeOrigin: true,
-    },
-  },
-}
+// ✅ Use path aliases
+import { Button } from "@/shared/ui/Button";
+import { modelsApi } from "@/shared/api/api";
+
+// ❌ Never use deep relative imports
+import { Button } from "../../../shared/ui/Button";
 ```
+
+### Feature-Sliced Design
+
+Each feature is self-contained in `features/<name>/` with its own page component, sub-components, and barrel export (`index.ts`). Features should not depend on each other — shared code belongs in `shared/`.
 
 ### State Management
 
-- **React Context** — Global settings via `SettingsContext`
-- **Custom Hooks** — Data fetching via `usePromptData`
-- **Local State** — Component-level state with `useState`/`useReducer`
+| Layer | Use For | Location |
+|-------|---------|----------|
+| **React Context** | App-wide config (settings, chain pages) | `shared/context/` |
+| **React Query** | Server state (API data, caching, mutations) | `shared/hooks/query/` |
+| **Local State** | Component-internal UI state | Component files |
 
-### Custom Hooks
+React Query defaults: 5min staleTime, no focus refetch, 1 retry.
 
-| Hook | Location | Purpose |
-|------|----------|---------|
-| `usePromptData` | `hooks/usePromptData.ts` | Fetch and manage prompt data |
+### Shared Layer Organization
 
-### Key Components
-
-#### UI Components (`components/ui/`)
-
-The project uses a comprehensive set of reusable UI primitives:
-
-| Component | Purpose |
+| Directory | Purpose |
 |-----------|---------|
-| `Button` | Interactive button with variants |
-| `Card` | Container card component |
-| `Input` / `Textarea` | Form inputs |
-| `Select` | Dropdown select |
-| `Badge` | Status badges |
-| `Toast` | Notification toasts |
-| `Modal` | Modal dialog wrapper |
-| `MultiSortTable` | Multi-column sortable table |
-| `PerformanceChart` | Performance visualization |
-| `PromptSelector` | Prompt selection dropdown |
-| `SummaryCardGrid` | Grid of summary cards |
-| `GroupedDataTable` | Grouped data display |
+| `shared/api/` | HTTP client (`client.ts`) and API modules (`api.ts`) |
+| `shared/hooks/query/` | React Query hooks (`useQuery`/`useMutation` wrappers) |
+| `shared/lib/` | Pure utility functions (no React dependencies) |
+| `shared/ui/` | Reusable UI primitives (Button, Card, Input, Toast…) |
+| `shared/layout/` | App layout components (AppLayout, Header) |
+| `shared/hooks/` | Shared custom hooks (useToast, useChainExecution…) |
+| `shared/context/` | React Context providers (SettingsContext, ChainPagesContext) |
+| `shared/types/` | TypeScript interfaces and types |
+
+### API Client
+
+All API calls go through `shared/api/client.ts` (`request<T>()`). The client provides:
+- Request timeout (30s default, configurable via `X-Request-Timeout` header)
+- Retry with exponential backoff (5xx/network errors, max 3 for GET)
+- In-flight deduplication for identical GET requests
+- Session expiry handling (401 or HTML response → redirect)
+- Empty response error handling
+
+### Barrels
+
+Each module exports through an `index.ts` barrel. The root `shared/index.ts` is `@deprecated` — import from specific modules (e.g., `@/shared/ui` not `@/shared`).
 
 ## Development Workflow
 
 ### Adding a New Page
 
-1. Create page component in `src/pages/`
-2. Add route in `src/App.tsx`
-3. Add navigation item in `src/components/Header.tsx`
+1. Create feature directory: `src/features/<name>/`
+2. Add page component: `src/features/<name>/PageName.tsx` (default export)
+3. Create barrel export: `src/features/<name>/index.ts`
+4. Register route in `src/app/router/routeConfig.ts`
+5. Add route constant in `src/app/router/routes.ts`
+6. Add navigation item in `src/shared/layout/Header.tsx`
 
 ### Adding a New API Endpoint
 
-1. Define schema in `src/types/index.ts`
-2. Add function to appropriate API client in `src/services/`
-3. Use in components via the API client
+1. Define types in `src/shared/types/` or feature's `types.ts`
+2. Add function to appropriate API client in `src/shared/api/`
+3. Create React Query hook in `src/shared/hooks/query/` for server state
+4. Use in components via the query hook or API client
 
-### Styling
+### Adding a Shared UI Component
 
-All styling uses Tailwind CSS utility classes. Global styles are in `src/index.css`:
+1. Create component in `src/shared/ui/ComponentName.tsx`
+2. Export from `src/shared/ui/index.ts`
+3. Use Tailwind CSS for styling
 
-```css
-@import "tailwindcss";
+### Adding Tests
+
+1. Create `Component.test.tsx` or `hook.test.ts` alongside the source file
+2. Use `@testing-library/react` for component tests
+3. Mock `fetch` or API calls as needed
+
+```typescript
+// Example: hook test
+import { renderHook, act } from '@testing-library/react';
+import { useToast } from '@/shared/hooks/useToast';
+
+describe('useToast', () => {
+  it('shows and hides toast', () => {
+    const { result } = renderHook(() => useToast());
+    expect(result.current.toast.visible).toBe(false);
+
+    act(() => {
+      result.current.showToast('Hello', 'success');
+    });
+    expect(result.current.toast.visible).toBe(true);
+    expect(result.current.toast.message).toBe('Hello');
+  });
+});
 ```
 
-## Build & Deployment
+## Scripts
 
-### Production Build
-
-```bash
-npm run build
-```
-
-Output is placed in `frontend/dist/`.
-
-### Preview Build Locally
-
-```bash
-npm run preview
-```
-
-### Linting
-
-```bash
-npm run lint
-```
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| Backend API calls fail | Ensure backend is running on port 8000 |
-| TypeScript errors | Run `npx tsc --noEmit` to check |
-| Hot reload not working | Restart dev server (`npm run dev`) |
-| Build fails | Check TypeScript errors first (`npm run build 2>&1`) |
+| Script | Command |
+|--------|---------|
+| Dev server | `npm run dev` |
+| Build | `npm run build` |
+| Lint | `npm run lint` |
+| Test (watch) | `npm run test` |
+| Test (CI) | `npm run test:run` |
+| Test coverage | `npm run test:coverage` |
+| Bundle analyze | `ANALYZE=true npm run build` |

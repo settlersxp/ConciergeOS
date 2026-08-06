@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { modelsApi } from "../../services/api";
-import usePromptData from "../../hooks/usePromptData";
-import type { LLMModel } from "../../types";
+import { modelsApi } from "@/shared/api/api";
+import usePromptData from "@/shared/hooks/usePromptData";
+import type { LLMModel } from "@/shared/types";
 import PromptSettingsPanel from "./PromptSettingsPanel";
 
 interface PromptSelectorProps {
